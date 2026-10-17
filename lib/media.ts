@@ -10,7 +10,7 @@ export async function imageData(file: File, max = 1024): Promise<string> {
     return canvas.toDataURL('image/jpeg', .85);
   } finally {image.close();}
 }
-export async function videoFrames(file: File): Promise<{time: number; data: string}[]> {
+export async function videoFrames(file: File, range?: {start:number;end:number}, count = 6): Promise<{time: number; data: string}[]> {
   const url = URL.createObjectURL(file), video = document.createElement('video');
   video.preload = 'auto'; video.muted = true; video.playsInline = true;
   const event = (name: string) => new Promise<void>((resolve, reject) => {
@@ -26,9 +26,11 @@ export async function videoFrames(file: File): Promise<{time: number; data: stri
     if (!ctx) throw Error('Canvas unavailable.');
     const scale = Math.min(1, 768 / Math.max(video.videoWidth, video.videoHeight));
     canvas.width = Math.max(1, Math.round(video.videoWidth * scale)); canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const start = range?.start ?? 0, end = range?.end ?? video.duration;
+    if (start < 0 || end > video.duration || end <= start) throw Error('Invalid guide interval.');
     const frames = [];
-    for (let i = 0; i < 6; i++) {
-      const time = Math.min(video.duration * (i / 5), Math.max(0, video.duration - .05));
+    for (let i = 0; i < count; i++) {
+      const time = Math.min(start + (end-start) * (i / (count-1)), Math.max(start, end - .05));
       if (Math.abs(time-video.currentTime) > .001) {const sought=event('seeked'); video.currentTime=time; await sought;}
       ctx.drawImage(video,0,0,canvas.width,canvas.height); frames.push({time,data:canvas.toDataURL('image/jpeg',.8)});
     }
