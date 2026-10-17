@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     if (!['motion','swap'].includes(body.mode) || typeof body.intent !== 'string' || !body.intent.trim() || body.intent.length > 12000) throw Error('Choose a mode and provide a brief of up to 12,000 characters.');
     if (!Array.isArray(body.pictures) || !body.pictures.length || body.pictures.length > 11 || !Array.isArray(body.frames) || !body.frames.length || body.frames.length > 6) throw Error('Provide 1–11 pictures and 1–6 guide frames.');
     const slots: number[] = [];
-    const content: Record<string,unknown>[] = [{type:'text',text:`Mode: ${body.mode === 'swap' ? 'SWAP' : 'MOTION TRANSFER'}\nUser intent: ${body.intent}`}];
+    const content: Record<string,unknown>[] = [{type:'text',text:`Mode: ${body.mode === 'swap' ? 'SWAP' : 'MOTION TRANSFER'}\nAudio conditioning: ${body.audioConditioning === true ? 'enabled, using guide video audio at generation time' : 'disabled'}. No audio is supplied to you; do not describe or infer sounds.\nUser intent: ${body.intent}`}];
     const addImage = (data: unknown) => {
       if (typeof data !== 'string' || !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(data) || data.length > 3_000_000) throw Error('Invalid preview image.');
       content.push({type:'image_url', image_url:{url:data}});
