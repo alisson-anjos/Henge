@@ -41,7 +41,6 @@ The initial prompt template is in `lib/prompt.ts`. Replace it with the finalized
 - The editor uses `@PictureN`; export converts to `<Picture N>` without renumbering.
 - Removing a reference leaves other slots intact. Reusing an empty slot intentionally replaces that slot's identity.
 - `@Video1` converts to `<Video 1>` as a textual mention only. The adapter must not attach the guide as a native video reference because a token exists.
-- Workflow-specific triggers belong in the adapter. Existing Character Swap's `body_swap:` trigger is not automatically applied to the new motion-transfer mode.
 
 ## Architecture and references
 
