@@ -39,7 +39,7 @@ def training_busy():
     for p in Path('/proc').glob('[0-9]*/cmdline'):
         try:
             s=p.read_bytes()
-            if b'/tmp/h3-full-runtime-code/run.py' in s and b'openjutsu_h3_color_binding_v6' in s:return True
+            if b'/tmp/h3-full-runtime-code/run.py' in s or b'/data/ai-toolkit-h3-native-temporal/run.py' in s:return True
         except (FileNotFoundError,ProcessLookupError,PermissionError):pass
     return False
 
