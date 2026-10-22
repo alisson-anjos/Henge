@@ -1,0 +1,44 @@
+{
+  "1": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "kagemane/validation/ref.png"
+    }
+  },
+  "3": {
+    "class_type": "TextGenerate",
+    "inputs": {
+      "clip": [
+        "1",
+        0
+      ],
+      "image": [
+        "2",
+        0
+      ],
+      "prompt": "Return JSON",
+      "max_length": 2500,
+      "sampling_mode": "off",
+      "thinking": true,
+      "use_default_template": true,
+      "mtp": "off"
+    }
+  },
+  "4": {
+    "class_type": "KagemaneTextResult",
+    "inputs": {
+      "text": [
+        "3",
+        0
+      ]
+    }
+  }
+}

@@ -4,3 +4,13 @@ node_modules/
 !.env.example
 *.tsbuildinfo
 .DS_Store
+
+backend/*.log
+backend/services.json
+backend/__pycache__/
+backend/**/__pycache__/
+backend/evidence/
+.runtime/
+
+*.zip
+scripts/__pycache__/

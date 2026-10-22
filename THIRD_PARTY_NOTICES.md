@@ -25,3 +25,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+## Fonts
+
+Bricolage Grotesque, Geist and Geist Mono are bundled locally from Google Fonts under the SIL Open Font License 1.1. The full copyright and license notices are in `public/fonts/*-OFL.txt`.
+
+The Studio + History visual reference and its supplied artwork were provided by the project owner in the Claude Design export.

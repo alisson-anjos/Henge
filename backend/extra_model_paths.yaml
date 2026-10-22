@@ -1,0 +1,16 @@
+shared:
+  base_path: /data/comfyui/models
+  checkpoints: checkpoints
+  diffusion_models: diffusion_models
+  text_encoders: text_encoders
+  vae: vae
+  loras: loras
+  detection: detection
+  geometry_estimation: geometry_estimation
+sam3d_local:
+  base_path: /tmp/sam3d-batch-assets
+  detection: detection
+  geometry_estimation: geometry_estimation
+moge_local:
+  base_path: /data/models/moge-comfy
+  geometry_estimation: geometry_estimation

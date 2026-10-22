@@ -1,0 +1,224 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "lora_name": "kagemane/training_adapter_v2.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "3": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "2",
+        0
+      ],
+      "lora_name": "kagemane/motion_8000.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "4": {
+    "class_type": "MiniMaxH3SigmaShift",
+    "inputs": {
+      "model": [
+        "3",
+        0
+      ],
+      "shift_video": 12.0,
+      "shift_audio": 3.0
+    }
+  },
+  "5": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "6": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    }
+  },
+  "7": {
+    "class_type": "KagemaneLoadShot",
+    "inputs": {
+      "video": "kagemane/validation/source.mp4",
+      "pictures": "[\"kagemane/validation/ref.png\"]",
+      "width": 512,
+      "height": 288,
+      "length": 107
+    }
+  },
+  "8": {
+    "class_type": "KagemaneGuide",
+    "inputs": {
+      "images": [
+        "7",
+        0
+      ],
+      "representation": "original",
+      "bindings": "[]",
+      "source_kind": "human",
+      "segment_start": 0,
+      "sam_checkpoint": "sam3.1_multiplex_fp16.safetensors",
+      "body_model": "sam_3d_body_dinov3_bf16.safetensors"
+    }
+  },
+  "9": {
+    "class_type": "KagemaneH3Conditioning",
+    "inputs": {
+      "clip": [
+        "5",
+        0
+      ],
+      "vae": [
+        "6",
+        0
+      ],
+      "guide": [
+        "8",
+        0
+      ],
+      "references": [
+        "7",
+        1
+      ],
+      "prompt": "motion_transfer: Animate <Picture 1> with <Video 1>.",
+      "width": 512,
+      "height": 288,
+      "length": 107,
+      "clip_video_fps": 2.0,
+      "reference_size": "match",
+      "guide_context": true,
+      "audio_conditioning": false,
+      "audio_video": "kagemane/validation/source.mp4"
+    }
+  },
+  "10": {
+    "class_type": "CFGGuider",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "9",
+        0
+      ],
+      "negative": [
+        "9",
+        0
+      ],
+      "cfg": 1.0
+    }
+  },
+  "11": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 42
+    }
+  },
+  "12": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "13": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "scheduler": "simple",
+      "steps": 8,
+      "denoise": 1.0
+    }
+  },
+  "14": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "11",
+        0
+      ],
+      "guider": [
+        "10",
+        0
+      ],
+      "sampler": [
+        "12",
+        0
+      ],
+      "sigmas": [
+        "13",
+        0
+      ],
+      "latent_image": [
+        "9",
+        1
+      ]
+    }
+  },
+  "15": {
+    "class_type": "LTXVSeparateAVLatent",
+    "inputs": {
+      "av_latent": [
+        "14",
+        0
+      ]
+    }
+  },
+  "16": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "15",
+        0
+      ],
+      "vae": [
+        "6",
+        0
+      ]
+    }
+  },
+  "17": {
+    "class_type": "KagemaneSaveVideo",
+    "inputs": {
+      "images": [
+        "16",
+        0
+      ],
+      "filename": "kagemane/validation/source_result.mp4",
+      "trim_frames": 107,
+      "fps": 24.0
+    }
+  },
+  "18": {
+    "class_type": "KagemaneSaveVideo",
+    "inputs": {
+      "images": [
+        "8",
+        0
+      ],
+      "filename": "kagemane/validation/source_guide.mp4",
+      "trim_frames": 107,
+      "fps": 24.0
+    }
+  }
+}
