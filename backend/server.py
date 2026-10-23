@@ -38,8 +38,8 @@ def public(job):
 def training_busy():
     for p in Path('/proc').glob('[0-9]*/cmdline'):
         try:
-            s=p.read_bytes()
-            if b'/tmp/h3-full-runtime-code/run.py' in s or b'/data/ai-toolkit-h3-native-temporal/run.py' in s:return True
+            args=p.read_bytes().split(b'\0')
+            if any(runner in args for runner in (b'/tmp/h3-full-runtime-code/run.py',b'/data/ai-toolkit-h3-native-temporal/run.py',b'/tmp/h3-tara-motion-runtime/run.py')):return True
         except (FileNotFoundError,ProcessLookupError,PermissionError):pass
     return False
 

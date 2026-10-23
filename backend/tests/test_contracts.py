@@ -2,8 +2,15 @@ import sys,unittest,copy
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from workflows import split_frames,h3_graph,fibo_graph,split_on_cuts
-from server import validate_request,validate_plan
+from server import validate_request,validate_plan,training_busy
+from unittest.mock import patch,Mock
 class WorkflowContracts(unittest.TestCase):
+ def test_training_gate_recognizes_tara_runtime(self):
+  process=Mock();process.read_bytes.return_value=b'python\0-u\0/tmp/h3-tara-motion-runtime/run.py\0config.yaml\0'
+  with patch('server.Path.glob',return_value=[process]):self.assertTrue(training_busy())
+ def test_training_gate_ignores_shell_text(self):
+  process=Mock();process.read_bytes.return_value=b'bash\0-c\0echo /tmp/h3-tara-motion-runtime/run.py\0'
+  with patch('server.Path.glob',return_value=[process]):self.assertFalse(training_busy())
  def request(self):return {'mode':'motion','prompt':'motion_transfer: <Picture 1> follows <Video 1>.','quality':'480p','video':{'start_seconds':0,'end_seconds':4.5},'processing':{'requested_seconds_per_shot':4.5,'context_frames':22},'subject_guidance':{'representation':'3d','bindings':[]}}
  def plan(self):return {'source_kind':'human','target_kind':'animal','use_fibo':False,'fibo_instruction':'Replace <image_1> performer with <image_2>.','fibo_picture_slots':[1],'picture_roles':[{'slot':1,'role':'identity'}],'prompt':'motion_transfer: <Picture 1> follows <Video 1>.','warnings':[]}
  def test_raw_prompt_preserves_exact_user_text(self):
