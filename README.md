@@ -1,10 +1,10 @@
-# Kagemane
+# Kagemage
 
 An open studio for **motion transfer** and **video swaps**, designed around MiniMax H3 guide-latent conditioning.
 
 ## Current milestone
 
-Kagemane connects its studio UI to a local FastAPI bridge and an isolated ComfyUI backend. It supports guide intervals, image references, subject/color bindings, optional prompt enhancement, reviewed execution plans, conditional FIBO image preparation, segmented generation, progress, cancellation, result comparison and server history.
+Kagemage connects its studio UI to a local FastAPI bridge and an isolated ComfyUI backend. It supports guide intervals, image references, subject/color bindings, optional prompt enhancement, reviewed execution plans, conditional FIBO image preparation, segmented generation, progress, cancellation, result comparison and server history.
 
 The integration has passed TypeScript, production-build and CPU contract checks. End-to-end GPU generation and the quality of 2D/3D tracking still require validation. FIBO prepares a pose/appearance image; it does not perform full temporal skeleton retargeting. SAM 3D Body requires a human source.
 
@@ -32,7 +32,9 @@ VLM_API_KEY=your-key-if-required
 
 The endpoint must support vision chat messages with `image_url` data URLs and return `choices[0].message.content`. It receives the short brief, labeled picture previews (up to 1024 pixels), and six timestamped frames from the guide (up to 768 pixels). This is sampled-frame analysis, not full-video understanding or audio analysis. The browser tells you which media will be sent. Credentials stay on the server. The VLM is an optional dependency; choose a locally hosted open model for an entirely open-weights pipeline.
 
-The initial prompt template is in `lib/prompt.ts`. Replace it with the finalized OpenJutsu training/inference template as the model develops. It has separate motion-transfer and swap instructions. Provider inference is not exercised without configuration and explicit use of the Build prompt button.
+Automatic prompting in the editor and the backend planner shares `lib/h3-prompt-policy.json`. Enhanced outputs use the H3 six-section reference format, with `motion_transfer:` for motion mode and `body_swap:` for swap mode. References retain their exact indices and separate identity, outfit, object, style and environment roles. Requested scene replacements cover the entire environment while retaining the source performance and specified interaction props. Raw-prompt mode remains verbatim. See [prompt format and examples](docs/prompt-format.md).
+
+Existing browser history/storage keys, ComfyUI node identifiers and backend environment variables retain their existing names for compatibility. The public application name and new download filenames are Kagemage.
 
 ## Reference contract
 
@@ -68,7 +70,7 @@ The confirmed interval controls Context Window activation, duration estimates, s
 
 ## Local direction history
 
-Exporting a direction saves its prompt, settings and a source thumbnail in this browser (up to 30 entries). History supports reuse, deletion, direction ratings, feedback NDJSON export and shareable JSON presets. Reuse requires reattaching media; reference slot numbers are preserved. Ratings describe directions, not generated outputs. Preset downloads omit media and local filenames. Public Community publishing and video generation remain unconnected.
+Exporting a direction saves its prompt, settings and a source thumbnail in this browser (up to 30 entries). History supports reuse, deletion, direction ratings, feedback NDJSON export and shareable JSON presets. Reuse requires reattaching media; reference slot numbers are preserved. Ratings describe directions, not generated outputs. Preset downloads omit media and local filenames. Public Community publishing remains unconnected. Video generation uses the configured local bridge.
 
 The Keep source audio setting is independent of audio conditioning and is recorded as `output_audio.keep_source`. Curated templates supply prompts for your own media. Uploaded files stay local except for resized previews explicitly sent with Build prompt.
 

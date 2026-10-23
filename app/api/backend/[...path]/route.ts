@@ -14,7 +14,7 @@ async function proxy(request: Request, context: {params: Promise<{path: string[]
     const outputHeaders = new Headers();
     for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'content-disposition']) {const value = response.headers.get(name); if (value) outputHeaders.set(name, value);}
     return new Response(response.body, {status: response.status, headers: outputHeaders});
-  } catch { return Response.json({error: 'Kagemane backend is offline. Start the backend services.'}, {status: 503}); }
+  } catch { return Response.json({error: 'Kagemage backend is offline. Start the backend services.'}, {status: 503}); }
 }
 export const GET = proxy;
 export const POST = proxy;

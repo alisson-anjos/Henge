@@ -2,7 +2,7 @@
 
 Project structure and configuration reference: Comfy Cinematic Studio and Comfy Reshoot, MIT licensed, copyright (c) 2026 Comfy Org.
 
-The initial TypeScript configuration and Next.js type declarations were adapted from Cinematic Studio. Its license is reproduced below. Application source and visual design were authored for OpenJutsu.
+The initial TypeScript configuration and Next.js type declarations were adapted from Cinematic Studio. Its license is reproduced below. Application source and visual design were authored for Kagemage (formerly OpenJutsu).
 
 MIT License
 

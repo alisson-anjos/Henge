@@ -1,4 +1,4 @@
-import { PROMPT_TEMPLATE, invalidReferences } from '../../../lib/prompt';
+import { PROMPT_TEMPLATE, invalidReferences, h3PromptError } from '../../../lib/prompt';
 export const runtime = 'nodejs';
 export async function POST(request: Request) {
   const endpoint = process.env.VLM_CHAT_URL;
@@ -24,12 +24,14 @@ export async function POST(request: Request) {
       if (typeof frame.time !== 'number' || !Number.isFinite(frame.time) || frame.time < 0) throw Error('Invalid frame timestamp.');
       content.push({type:'text',text:`Guide video sampled frame at ${frame.time.toFixed(2)} seconds (not a reference picture):`}); addImage(frame.data);
     }
-    const response = await fetch(endpoint, {method:'POST',headers:{'Content-Type':'application/json',...(process.env.VLM_API_KEY ? {Authorization:`Bearer ${process.env.VLM_API_KEY}`} : {})},body:JSON.stringify({model,messages:[{role:'system',content:PROMPT_TEMPLATE},{role:'user',content}],temperature:.3,max_tokens:1600}),signal:AbortSignal.timeout(120000)});
+    const response = await fetch(endpoint, {method:'POST',headers:{'Content-Type':'application/json',...(process.env.VLM_API_KEY ? {Authorization:`Bearer ${process.env.VLM_API_KEY}`} : {})},body:JSON.stringify({model,messages:[{role:'system',content:PROMPT_TEMPLATE},{role:'user',content}],temperature:.2,max_tokens:2600}),signal:AbortSignal.timeout(120000)});
     if (!response.ok) return Response.json({error:`VLM provider returned HTTP ${response.status}. Check the server connection and model.`},{status:502});
     const result = await response.json();
     const text = result.choices?.[0]?.message?.content;
     if (typeof text !== 'string' || !text.trim()) throw Error('The VLM returned no text prompt.');
     const prompt = text.trim().replace(/^Answer:\s*/i,'');
+    const formatError = h3PromptError(prompt, body.mode);
+    if (formatError) return Response.json({error: formatError}, {status: 422});
     if (invalidReferences(prompt,slots).length) throw Error('The VLM mentioned an unattached picture. Refine your brief and try again.');
     return Response.json({prompt});
   } catch (error) {

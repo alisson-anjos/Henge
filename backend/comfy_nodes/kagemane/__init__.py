@@ -1,4 +1,4 @@
-"""Kagemane media, guide preparation and H3 conditioning nodes. No model downloads."""
+"""Kagemage media, guide preparation and H3 conditioning nodes. No model downloads."""
 import json,math,os,subprocess
 from pathlib import Path
 import numpy as np
@@ -10,7 +10,7 @@ from .clip_video import clip_with_video_context
 
 def input_path(name):
     root=Path(folder_paths.get_input_directory()).resolve();p=(root/name).resolve()
-    if not p.is_relative_to(root) or not p.is_file():raise ValueError('Unknown Kagemane input asset')
+    if not p.is_relative_to(root) or not p.is_file():raise ValueError('Unknown Kagemage input asset')
     return p
 
 
@@ -25,7 +25,7 @@ def read_frames(path,width,height,length):
 class KagemaneLoadShot:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'video':('STRING',),'pictures':('STRING',{'default':'[]'}),'width':('INT',{'default':512,'min':32,'step':32}),'height':('INT',{'default':288,'min':32,'step':32}),'length':('INT',{'default':107,'min':5,'max':362})}}
-    RETURN_TYPES=('IMAGE','KAGEMANE_REFS');FUNCTION='load';CATEGORY='Kagemane'
+    RETURN_TYPES=('IMAGE','KAGEMANE_REFS');FUNCTION='load';CATEGORY='Kagemage'
     def load(self,video,pictures,width,height,length):
         refs=[]
         for p in json.loads(pictures):
@@ -36,7 +36,7 @@ class KagemaneLoadShot:
 class KagemaneGuide:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'representation':(['original','2d','3d'],),'bindings':('STRING',{'default':'[]'}),'source_kind':(['human','animal','other'],),'segment_start':('FLOAT',{'default':0}),'sam_checkpoint':('STRING',{'default':'sam3.1_multiplex_fp16.safetensors'}),'body_model':('STRING',{'default':'sam_3d_body_dinov3_bf16.safetensors'}),'preserve_objects':('STRING',{'default':'[]'})}}
-    RETURN_TYPES=('IMAGE',);FUNCTION='prepare';CATEGORY='Kagemane'
+    RETURN_TYPES=('IMAGE',);FUNCTION='prepare';CATEGORY='Kagemage'
     def prepare(self,images,representation,bindings,source_kind,segment_start,sam_checkpoint,body_model,preserve_objects="[]"):
         if representation=='original':return (images,)
         subjects=json.loads(bindings)
@@ -67,7 +67,7 @@ class KagemaneGuide:
             used.add(best);rgb=tuple(int(s['hex'].lstrip('#')[i:i+2],16) for i in [0,2,4]);chosen.append((best,s,rgb))
         object_mask=torch.zeros((n,h,w),dtype=torch.bool)
         for noun in json.loads(preserve_objects):
-            if noun not in ['phone','microphone','guitar','ukulele','cup','bottle','bicycle','torch']:continue
+            if noun not in ['phone','microphone','guitar','ukulele','cup','bottle','bicycle','torch','piano','keyboard']:continue
             object_cond=clip.encode_from_tokens_scheduled(clip.tokenize(noun))
             objects=SAM3_VideoTrack.execute(images=images,model=sam,conditioning=object_cond,detection_threshold=.5,max_objects=4,detect_interval=1)[0]
             if objects.get('packed_masks') is not None and objects['packed_masks'].shape[1]:
@@ -120,7 +120,7 @@ class KagemaneGuide:
 class KagemaneH3Conditioning:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'clip':('CLIP',),'vae':('VAE',),'guide':('IMAGE',),'references':('KAGEMANE_REFS',),'prompt':('STRING',{'multiline':True}),'width':('INT',{'default':512}),'height':('INT',{'default':288}),'length':('INT',{'default':107}),'clip_video_fps':('FLOAT',{'default':2,'min':.5,'max':24}),'reference_size':(['match','max'],),'guide_context':('BOOLEAN',{'default':True}),'audio_conditioning':('BOOLEAN',{'default':False}),'audio_video':('STRING',{'default':''})},'optional':{'audio_vae':('VAE',),'context_images':('IMAGE',),'context_count':('INT',{'default':0})}}
-    RETURN_TYPES=('CONDITIONING','LATENT');FUNCTION='encode';CATEGORY='Kagemane'
+    RETURN_TYPES=('CONDITIONING','LATENT');FUNCTION='encode';CATEGORY='Kagemage'
     def encode(self,clip,vae,guide,references,prompt,width,height,length,clip_video_fps,reference_size,guide_context,audio_conditioning,audio_video,audio_vae=None,context_images=None,context_count=0):
         from comfy_extras.nodes_minimax_h3 import MiniMaxH3ReferenceToVideo,MiniMaxH3AddGuide
         if guide_context:clip=clip_with_video_context(clip,{'guide':guide},length,context_fps=clip_video_fps)
@@ -142,7 +142,7 @@ class KagemaneH3Conditioning:
 class KagemaneSaveVideo:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'filename':('STRING',),'trim_frames':('INT',{'default':107,'min':1}),'fps':('FLOAT',{'default':24})}}
-    RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Kagemane'
+    RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Kagemage'
     def save(self,images,filename,trim_frames,fps):
         root=Path(folder_paths.get_output_directory()).resolve();p=(root/filename).resolve()
         if not p.is_relative_to(root) or p.suffix!='.mp4':raise ValueError('Invalid output name')
@@ -157,7 +157,7 @@ NODE_CLASS_MAPPINGS={c.__name__:c for c in [KagemaneLoadShot,KagemaneGuide,Kagem
 class KagemaneTextResult:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'text':('STRING',{'forceInput':True})}}
-    RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Kagemane'
+    RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Kagemage'
     def save(self,text):return {'ui':{'text':[text]}}
 
 NODE_CLASS_MAPPINGS['KagemaneTextResult']=KagemaneTextResult

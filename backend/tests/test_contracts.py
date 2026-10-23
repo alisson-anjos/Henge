@@ -4,6 +4,9 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from workflows import split_frames,h3_graph,fibo_graph,split_on_cuts
 from server import validate_request,validate_plan,training_busy
 from unittest.mock import patch,Mock
+def structured_prompt(description='Transfer the guide performance.'):
+ return 'motion_transfer: subject_definitions: <Subject 1> uses <Picture 1>. summary: [reference generation] '+description+' retention_analysis: <Subject 1>: fully_preserved - stable identity. detailed_description: [Shot 1] Transfer the guide timing and gestures. overall_soundscape: N/A non_diegetic_music: N/A'
+
 class WorkflowContracts(unittest.TestCase):
  def test_training_gate_recognizes_tara_runtime(self):
   process=Mock();process.read_bytes.return_value=b'python\0-u\0/tmp/h3-tara-motion-runtime/run.py\0config.yaml\0'
@@ -12,13 +15,13 @@ class WorkflowContracts(unittest.TestCase):
   process=Mock();process.read_bytes.return_value=b'bash\0-c\0echo /tmp/h3-tara-motion-runtime/run.py\0'
   with patch('server.Path.glob',return_value=[process]):self.assertFalse(training_busy())
  def request(self):return {'mode':'motion','prompt':'motion_transfer: <Picture 1> follows <Video 1>.','quality':'480p','video':{'start_seconds':0,'end_seconds':4.5},'processing':{'requested_seconds_per_shot':4.5,'context_frames':22},'subject_guidance':{'representation':'3d','bindings':[]}}
- def plan(self):return {'source_kind':'human','target_kind':'animal','use_fibo':False,'fibo_instruction':'Replace <image_1> performer with <image_2>.','fibo_picture_slots':[1],'picture_roles':[{'slot':1,'role':'identity'}],'prompt':'motion_transfer: <Picture 1> follows <Video 1>.','warnings':[]}
+ def plan(self):return {'source_kind':'human','target_kind':'animal','use_fibo':False,'fibo_instruction':'Replace <image_1> performer with <image_2>.','fibo_picture_slots':[1],'picture_roles':[{'slot':1,'role':'identity'}],'prompt':structured_prompt(),'warnings':[]}
  def test_raw_prompt_preserves_exact_user_text(self):
   r=self.request();r['prompt']='  Troque pelo <Picture 1> — anime.\nNão mude o ritmo!  '
   p=self.plan();p['prompt']='Rewritten <Picture 99>'
   self.assertEqual(validate_plan(p,[1],{'enhance_prompt':False},r)['prompt'],r['prompt'])
  def test_enhancement_uses_vlm_prompt(self):
-  r=self.request();p=self.plan();p['prompt']='motion_transfer: Enhanced <Picture 1>'
+  r=self.request();p=self.plan();p['prompt']=structured_prompt('Enhanced <Picture 1>')
   self.assertEqual(validate_plan(p,[1],{'enhance_prompt':True},r)['prompt'],p['prompt'])
  def test_overlap_covers_every_output_frame_once(self):
   for n in [5,22,107,108,241,720,3600]:
