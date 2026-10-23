@@ -111,3 +111,9 @@ O LoRA 10500 original está no servidor em /data/reports/h3_rank_analysis_10500/
 9. Guardar logs, request/plano/grafo efetivos, versões/modelos, tempos, vídeos lado a lado sincronizados e falhas observadas. Não declarar100% pelo job ter terminado.
 
 Entregar: código integrado; quatro workflows (Guide/TARA × API/visual); .env.example local portável sem segredos; lista de modelos/dependências com origem e nomes reais; comandos de iniciar/parar; tutorial curto; evidências GPU e limitações; commits focados. Não publicar nem fazer push até autorização local. Ao terminar cada etapa, diga o que foi validado e o que ainda falta, e continue a próxima etapa autorizada.
+
+## Atualização: workflow automático disponível
+
+O pacote agora inclui `workflows/tara-native-auto-prompt.comfy.json` e `.api.json`, documentados em `workflows/TARA-AUTO-PROMPT.md`. BFSNodes main **1.115.20+** fornece os nós públicos `BFSH3PrepareNativeVideo`, `BFSH3DescribeReferences`, `BFSH3BuildNativePrompt` e `BFSH3NativeReferenceSetToVideo`. Use-os como ponto de partida para integrar a opção TARA na UI; não reimplemente o nó privado H3BenchConditioning. O fluxo usa Generate Text nativo (inclusive uma chamada isolada por imagem), inventário de1..9refs, template H3 editável e frame/canvas derivados do vídeo. O conjunto de imagens descrito é o mesmo usado no encoder H3.
+
+O vídeo é ressampleado24fps no loader. Default de duração é todo o vídeo carregado; padding de último frame até17n+5 é removido da saída pelo ImageFromBatch. O exemplo não segmenta vídeos longos automaticamente e carregar o arquivo inteiro ainda consome RAM; o bridge/context-window deve tratar isso. Não remova esse trim ao integrar. Para testes, limite explicitamente o intervalo/VHS frame cap. Novos nós e links passaram testes CPU/estruturais; ainda é necessário validar carregamento visual, captions e geração real na5090. Guia padrão do aplicativo continua Add Guide; esse exemplo é a opção TARA experimental.
