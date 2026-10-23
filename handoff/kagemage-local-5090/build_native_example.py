@@ -44,10 +44,11 @@ n(23,'SaveVideo',(2830,0),video=['22',0],filename_prefix='Kagemage/TARA_native_1
 if args.auto_prompt:
  for i in [7,8,9,11]:del g[str(i)]
  g['10']['inputs']['frame_load_cap']=0
+ titles[13]='OPTIONAL Picture 2 — connect to Describe References ref_image_2 if needed'
  titles[10]='GUIDE — source dimensions; force 24 fps; automatic frame count'
- n(24,'BFSH3PrepareNativeVideo',(1130,0),images=['10',0],source_fps=24.,output_scale=1.,max_megapixels=.4,reference_scale=1.,max_frames=0,frame_rounding='pad last frame',analysis_frames=12,request='Replace the main performer with <Picture 1> and the entire setting with <Picture 2>. Preserve the guide performance, timing and camera motion.')
+ n(24,'BFSH3PrepareNativeVideo',(1130,0),images=['10',0],source_fps=24.,output_scale=1.,max_megapixels=.4,reference_scale=1.,max_frames=0,frame_rounding='pad last frame',analysis_frames=12,request='Replace the main performer with <Picture 1>. Preserve the guide performance, timing, camera motion and source setting unless I explicitly request another change.')
  n(25,'CLIPLoader',(750,1380),title='PROMPT VLM — generation capable; independent of H3 encoder',clip_name='qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors',type='minimax',device='default')
- n(26,'BFSH3DescribeReferences',(1570,720),clip=['25',0],request=['24',7],tokens_per_image=384,max_image_side=1024,ref_image_1=['12',0],ref_image_2=['13',0])
+ n(26,'BFSH3DescribeReferences',(1570,720),clip=['25',0],request=['24',7],tokens_per_image=384,max_image_side=1024,ref_image_1=['12',0])
  n(27,'TextGenerate',(1570,0),title='Generate Text 1 — analyze numbered guide frames only',clip=['25',0],prompt=['24',6],image=['24',1],max_length=1024,sampling_mode='off',thinking=False,use_default_template=True,mtp='off')
  n(28,'BFSH3BuildNativePrompt',(1990,400),request=['24',7],inventory=['26',1],guide_analysis=['27',0],metadata=['24',5],template=helper.FINAL_TEMPLATE,mode='motion_transfer')
  n(29,'TextGenerate',(2420,400),title='Generate Text 2 — final six-section H3 prompt',clip=['25',0],prompt=['28',0],max_length=3072,sampling_mode='off',thinking=False,use_default_template=True,mtp='off')
@@ -94,7 +95,7 @@ for idx,(key,item) in enumerate(g.items()):
  if item['class_type']=='TextGenerate':node['widgets_values']=['',item['inputs']['max_length'],'off',False,True,'off']
  if item['class_type']=='BFSH3DescribeReferences':
   node['widgets_values']=['',384,1024]
-  for j in range(3,10):node['inputs'].append({'name':f'ref_image_{j}','type':'IMAGE','link':None})
+  for j in range(2,10):node['inputs'].append({'name':f'ref_image_{j}','type':'IMAGE','link':None})
  if item['class_type']=='BFSH3NativeReferenceSetToVideo':node['widgets_values']=[512,288,107,'match',True]
  nodes.append(node);byid[i]=node
 for key,item in g.items():

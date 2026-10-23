@@ -12,4 +12,4 @@ Abra `workflows/tara-native-10500-v2.comfy.json`. O guia de controles e dependê
 
 ## Versão com prompt e tamanho automáticos (mais recente)
 
-Abra **`workflows/tara-native-auto-prompt.comfy.json`** depois de atualizar BFSNodes para **1.115.20+**. Referências são descritas individualmente com Generate Text; outro Generate Text analisa frames do guia, e o último escreve o prompt final no template H3. Canvas e quantidade de frames vêm do vídeo carregado. Veja `workflows/TARA-AUTO-PROMPT.md` para ligar1..9imagens e ajustar escalas. Não depende do plugin privado de benchmark.
+Abra **`workflows/tara-native-auto-prompt.comfy.json`** depois de atualizar BFSNodes para **1.115.21+**. Referências são descritas individualmente com Generate Text; outro Generate Text analisa frames do guia, e o último escreve o prompt final no template H3. Canvas e quantidade de frames vêm do vídeo carregado. Veja `workflows/TARA-AUTO-PROMPT.md` para ligar1..9imagens e ajustar escalas. Não depende do plugin privado de benchmark.

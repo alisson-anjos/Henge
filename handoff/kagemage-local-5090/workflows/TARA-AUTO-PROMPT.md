@@ -1,6 +1,6 @@
 # Native H3 workflow: automatic prompts and video-derived dimensions
 
-Requires BFSNodes **1.115.20+**, current ComfyUI native MiniMax H3 + Generate Text, and VideoHelperSuite. This is a standalone workflow, not Planner state. TARA remains opt-in; existing Planner defaults stay Add Guide.
+Requires BFSNodes **1.115.21+**, current ComfyUI native MiniMax H3 + Generate Text, and VideoHelperSuite. This is a standalone workflow, not Planner state. TARA remains opt-in; existing Planner defaults stay Add Guide.
 
 The examples use the **native H3 reference conditioning contract**, with public BFS glue nodes for dynamic reference sets and geometry. They are not entirely Comfy core: VHS loads the video and BFS provides preparation, per-picture analysis, template assembly, reference-set encoding and the TARA MODEL patch. There is no private `H3BenchConditioning` dependency.
 
@@ -17,7 +17,7 @@ The examples use the **native H3 reference conditioning contract**, with public 
 
 ## Adding N references
 
-The supplied visual graph has two LoadImage nodes. Connect more LoadImage nodes to `ref_image_3` ... `ref_image_9` on **Describe References**. Only one connection per additional image is needed: that node returns the same set to the native encoder automatically. The inventory and template expand to the actual count. Remove Picture2 and edit the request if only Picture1 is wanted. The request itself must identify the intended roles; pictures do not prescribe an edit automatically.
+The supplied visual graph starts with one connected LoadImage (Picture1); a second LoadImage is present but unconnected and marked optional. Connect additional LoadImage nodes to `ref_image_2` ... `ref_image_9` on **Describe References**. Only one connection per additional image is needed: that node returns the same set to the native encoder automatically. The inventory and template expand to the actual count. With one image, leave the default request using Picture1. If you want a background from Picture2, connect that second reference and explicitly request the scene change. The request itself must identify the intended roles; pictures do not prescribe an edit automatically.
 
 Connect consecutive slots 1..N. Gaps are explicitly rejected: the current native H3 encoder numbers references in insertion order rather than preserving numeric gaps. Rejecting holes prevents silent Picture3→Picture2 identity errors. This standalone workflow does not reinterpret the separate UI's persistent sparse slot scheme.
 
@@ -44,3 +44,7 @@ The default patch backend is Flash partitions. Optional Kitchen/sparse backends 
 CPU tests cover actual source dimensions, portrait/landscape, FPS conversion, grid trim/pad and final-duration trim count, explicit caps, independent per-image calls, ordering/gap rejection, prompt templating without recursive substitution, six-section checks and delegation of the same reference set to the native H3 encoder. Structural checks cover visual/API link consistency. These do not establish semantic caption quality or a successful5090 render. Local GPU and browser validation remain required.
 
 The policy snapshot is `h3_native_prompt_policy.json`, copied from Kagemage's shared H3 policy at implementation time. It is packaged locally, so BFS does not require the UI repo or make a network request to load rules. Keep the snapshots in sync when intentionally changing prompt policy.
+
+### Request/reference mismatch and saved workflows
+
+Version1.115.21 checks requested Picture indices **before** per-image VLM generation, lists the exact attached set in the final writer instruction, and reports available slots in errors. Older saved examples may still contain `and the entire setting with <Picture 2>` in Prepare Native Video → request. With only Picture1 connected, remove that clause (or connect the intended second image), then regenerate. Updating the plugin does not overwrite a saved user request/template. Final instructions also separate source observations from target clothing and setting; source hoodies/pants must not override the assigned reference outfit. These are instruction improvements, not a guarantee of semantic correctness.
