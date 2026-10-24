@@ -22,8 +22,8 @@ Follow progress in **Logs** (`Downloading: …` / `Installed: …`).
 | Head Swap v1.0 | H3 ref2va + Head Swap r32 + turbo LoRA; face picture + source video |
 | Sharpness (LMS) | H3 ref2va + LMS fro dyn95 + turbo LoRA; source video only |
 
-Turbo LoRA (Character, Head Swap, Sharpness): DMD 8-step (default), DMAD 4-step
-or TaoMate 3-step, chosen in the advanced settings.
+Turbo LoRA (Character, Head Swap, Sharpness): DMD 8-step (default), DMAD 4-step,
+lightx2v 8-step v1.1 or lightx2v 4-step v1.0, chosen in the advanced settings.
 
 The prompt planner / VLM is Qwen3.5 9B (W4A8 GPTQ), running inside ComfyUI.
 

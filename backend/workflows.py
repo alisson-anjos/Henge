@@ -18,7 +18,8 @@ MODELS={
 TURBOS={
  'dmd8':{'label':'DMD 8-step (drbaph)','lora':'henge/dmd_ref2va_8step.safetensors','steps':8},
  'dmad4':{'label':'DMAD 4-step (Kijai)','lora':'henge/turbo_dmad_4step.safetensors','steps':4},
- 'taomate3':{'label':'TaoMate 3-step (Kijai)','lora':'henge/turbo_taomate_3step.safetensors','steps':3},
+ 'lightx8':{'label':'lightx2v 8-step v1.1 (768p)','lora':'henge/turbo_lightx2v_8step_v1_1.safetensors','steps':8},
+ 'lightx4':{'label':'lightx2v 4-step v1.0 (768p)','lora':'henge/turbo_lightx2v_4step_v1_0.safetensors','steps':4},
 }
 def node(kind,**inputs):return {'class_type':kind,'inputs':inputs}
 def grid_frames(n):return max(5,math.ceil((n-5)/17)*17+5)

@@ -75,15 +75,26 @@
       "note": "Optional turbo LoRA (4 steps)."
     },
     {
-      "id": "turbo_taomate3",
-      "url": "https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_taomate_3step_lora_avg_rank_19_bf16.safetensors",
-      "destination": "loras/henge/turbo_taomate_3step.safetensors",
+      "id": "turbo_lightx8",
+      "url": "https://huggingface.co/lightx2v/Minimax-h3-Turbo/resolve/main/minimax_h3_ref2v_turbo_8step_v1.1_768p_comfyui_bf16.safetensors",
+      "destination": "loras/henge/turbo_lightx2v_8step_v1_1.safetensors",
       "profiles": [
         "character",
         "headswap",
         "sharpness"
       ],
-      "note": "Optional turbo LoRA (3 steps)."
+      "note": "Optional turbo LoRA (8 steps)."
+    },
+    {
+      "id": "turbo_lightx4",
+      "url": "https://huggingface.co/lightx2v/Minimax-h3-Turbo/resolve/main/minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
+      "destination": "loras/henge/turbo_lightx2v_4step_v1_0.safetensors",
+      "profiles": [
+        "character",
+        "headswap",
+        "sharpness"
+      ],
+      "note": "Optional turbo LoRA (4 steps)."
     },
     {
       "id": "headswap",
