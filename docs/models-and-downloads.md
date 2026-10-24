@@ -9,8 +9,8 @@ ComfyUI directory configured by `COMFY_ROOT`, or expose them with ComfyUI's
 
 | Task | LoRA | Method |
 | --- | --- | --- |
-| Character Swap | Character Swap v1.1, selected automatically | Guide Latents |
-| Motion Transfer | Original 10500 or TARA-trained 4500 | Guide Latents (default) or TARA (experimental), under Advanced |
+| Character Swap | Character Swap v1.1, selected automatically | Guide Latents (default) or TARA (experimental) |
+| Motion Transfer | Original 10500 or TARA-trained 4500 | Guide Latents (default) or TARA (experimental), in the main generation panel |
 
 The motion model and method are independent. A guide-trained LoRA may be used
 with TARA; a TARA-trained LoRA may be selected with Guide Latents. Wiring support
