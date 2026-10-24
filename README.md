@@ -20,6 +20,8 @@ npm run dev
 
 Open http://127.0.0.1:3000. No API key is required for manual prompting, local media previews or direction export.
 
+See [models, download links and backend setup](docs/models-and-downloads.md).
+
 ## Automatic prompts
 
 Configure these server-only variables in `.env.local` and restart the server:
@@ -30,7 +32,7 @@ VLM_MODEL=your-vision-model
 VLM_API_KEY=your-key-if-required
 ```
 
-The endpoint must support vision chat messages with `image_url` data URLs and return `choices[0].message.content`. It receives the short brief, labeled picture previews (up to 1024 pixels), and six timestamped frames from the guide (up to 768 pixels). This is sampled-frame analysis, not full-video understanding or audio analysis. The browser tells you which media will be sent. Credentials stay on the server. The VLM is an optional dependency; choose a locally hosted open model for an entirely open-weights pipeline.
+The endpoint must support vision chat messages with `image_url` data URLs and return `choices[0].message.content`. References are inspected independently; sampled guide frames are analyzed separately before the final prompt is composed. This is sampled-frame analysis, not full-video understanding or audio analysis. The browser tells you which media will be sent. Credentials stay on the server. The VLM is an optional dependency; choose a locally hosted open model for an entirely open-weights pipeline.
 
 Automatic prompting in the editor and the backend planner shares `lib/h3-prompt-policy.json`. Enhanced outputs use the H3 six-section reference format, with `motion_transfer:` for motion mode and `body_swap:` for swap mode. References retain their exact indices and separate identity, outfit, object, style and environment roles. Requested scene replacements cover the entire environment while retaining the source performance and specified interaction props. Raw-prompt mode remains verbatim. See [prompt format and examples](docs/prompt-format.md).
 
@@ -38,11 +40,11 @@ Existing browser history/storage keys, ComfyUI node identifiers and backend envi
 
 ## Reference contract
 
-- The selected video interval supplies aligned guide latents. Its sampled frames can also enter Qwen/CLIP context without native video-reference latents.
+- Guide Latents is the default method. TARA (experimental) uses the native video-reference channel with temporal alignment instead. Both motion LoRAs can select either method.
 - Up to eleven image slots correspond to native `<Picture N>` tokens.
 - The editor uses `@PictureN`; export converts to `<Picture N>` without renumbering.
 - Removing a reference leaves other slots intact. Reusing an empty slot intentionally replaces that slot's identity.
-- `@Video1` converts to `<Video 1>` as a textual mention only. The adapter must not attach the guide as a native video reference because a token exists.
+- `@Video1` converts to `<Video 1>`. Native video-reference latents are attached only when TARA is explicitly selected.
 
 ## Architecture and references
 

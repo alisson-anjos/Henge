@@ -38,6 +38,10 @@ class WorkflowContracts(unittest.TestCase):
   r=self.request();r['prompt']='Use <Picture 2>'
   with self.assertRaises(ValueError):validate_request(r,{},[1])
  def test_cross_species_turns_on_fibo(self):self.assertTrue(validate_plan(self.plan(),[1],{},self.request())['use_fibo'])
+ def test_human_to_human_does_not_prepare_for_clothing_or_hair(self):
+  p=self.plan();p.update(source_kind='human',target_kind='human',use_fibo=True)
+  out=validate_plan(p,[1],{'fibo':'auto'},self.request())
+  self.assertFalse(out['use_fibo']);self.assertFalse(out['preparation_recommended'])
  def test_explicit_fibo_off_is_respected(self):self.assertFalse(validate_plan(self.plan(),[1],{'fibo':'off'},self.request())['use_fibo'])
  def test_animal_never_uses_human_body_model(self):
   r=self.request();r['subject_guidance']['bindings']=[{'id':'cat'}];p=self.plan();p.update(source_kind='animal',target_kind='human');self.assertEqual(validate_plan(p,[1],{},r)['representation'],'2d')

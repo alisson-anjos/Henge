@@ -4,8 +4,9 @@ Only branches selected in a validated plan are added: unused loaders never execu
 import json,math
 from pathlib import Path
 MODELS={
- 'motion':{'label':'Motion transfer · trained checkpoint 8000','lora':'kagemane/motion_8000.safetensors','adapter':'kagemane/training_adapter_v2.safetensors','clip_context':True},
- 'character':{'label':'Character Swap v1.1 · published','lora':'kagemane/character_v1_1.safetensors','adapter':'kagemane/dmd_ref2va_8step.safetensors','clip_context':False},
+ 'motion':{'label':'Original · 10500','task':'motion','lora':'kagemane/motion_10500.safetensors','adapter':'kagemane/training_adapter_v2.safetensors','clip_context':True},
+ 'motion_tara4500':{'label':'TARA-trained · 4500','task':'motion','lora':'kagemane/motion_tara_4500.safetensors','adapter':'kagemane/training_adapter_v2.safetensors','clip_context':True},
+ 'character':{'task':'swap','label':'Character Swap v1.1 · published','lora':'kagemane/character_v1_1.safetensors','adapter':'kagemane/dmd_ref2va_8step.safetensors','clip_context':False},
  'mix50':{'label':'Character Swap v1.0 + v1.1 · 50/50 Dyn95','lora':'kagemane/character_mix50_dyn95.safetensors','adapter':'kagemane/dmd_ref2va_8step.safetensors','clip_context':False},
 }
 def node(kind,**inputs):return {'class_type':kind,'inputs':inputs}

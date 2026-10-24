@@ -90,3 +90,23 @@ ComfyUI must load BFSNodes alongside the Kagemage custom nodes for TARA. The
 launcher whitelist now includes `bfsnodes`; install/symlink that plugin under the
 same name or adapt the whitelist to your real folder name. Do not keep duplicate
 BFS copies. Existing LoRA profile paths/defaults were not changed by this option.
+
+### Reference preparation review
+
+Reference preparation is automatic by default, with an off switch under Advanced.
+The planner recommends adaptation when an animal reference needs to follow a
+human guide (or another supported anatomy mismatch). A normal human-to-human
+swap, unusual hair, wardrobe or makeup does not activate it automatically.
+After analysis, the execution plan explains the recommendation and offers
+**Adapt reference** or **Use original image** before approval. FIBO prepares an
+additional image; it never overwrites the uploaded original. This is a pose and
+appearance aid, not a guarantee of anatomical or temporal alignment.
+
+### Tasks and motion models
+
+**Character Swap** uses the published v1.1 LoRA without a model selector.
+**Motion Transfer** offers Original 10500 and TARA-trained 4500. Either motion
+LoRA can use Guide Latents (default) or TARA (experimental), independently of how
+it was trained. Method, reference scale, seed and sampling controls are under
+Advanced. These combinations are wired and covered by CPU contracts; visual
+quality still requires real inference checks.

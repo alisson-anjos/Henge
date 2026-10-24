@@ -39,3 +39,29 @@ class ConditioningModes(unittest.TestCase):
    self.assertNotIn('ref_videos',calls[1][1])
 
 if __name__=='__main__':unittest.main()
+
+class MotionModelSelection(unittest.TestCase):
+ def test_both_motion_models_support_both_methods(self):
+  for profile,filename in [('motion','motion_10500.safetensors'),('motion_tara4500','motion_tara_4500.safetensors')]:
+   for method in ['guide','tara']:
+    g=h3_graph('clip.mp4',['identity.png'],'text',512,288,22,22,profile,42,8,'original',[],'human',0,conditioning_mode=method)
+    self.assertTrue(g['3']['inputs']['lora_name'].endswith(filename))
+    self.assertEqual('21' in g,method=='tara')
+ def test_character_swap_uses_v11(self):
+  g=h3_graph('clip.mp4',['identity.png'],'text',512,288,22,22,'character',42,8,'original',[],'human',0)
+  self.assertTrue(g['3']['inputs']['lora_name'].endswith('character_v1_1.safetensors'))
+
+class PreparationChoice(unittest.TestCase):
+ def test_choice_updates_only_awaiting_plan_and_preserves_original_prompt(self):
+  from fastapi.testclient import TestClient
+  import server
+  job={'id':'a'*32,'status':'awaiting_approval','options':{'fibo':'auto'},'plan':{'use_fibo':True,'prompt':'original text','fibo_picture_slots':[1],'fibo_instruction':'Prepare upright dog'}}
+  def save(current,**patches):current.update(patches);return current
+  with patch.object(server,'load',return_value=job),patch.object(server,'save',side_effect=save):
+   client=TestClient(server.app)
+   for enabled in [False,True]:
+    result=client.post('/jobs/'+job['id']+'/preparation',json={'enabled':enabled})
+    self.assertEqual(result.status_code,200);self.assertEqual(result.json()['plan']['use_fibo'],enabled)
+    self.assertEqual(job['plan']['prompt'],'original text')
+   job['status']='rendering'
+   self.assertEqual(client.post('/jobs/'+job['id']+'/preparation',json={'enabled':False}).status_code,409)
