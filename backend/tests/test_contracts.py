@@ -54,5 +54,5 @@ class WorkflowContracts(unittest.TestCase):
   self.assertNotIn('VAELoader',[v['class_type'] for k,v in g.items() if k=='19']);self.assertNotIn('20',g)
   self.assertFalse(any(v['class_type']=='TextEncodeFibo2' for v in g.values()))
  def test_reference_order_is_explicit(self):
-  g=fibo_graph('guide.png',['identity.png','background.png'],'edit',42);self.assertEqual(g['22']['inputs']['image'],'identity.png');self.assertEqual(g['23']['inputs']['image'],'background.png')
+  g=fibo_graph('guide.png',['identity.png','background.png'],'edit',42);self.assertEqual(g['22']['inputs']['image'],'identity.png');self.assertEqual(g['23']['inputs']['image'],'background.png');self.assertEqual(g['5']['inputs']['images.image_1'],['4',0]);self.assertEqual(g['5']['inputs']['images.image_2'],['22',0]);self.assertNotIn('image_1',g['5']['inputs'])
 if __name__=='__main__':unittest.main()
