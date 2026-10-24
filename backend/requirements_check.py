@@ -54,6 +54,7 @@ def check(models_dir,models):
         if model.get('adapter'):
             adapter=model['adapter'];add(profile+'_adapter',ADAPTER_LABELS.get(adapter.rsplit('/',1)[-1],'Adapter LoRA'),'loras/'+adapter,profile)
         add(profile+'_lora',f"{model.get('label',profile)} LoRA",lora,profile)
+        for key,label,relative in model.get('files',[]):add(profile+'_'+key,label,relative,profile)
     requirements=list(rows.values())
     def ok(group):
         needed=[r for r in requirements if group in r['groups']]

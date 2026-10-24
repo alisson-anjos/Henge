@@ -123,6 +123,15 @@
       "note": "LMS sharpness LoRA extracted with Frobenius/SVD (dyn95). Private dataset: needs HF_TOKEN."
     },
     {
+      "id": "latent_upscaler",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/latent_upscaler/h3_upscaler_lms_v0.1.safetensors",
+      "destination": "latent_upscale_models/h3_upscaler_lms_v0.1.safetensors",
+      "profiles": [
+        "sharpness"
+      ],
+      "note": "MiniMax H3 3D latent upscaler (LBH-123-AI base, MIT) fine-tuned on the LMS data. Sharpness above 720p: half-size LMS pass, latent upscale, refine."
+    },
+    {
       "id": "motion_adapter",
       "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/training_adapter_v2.safetensors",
       "destination": "loras/henge/training_adapter_v2.safetensors",

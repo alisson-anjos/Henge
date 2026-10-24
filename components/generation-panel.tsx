@@ -45,6 +45,9 @@ export default function GenerationPanel({initialSettings = {}, onShareSettings, 
   const setMask = (patch: Partial<typeof MASK_DEFAULTS>) => setMaskSettings(current => ({...current, ...patch}));
   const [cfg, setCfg] = useState(typeof initialSettings.cfg === 'number' ? Math.min(12, Math.max(1, initialSettings.cfg)) : 1);
   const [base, setBase] = useState(initialSettings.base === 'omniref' ? 'omniref' : 'h3');
+  const [loraStrength, setLoraStrength] = useState(typeof initialSettings.lora_strength === 'number' ? Math.min(2, Math.max(0, initialSettings.lora_strength)) : 1);
+  const [latentUpscale, setLatentUpscale] = useState(typeof initialSettings.latent_upscale === 'boolean' ? initialSettings.latent_upscale : true);
+  const [upscaleDenoise, setUpscaleDenoise] = useState(typeof initialSettings.upscale_denoise === 'number' ? Math.min(1, Math.max(.1, initialSettings.upscale_denoise)) : .5);
   const [turbo, setTurbo] = useState(typeof initialSettings.turbo === 'string' ? initialSettings.turbo : 'dmd8');
   const [prepareReferences, setPrepareReferences] = useState(initialSettings.prepare_references !== false);
   const [attention, setAttention] = useState(initialSettings.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention');
@@ -71,7 +74,7 @@ export default function GenerationPanel({initialSettings = {}, onShareSettings, 
     if (!request || !video || !canSubmit || submitting) return;
     setError(''); setSubmitting(true);
     try {
-      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, base, cfg, ...(usesMask ? {mask: maskSettings} : {}), ...(mode === 'motion' ? {} : {turbo})})); body.set('video', video);
+      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, base, cfg, ...(usesMask ? {mask: maskSettings} : {}), ...(mode === 'motion' ? {} : {turbo}), ...(mode === 'sharpness' ? {lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise} : {})})); body.set('video', video);
       pictures.forEach(p => body.set(`picture_${p.slot}`, p.file));
       const response = await fetch('/api/backend/jobs', {method: 'POST', body}); const result = await readJson(response);
       if (!response.ok) throw Error(result.detail || result.error || 'Unable to create job');
@@ -145,13 +148,18 @@ export default function GenerationPanel({initialSettings = {}, onShareSettings, 
         <label>{tr('Invert (regenerate everything except the subject)', 'Inverter (regenera tudo menos o personagem)', 'Invertir (regenera todo menos el personaje)')}<input type="checkbox" checked={maskSettings.invert} onChange={e => setMask({invert: e.target.checked})}/></label>
         <button type="button" className="text-link" onClick={() => setMaskSettings(MASK_DEFAULTS)}>{tr('Reset to BFS planner defaults', 'Voltar aos padrões do planner BFS', 'Volver a los valores del planner BFS')}</button>
       </fieldset>}
+      {mode === 'sharpness' && <fieldset className="mask-settings"><legend>{tr('Sharpness', 'Nitidez', 'Nitidez')}</legend>
+        <label>{tr('Sharpness strength (LMS LoRA)', 'Força do sharpness (LoRA LMS)', 'Fuerza de nitidez (LoRA LMS)')}<input type="number" min="0" max="2" step="0.05" value={loraStrength} onChange={e => setLoraStrength(Math.min(2, Math.max(0, Number(e.target.value) || 0)))}/></label>
+        <label>{tr('Latent upscale above 720p (half-size pass → 3D latent upscaler → refine)', 'Latent upscale acima de 720p (passada em meia resolução → latent upscaler 3D → refino)', 'Latent upscale por encima de 720p (pasada a media resolución → latent upscaler 3D → refinado)')}<input type="checkbox" checked={latentUpscale} onChange={e => setLatentUpscale(e.target.checked)}/></label>
+        <label>{tr('Refine denoise (higher = more new detail)', 'Denoise do refino (maior = mais detalhe novo)', 'Denoise del refinado (mayor = más detalle nuevo)')}<input type="number" min="0.1" max="1" step="0.05" value={upscaleDenoise} disabled={!latentUpscale} onChange={e => setUpscaleDenoise(Math.min(1, Math.max(.1, Number(e.target.value) || .5)))}/></label>
+      </fieldset>}
       <label>CFG<input type="number" min="1" max="12" step="0.5" value={cfg} onChange={e => setCfg(Math.min(12, Math.max(1, Number(e.target.value) || 1)))}/></label>
       <label>{tr('Attention', 'Atenção', 'Atención')}<select value={attention} onChange={e => setAttention(e.target.value)}><option value="comfy kitchen attention">Comfy Kitchen (INT8)</option><option value="pytorch attention">PyTorch</option></select></label>
       <label>CLIP video FPS<select value={activeConditioning === 'tara' ? 2 : clipFps} disabled={activeConditioning === 'tara'} onChange={e => setClipFps(Number(e.target.value))}>{[1, 2, 4, 8].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
       <label>{tr('Detect camera cuts', 'Detectar cortes de câmera', 'Detectar cortes de cámara')}<input type="checkbox" checked={detectCuts} onChange={e => setDetectCuts(e.target.checked)}/></label>
     </div>{onImportSettings && <button className="quiet-button import-settings-button" onClick={onImportSettings}>{tr('Import settings', 'Importar configuração', 'Importar configuración')}</button>}</details>
   </div>;
-  const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo, prepare_references: prepareReferences, base, cfg, mask: maskSettings};
+  const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo, prepare_references: prepareReferences, base, cfg, mask: maskSettings, lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise};
   const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button><button className="primary" disabled={!health?.online || health?.models[profile]?.available === false || !canSubmit || submitting} onClick={submit}>{submitting ? tr('Sending…', 'Enviando…', 'Enviando…') : tr('Generate', 'Gerar', 'Generar')}</button></>;
   return <section className="generation-panel" aria-label={tr('Generation backend', 'Geração no backend', 'Generación en backend')}>
     {settingsTarget ? createPortal(settings, settingsTarget) : null}

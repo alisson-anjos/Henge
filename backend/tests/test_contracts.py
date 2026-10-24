@@ -37,6 +37,9 @@ class WorkflowContracts(unittest.TestCase):
  def test_camera_cuts_reset_context_without_dropping_frames(self):
   shots=split_on_cuts(720,107,22,[95,250,400]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),720)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,95,250,400]);self.assertTrue(all(s['overlap']==0 for s in shots if s['reset_context']))
+ def test_close_cuts_do_not_create_tiny_shots(self):
+  shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
+  self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))
  def test_missing_native_reference_slot_is_rejected(self):
   with self.assertRaises(ValueError):validate_request(self.request(),{},[1,3])
  def test_invented_reference_is_rejected(self):
@@ -74,6 +77,11 @@ class WorkflowContracts(unittest.TestCase):
   self.assertEqual(g['3']['inputs']['lora_name'],'henge/lms_v1_fro_dyn95.safetensors');self.assertEqual(g['7']['inputs']['pictures'],'[]');self.assertEqual(g['13']['inputs']['scheduler'],'simple')
   g=h3_graph('v.mp4',['face.png'],'head_swap:',512,288,107,107,'headswap',42,8,'original',[],'human',0)
   self.assertEqual(g['3']['inputs']['lora_name'],'henge/head_swap_v1_0_r32.safetensors');self.assertEqual(g['13']['inputs']['scheduler'],'beta');self.assertFalse(g['9']['inputs']['guide_context'])
+ def test_sharpness_latent_upscale_two_pass(self):
+  g=h3_graph('v.mp4',[],'Enhance.',544,1024,73,72,'sharpness',1,8,'original',[],'human',0,lora_strength=1.4,upscale={'width':1088,'height':2048,'denoise':.5})
+  self.assertEqual(g['3']['inputs']['strength_model'],1.4);self.assertEqual(g['30']['inputs']['latent'],['15',0]);self.assertEqual((g['30']['inputs']['mode.width'],g['30']['inputs']['mode.height']),(1088,2048))
+  self.assertEqual(g['32']['inputs']['guide'],['31',0]);self.assertEqual(g['37']['inputs']['latent_image'],['33',0]);self.assertEqual(g['34']['inputs']['denoise'],.5);self.assertEqual(g['16']['inputs']['samples'],['38',0])
+  self.assertNotIn('30',h3_graph('v.mp4',[],'Enhance.',544,1024,73,72,'sharpness',1,8,'original',[],'human',0))
  def test_head_swap_prompt_template(self):
   from edit_modes import head_swap_prompt
   text=head_swap_prompt(' "Male, round face,\n short black hair" ')

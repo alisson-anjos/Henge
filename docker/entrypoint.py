@@ -61,7 +61,7 @@ def main():
     downloader=subprocess.Popen([sys.executable,str(APP/'scripts/download_models.py')],cwd=APP)
     comfy_host='0.0.0.0' if os.environ.get('HENGE_EXPOSE_COMFY')=='1' else '127.0.0.1'
     comfy_args=shlex.split(os.environ.get('HENGE_COMFY_ARGS','--lowvram'))
-    commands=[([sys.executable,'main.py','--listen',comfy_host,'--port','8189','--preview-method','taesd',*comfy_args,'--disable-all-custom-nodes','--whitelist-custom-nodes','henge','bfsnodes'],COMFY),([sys.executable,'-m','uvicorn','server:app','--host','127.0.0.1','--port','8766'],APP/'backend'),(['node','node_modules/next/dist/bin/next','start','--hostname','0.0.0.0','--port','8188'],APP)]
+    commands=[([sys.executable,'main.py','--listen',comfy_host,'--port','8189','--preview-method','taesd',*comfy_args,'--disable-all-custom-nodes','--whitelist-custom-nodes','henge','bfsnodes','h3_latent_upscaler'],COMFY),([sys.executable,'-m','uvicorn','server:app','--host','127.0.0.1','--port','8766'],APP/'backend'),(['node','node_modules/next/dist/bin/next','start','--hostname','0.0.0.0','--port','8188'],APP)]
     for command,cwd in commands:processes.append(subprocess.Popen(command,cwd=cwd))
     try:
         reported=False

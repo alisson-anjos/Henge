@@ -11,7 +11,8 @@ MODELS={
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
  'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/head_swap_v1_0_r32.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False,'scheduler':'beta'},
- 'sharpness':{'task':'sharpness','label':'LMS Sharpness v1 · fro dyn95','lora':'henge/lms_v1_fro_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
+ 'sharpness':{'task':'sharpness','label':'LMS Sharpness v1 · fro dyn95','lora':'henge/lms_v1_fro_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False,
+              'files':[('latent_upscaler','Latent upscaler 3D · LMS v0.1','latent_upscale_models/h3_upscaler_lms_v0.1.safetensors')]},
 }
 # Swappable speed LoRAs for the modes whose adapter is a turbo LoRA (not Motion: its
 # training adapter V2 is what the motion LoRAs were trained on).
@@ -23,6 +24,8 @@ TURBOS={
  'lightx4':{'label':'lightx2v 4-step v1.0 (768p)','lora':'henge/turbo_lightx2v_4step_v1_0.safetensors','steps':4},
 }
 # Base diffusion models. OmniRef (FastVideo) is already distilled to 8 steps: pair it with turbo 'none'.
+# Latent upscaler for the Sharpness two-pass recipe (MinimaxH3LatentUpscaler3D, LBH-123-AI, MIT), fine-tuned on the LMS data.
+LATENT_UPSCALER='h3_upscaler_lms_v0.1.safetensors'
 BASES={
  'h3':{'label':'MiniMax H3 ref2va','unet':'minimax_h3_ref2va_pruned_int8_convrot.safetensors'},
  'omniref':{'label':'FastH3 OmniRef 8-step (FastVideo)','unet':'fasth3_omniref_8step_pruned_int8_convrot.safetensors'},
@@ -40,11 +43,11 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,upscale=None):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
-      '3':node('LoraLoaderModelOnly',model=['2',0],lora_name=model['lora'],strength_model=1.),
+      '3':node('LoraLoaderModelOnly',model=['2',0],lora_name=model['lora'],strength_model=float(lora_strength)),
       # Published H3 workflows run dense attention on Comfy Kitchen (INT8); TARA detects it.
       '22':node('ModelAttentionBackend',model=['3',0],attention=attention),
       '4':node('MiniMaxH3SigmaShift',model=['22',0],shift_video=12.,shift_audio=3.),
@@ -84,6 +87,25 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         g['9']['inputs'].update(context_images=['20',0],context_count=context_count)
         if conditioning_mode=='tara' and context_prompt:
             g['9']['inputs']['prompt']+=f' <Picture {len(refs)+1}> is the preceding generated final frame, used only for scene/identity continuity. Follow the current Video 1 performance and timing; do not freeze its pose or override the assigned reference identities.'
+    if upscale:
+        # Sharpness two-pass: LMS at the low first-pass size, the 3D latent upscaler to the target size, then a
+        # partial-denoise LMS pass guided by the source at the target size. `video` holds the target-size shot.
+        W,H=upscale['width'],upscale['height']
+        g['30']=node('MinimaxH3LatentUpscaler3D',latent=['15',0],model_name=LATENT_UPSCALER,mode='target dimensions',align=32,enable_chunking=True,device='cuda',precision='fp16',**{'mode.width':W,'mode.height':H})
+        g['31']=node('HengeLoadShot',video=video,pictures=json.dumps(refs),width=W,height=H,length=length)
+        g['32']=node('HengeH3Conditioning',**{**g['9']['inputs'],'guide':['31',0],'references':['31',1],'width':W,'height':H,
+                                               'reference_scale':max(.25,min(1.,width/W))})
+        if context_video:
+            # Continuity frames come from the previous upscaled result: feed pass 2 at the target size.
+            g['40']=node('HengeLoadShot',video=context_video,pictures='[]',width=W,height=H,length=context_count);g['32']['inputs']['context_images']=['40',0]
+        g['33']=node('LTXVConcatAVLatent',video_latent=['30',0],audio_latent=['15',1])
+        g['34']=node('BasicScheduler',model=g['13']['inputs']['model'],scheduler=g['13']['inputs']['scheduler'],steps=max(2,round(steps*float(upscale['denoise']))),denoise=float(upscale['denoise']))
+        g['35']=node('RandomNoise',noise_seed=seed+1000)
+        g['36']=node('CFGGuider',**{**g['10']['inputs'],'positive':['32',0],'negative':['39',0] if cfg>1 else ['32',0]})
+        if cfg>1:g['39']=node('ConditioningZeroOut',conditioning=['32',0])
+        g['37']=node('SamplerCustomAdvanced',noise=['35',0],guider=['36',0],sampler=['12',0],sigmas=['34',0],latent_image=['33',0])
+        g['38']=node('LTXVSeparateAVLatent',av_latent=['37',0])
+        g['16']['inputs']['samples']=['38',0]
     return g
 
 def fibo_graph(image,refs,instruction,seed):
@@ -114,8 +136,13 @@ def plan_graph(image,instructions,max_tokens=2500,clip_name='qwen3.5_9b_w4a8_gpt
     return g
 
 
-def split_on_cuts(total,per_shot,context,cuts):
-    boundaries=sorted({0,total,*[int(c) for c in cuts if 0<int(c)<total]})
+def split_on_cuts(total,per_shot,context,cuts,min_gap=24):
+    # Scene detection fires on flashes, fades and fast pans; a cut closer than min_gap frames to the
+    # previous boundary (or the end) would only buy a near-empty shot rendered at full length.
+    boundaries=[0]
+    for c in sorted({int(c) for c in cuts}):
+        if c-boundaries[-1]>=min_gap and total-c>=min_gap:boundaries.append(c)
+    boundaries.append(total)
     output=[]
     for start,end in zip(boundaries,boundaries[1:]):
         for i,shot in enumerate(split_frames(end-start,per_shot,context)):

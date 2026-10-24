@@ -7,7 +7,7 @@ import requests
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageOps
-from workflows import MODELS,TURBOS,BASES,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import MODELS,TURBOS,BASES,LATENT_UPSCALER,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import MODES,FIXED_RECIPE,LMS_CAPTION,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
@@ -72,6 +72,10 @@ def clamp_float(value,lo,hi,label):
     if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or not lo<=value<=hi:raise ValueError(f'Invalid {label}')
     return value
 
+# Output short side. Sharpness above 720p renders a half-size LMS pass, then latent-upscales and refines at this size.
+QUALITY={'480p':480,'720p':720,'1080p':1080,'1440p':1440}
+UPSCALE_ABOVE=720
+
 def validate_request(r,options,slots):
     if not isinstance(r,dict) or r.get('mode') not in MODES or not isinstance(r.get('prompt'),str) or len(r['prompt'])>16000:raise ValueError('Provide a valid direction and prompt')
     profile,low,high=MODES[r['mode']]
@@ -80,13 +84,14 @@ def validate_request(r,options,slots):
         r['prompt']=r['prompt'] or r['mode'];options['profile']=profile;options['enhance_prompt']=True
     elif not r['prompt'].strip():raise ValueError('Provide a valid direction and prompt')
     if not low<=len(slots)<=high:raise ValueError('Attach exactly one face picture' if r['mode']=='headswap' else 'Sharpness uses only the video; remove the reference pictures' if r['mode']=='sharpness' else 'Attach 1–11 reference images')
-    if r.get('quality') not in ['480p','720p','1080p']:raise ValueError('Choose 480p, 720p or 1080p')
+    if r.get('quality') not in QUALITY:raise ValueError('Choose 480p, 720p, 1080p or 2K')
     video=r.get('video',{});start=clamp_float(video.get('start_seconds'),0,86400,'start');end=clamp_float(video.get('end_seconds'),0,86400,'end')
     if end<=start:raise ValueError('End must be after start')
     if not isinstance(options.get('enhance_prompt',True),bool):raise ValueError('Enhance prompt must be a boolean')
     if not isinstance(options.get('auto_approve',False),bool):raise ValueError('Auto-approve must be a boolean')
     if not isinstance(options.get('prepare_references',True),bool):raise ValueError('Reference preparation must be a boolean')
-    clamp_float(options.get('cfg',1.),1,12,'CFG')
+    clamp_float(options.get('cfg',1.),1,12,'CFG');clamp_float(options.get('lora_strength',1.),0,2,'LoRA strength');clamp_float(options.get('upscale_denoise',.5),.1,1,'refine denoise')
+    if not isinstance(options.get('latent_upscale',True),bool):raise ValueError('Latent upscale must be a boolean')
     mask=options.get('mask') or {}
     if not isinstance(mask,dict) or set(mask)-{'threshold','shape','padding','expand','fill_holes','temporal_expand','blockify','invert','strength'}:raise ValueError('Invalid latent mask settings')
     if mask.get('shape','box') not in ['box','silhouette']:raise ValueError('Unknown mask shape')
@@ -199,10 +204,11 @@ def execute_graph(job,graph,stage):
                                     elif event.get('type')=='progress':
                                         maximum=max(1,int(data.get('max',1)));value=int(data.get('value',0));patch={'step':value,'step_total':maximum}
                                         if graph.get(str(data.get('node')),{}).get('class_type')=='SamplerCustomAdvanced':
-                                            patch['message']='Sampling video'
-                                            # Measured pace after the first step (model loading excluded) -> remaining time.
-                                            now=time.monotonic();pace.setdefault('first',(value,now))
-                                            first_value,first_time=pace['first']
+                                            refine=str(data.get('node'))=='37'
+                                            patch['message']='Refining the upscaled video' if refine else 'Sampling video'
+                                            # Measured pace after the first step (model loading excluded) -> remaining time, per sampler.
+                                            now=time.monotonic();pace.setdefault(str(data.get('node')),(value,now))
+                                            first_value,first_time=pace[str(data.get('node'))]
                                             if value>first_value:
                                                 per_step=(now-first_time)/(value-first_value)
                                                 left_segments=max(0,job.get('total_segments',1)-job.get('segment',1))
@@ -365,7 +371,13 @@ def generate(job):
             dest=character_reference(INPUT/ref,image_from_output(outputs),inp/f'reference_{i}_prepared.png')
             shutil.copyfile(dest,work/f'reference_{i}_prepared.png');prepared.append(str(dest.relative_to(INPUT)))
         refs=prepared;save(job,prepared_reference_urls=[f"/api/backend/jobs/{job['id']}/files/reference_{i}_prepared.png" for i in range(1,len(prepared)+1)])
-    width,height=meta['width'],meta['height'];short={'480p':480,'720p':720,'1080p':1080}[r['quality']];scale=short/min(width,height);w=max(32,round(width*scale/32)*32);h=max(32,round(height*scale/32)*32)
+    width,height=meta['width'],meta['height']
+    def size(short):scale=short/min(width,height);return max(32,round(width*scale/32)*32),max(32,round(height*scale/32)*32)
+    short=QUALITY[r['quality']];W,H=size(short);upscale=None
+    if r['mode']=='sharpness' and options.get('latent_upscale',True) and short>UPSCALE_ABOVE:
+        if not (COMFY/'models/latent_upscale_models'/LATENT_UPSCALER).is_file():raise ValueError(f'Latent upscale needs models/latent_upscale_models/{LATENT_UPSCALER}; turn Latent upscale off in Advanced to sharpen in one pass')
+        upscale={'width':W,'height':H,'denoise':options.get('upscale_denoise',.5)};w,h=size(max(480,short//2))
+    else:w,h=W,H
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
     if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
     context=min(r['processing'].get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17));shots=split_frames(total,per,context)
@@ -399,12 +411,12 @@ def generate(job):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         if shot.get('reset_context'):previous=None
         name=f'shot_{i:03d}.mp4';path=inp/name;t=start+shot['start']/24;duration=shot['frames']/24
-        args=['ffmpeg','-v','error','-ss',str(t),'-i',str(INPUT/assets['video']),'-t',str(duration),'-vf',f'fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2','-c:v','libx264','-threads','2','-crf','18','-pix_fmt','yuv420p','-c:a','aac','-y',str(path)];run(args)
+        args=['ffmpeg','-v','error','-ss',str(t),'-i',str(INPUT/assets['video']),'-t',str(duration),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-c:v','libx264','-threads','2','-crf','18','-pix_fmt','yuv420p','-c:a','aac','-y',str(path)];run(args)
         relative=str(path.relative_to(INPUT));context_rel=None
         if previous is not None:
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'))
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),upscale=upscale)
         execute_graph(job,graph,f'h3_segment_{i:03d}')
         rendered=OUTPUT/relative.replace('.mp4','_result.mp4');guide=OUTPUT/relative.replace('.mp4','_guide.mp4')
         if not rendered.is_file():raise ValueError('ComfyUI finished without the expected video')
@@ -420,7 +432,7 @@ def generate(job):
         i=args.index('-c:v');args[i+1]='libx264';args+=['-vf',f'fps={output_fps}','-threads','2','-crf','18']
     args+=['-t',str(end-start),'-movflags','+faststart','-y',str(output)];run(args)
     # Comparison uses the exact selected source interval and result duration.
-    compare=work/'comparison.mp4';run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(output),'-filter_complex',f'[0:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2[a];[a][1:v]hstack=shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
+    compare=work/'comparison.mp4';run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(output),'-filter_complex',f'[0:v]fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2[a];[a][1:v]hstack=shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
     save(job,status='completed',stage='complete',progress=1,eta_seconds=None,seconds_per_step=None,result_url=f"/api/backend/jobs/{job['id']}/files/result.mp4",comparison_url=f"/api/backend/jobs/{job['id']}/files/comparison.mp4",message='Generation complete',prompt_id=None)
 
 def worker():

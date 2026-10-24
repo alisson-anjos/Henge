@@ -10,6 +10,7 @@ RUN npm run build
 FROM ${PYTORCH_IMAGE} AS runtime
 ARG COMFY_REF=d52a7a5ef60b36062f7c3c69bd774f4c98b56eb0
 ARG BFS_REF=f4b6f63be1a76ccc4992112568fad38bcaa4120c
+ARG UPSCALER_REF=6a4b191e8af583b7c097f564690325f91d18c2e2
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
     COMFY_ROOT=/opt/ComfyUI COMFY_BASE_URL=http://127.0.0.1:8189 \
     HENGE_BACKEND_URL=http://127.0.0.1:8766 HENGE_DATA_DIR=/state/jobs \
@@ -20,7 +21,9 @@ ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
 RUN apt-get update && apt-get install -y --no-install-recommends git ffmpeg ca-certificates openssh-server curl libgl1 libglib2.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git /opt/ComfyUI && git -C /opt/ComfyUI checkout "$COMFY_REF" \
  && git clone https://github.com/alisson-anjos/ComfyUI-BFSNodes.git /opt/ComfyUI/custom_nodes/bfsnodes \
- && git -C /opt/ComfyUI/custom_nodes/bfsnodes checkout "$BFS_REF"
+ && git -C /opt/ComfyUI/custom_nodes/bfsnodes checkout "$BFS_REF" \
+ && git clone https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler.git /opt/ComfyUI/custom_nodes/h3_latent_upscaler \
+ && git -C /opt/ComfyUI/custom_nodes/h3_latent_upscaler checkout "$UPSCALER_REF"
 COPY --from=web /usr/local/bin/node /usr/local/bin/node
 COPY --from=web /app /app
 # Pin the base image's torch stack so custom-node requirements cannot swap the CUDA build.
