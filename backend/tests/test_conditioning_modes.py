@@ -42,7 +42,7 @@ if __name__=='__main__':unittest.main()
 
 class MotionModelSelection(unittest.TestCase):
  def test_both_motion_models_support_both_methods(self):
-  for profile,filename in [('motion','motion_10500.safetensors'),('motion_tara4500','motion_tara_4500.safetensors')]:
+  for profile,filename in [('motion','motion_10500_v2_merged.safetensors'),('motion_tara4500','motion_tara_4500.safetensors')]:
    for method in ['guide','tara']:
     g=h3_graph('clip.mp4',['identity.png'],'text',512,288,22,22,profile,42,8,'original',[],'human',0,conditioning_mode=method)
     self.assertTrue(g['3']['inputs']['lora_name'].endswith(filename))

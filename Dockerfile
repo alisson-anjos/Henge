@@ -13,7 +13,7 @@ ARG BFS_REF=f4b6f63be1a76ccc4992112568fad38bcaa4120c
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
     COMFY_ROOT=/opt/ComfyUI COMFY_BASE_URL=http://127.0.0.1:8189 \
     KAWARIMI_BACKEND_URL=http://127.0.0.1:8766 KAWARIMI_DATA_DIR=/state/jobs \
-    KAWARIMI_MODELS_DIR=/opt/ComfyUI/models KAWARIMI_MODEL_PROFILES=character \
+    KAWARIMI_MODELS_DIR=/opt/ComfyUI/models KAWARIMI_MODEL_PROFILES=character,motion10500,motion4500 \
     KAWARIMI_MODEL_MANIFEST=/app/config/model-repos.example.json \
     HF_HOME=/state/huggingface HF_XET_HIGH_PERFORMANCE=1 \
     PIP_BREAK_SYSTEM_PACKAGES=1 PIP_ROOT_USER_ACTION=ignore

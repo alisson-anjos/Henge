@@ -45,24 +45,24 @@ Environment variables (all optional):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `KAWARIMI_MODEL_PROFILES` | `character` | Comma list: `character`, `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500`, `motion4500` |
-| `HF_TOKEN` | — | Needed for private model repositories. Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
+| `KAWARIMI_MODEL_PROFILES` | `character,motion10500,motion4500` | Comma list: `character`, `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500`, `motion4500` |
+| `HF_TOKEN` | — | **Required for the motion LoRAs** (private for now). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
 | `KAWARIMI_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
 | `KAWARIMI_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
 | `KAWARIMI_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. On 80 GB GPUs try `--highvram` |
 | `KAWARIMI_EXPOSE_COMFY` | — | `1` makes ComfyUI listen on `0.0.0.0:8189` for debugging |
 | `PUBLIC_KEY` | — | RunPod injects your SSH key; enables `sshd` |
 
-Private motion LoRAs, until they are published:
+The motion LoRAs live in the private dataset `Alissonerdx/Kagemage-Backups`
+until they are published, so the default profiles
+(`character,motion10500,motion4500`) need `HF_TOKEN` with read access. Without
+it, Character Swap still installs and the motion modes show as unavailable.
 
-```json
-{"motion10500":{"url":"https://huggingface.co/Alissonerdx/REPO/resolve/main/motion_10500.safetensors"},
- "motion4500":{"url":"https://huggingface.co/Alissonerdx/REPO/resolve/main/motion_tara_4500.safetensors"}}
-```
-
-Put that JSON in `KAWARIMI_MODEL_OVERRIDES`, add `motion10500,motion4500` to
-`KAWARIMI_MODEL_PROFILES` and set `HF_TOKEN`. You can also drop a complete
-manifest at `/workspace/kawarimi/model-repos.json`; it replaces the bundled one.
+To point an entry at another link without rebuilding, set
+`KAWARIMI_MODEL_OVERRIDES`, e.g.
+`{"motion4500":{"url":"https://huggingface.co/USER/REPO/resolve/main/file.safetensors"}}`.
+You can also drop a complete manifest at `/workspace/kawarimi/model-repos.json`;
+it replaces the bundled one.
 
 ## 3. GPU
 
@@ -75,9 +75,9 @@ The image uses PyTorch 2.14 + CUDA 13.0, so the host driver must support CUDA 13
 
 ## 4. First boot
 
-Watch **Logs**. The first boot downloads ≈ 63 GB for the Character profile
+Watch **Logs**. The first boot downloads ≈ 65 GB with the default profiles
 (H3 21 GB + H3 text encoder 27 GB + VAE 5 GB + Qwen3.5 planner 7 GB + Character
-LoRAs 2.4 GB). When ComfyUI and the UI are up, open **Connect → HTTP 8188**
+LoRAs 2.4 GB + motion LoRAs 1.9 GB). When ComfyUI and the UI are up, open **Connect → HTTP 8188**
 (`https://<pod-id>-8188.proxy.runpod.net`).
 
 A model that cannot be downloaded (e.g. a private LoRA without a token) is

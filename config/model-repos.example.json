@@ -59,24 +59,24 @@
     },
     {
       "id": "motion_adapter",
-      "url": "https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/training_adapter_v2.safetensors",
       "destination": "loras/kawarimi/training_adapter_v2.safetensors",
       "profiles": [
-        "motion10500",
         "motion4500"
-      ]
+      ],
+      "note": "Combined at load time with motion4500 (TARA v2). Same sha256 as ostris/minimax_h3_training_adapter v2."
     },
     {
       "id": "motion10500",
-      "url": null,
-      "destination": "loras/kawarimi/motion_10500.safetensors",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/motion10500_plus_training_adapter_v2_exact.safetensors",
+      "destination": "loras/kawarimi/motion_10500_v2_merged.safetensors",
       "profiles": [
         "motion10500"
       ]
     },
     {
       "id": "motion4500",
-      "url": null,
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/tara_h3_motion_r64_multiscale_v2_000004500.safetensors",
       "destination": "loras/kawarimi/motion_tara_4500.safetensors",
       "profiles": [
         "motion4500"
