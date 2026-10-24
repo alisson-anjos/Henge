@@ -326,3 +326,34 @@ img{display:block;max-width:100%}
 
 /* Generation adapter, sharing the studio controls and surfaces. */
 .generation-panel{padding:22px;margin-top:18px}.generation-panel h2{font-size:16px}.generation-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}.generation-options label,.generation-jobs label{display:grid;gap:6px;font-size:12px;color:var(--muted,#aaa)}.generation-options input,.generation-options select,.generation-jobs select{width:100%;min-width:0;padding:10px;background:#17191b;color:#eee;border:1px solid #36383b;border-radius:8px}.generation-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}.generation-jobs{margin-top:18px}.generation-job{margin-top:16px;padding-top:16px;border-top:1px solid #343638}.generation-job details{margin:12px 0}.generation-job p,.generation-job li{font-size:13px;line-height:1.6}.generation-job video,.output-pane video{width:100%;max-height:520px;object-fit:contain}.fibo-preview{max-width:240px;max-height:240px;object-fit:contain;margin-top:14px}.generation-job progress{width:100%;accent-color:var(--accent)}@media(max-width:600px){.generation-options{grid-template-columns:1fr}.generation-panel{padding:15px}}
+
+/* One creation surface: direction -> generation -> reviewed plan/result. */
+.creation-card{overflow:hidden}
+.creation-card .prompt-card{border-radius:0;background:transparent;border:0}
+.creation-card .prompt-header{padding:18px 20px}
+.creation-card .prompt-editor textarea{min-height:140px;padding:18px 20px}
+.creation-card .prompt-footer{padding:10px 20px;border-bottom:1px solid var(--border,#24242e)}
+.creation-card .generation-panel{margin:0;padding:20px;border:0;border-radius:0;background:transparent}
+.creation-card .generation-panel>.label-row{align-items:center;gap:12px}
+.creation-card .generation-panel h2{font-size:13px;font-weight:600;margin:0}
+.creation-card .generation-panel>.label-row>.mono{font-size:9px;white-space:nowrap}
+.creation-card .generation-options{margin:16px 0;align-items:start;gap:16px}
+.generation-options input[type=checkbox]{width:16px;height:16px;padding:0;accent-color:var(--accent);justify-self:start}
+.generation-options label:has(input[type=checkbox]){grid-template-columns:1fr auto;align-items:center;gap:8px}
+.generation-options label:has(input[type=checkbox]) small{grid-column:1/-1;line-height:1.5;font-size:11px}
+.generation-advanced{border-top:1px solid var(--border,#24242e);padding-top:13px;margin-top:4px}
+.generation-advanced>summary{font-size:12px;color:var(--muted);cursor:pointer;padding:3px 0}
+.save-preset-option{display:flex;justify-content:space-between;align-items:center;gap:16px;border-top:1px solid var(--border,#24242e);padding:16px 0 3px;margin-top:16px}
+.save-preset-option>div{display:grid;gap:5px}
+.save-preset-option strong{font-size:12px;font-weight:500}
+.save-preset-option small{font-size:11px;line-height:1.5;color:var(--muted);max-width:340px}
+.save-preset-option .quiet-button{white-space:nowrap;font-size:11px;padding:9px 12px}
+.creation-card .generation-panel>.micro-copy{margin:14px 0 12px;line-height:1.6}
+.review-edit-button{width:100%;min-height:44px;justify-content:center}
+.creation-card .generation-jobs{padding-top:16px;border-top:1px solid var(--border,#24242e);margin-top:20px}
+.creation-card .generation-job{margin-top:20px;padding-top:20px}
+.preparation-recommendation{padding:16px;border:1px solid rgba(var(--accent-rgb),.3);background:rgba(var(--accent-rgb),.05);border-radius:10px;margin:16px 0}
+.preparation-recommendation>strong{font-size:13px}
+.preparation-recommendation .plan-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.preparation-recommendation small{font-size:11px;color:var(--muted)}
+@media(max-width:700px){.creation-card .prompt-header,.creation-card .generation-panel{padding:15px}.creation-card .prompt-editor textarea{padding:15px}.creation-card .prompt-footer{padding:10px 15px}.save-preset-option{align-items:flex-start;flex-direction:column}.creation-card .generation-panel>.label-row{flex-wrap:wrap}}

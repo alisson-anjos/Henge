@@ -15,7 +15,7 @@ with sync_playwright() as p:
     page.get_by_test_id('picture-input').set_input_files('/data/datasets/openjutsu/color_binding_v2_30/train/animate/refs_1/000151.webp')
     page.get_by_role('textbox',name='Execution prompt',exact=True).fill('motion_transfer: Animate @Picture1 with the performance in @Video1.')
     with page.expect_response(lambda r:r.url.endswith('/api/backend/jobs') and r.request.method=='POST') as response:
-        page.get_by_role('button',name='Upload and plan',exact=True).click()
+        page.get_by_role('button',name='Review edit',exact=True).click()
     created=response.value.json();assert response.value.ok,created
     jid=created['id'];job=created
     try:

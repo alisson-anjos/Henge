@@ -55,7 +55,6 @@ export default function Studio() {
   const [intent, setIntent] = useState('');
   const [auto, setAuto] = useState(false);
   const [working, setWorking] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState('');
   const [native, setNative] = useState(false);
   const [quality, setQuality] = useState('720p');
@@ -85,7 +84,7 @@ export default function Studio() {
   const accent = mode === 'swap' ? '#D6FF4B' : '#AA8BFF';
   const style = {'--accent': accent, '--accent-rgb': mode === 'swap' ? '214,255,75' : '170,139,255'} as CSSProperties;
   const modeName = (value: Mode) => value === 'swap' ? t.swap : t.motion;
-  const busy = working || exporting;
+  const busy = working;
 
   useEffect(() => () => {
     live.current.pictures.forEach(p => URL.revokeObjectURL(p.url));
@@ -206,20 +205,6 @@ export default function Studio() {
       pictures: pictures.map(p => ({slot: p.slot, token: `<Picture ${p.slot}>`, name: p.file.name})), generation_status: 'not_submitted',
     };
   }
-  async function exportRequest() {
-    if (!canExport) return;
-    const request = makeRequest(); if (!request || !video) return;
-    // Download in the click gesture; a slow thumbnail decode cannot block the export.
-    downloadJSON(request, 'kagemage-request.json'); setExporting(true);
-    let thumbnail = '';
-    try {
-      const frames = await videoFrames(video.file, video.range, 2);
-      thumbnail = frames[0]?.data || '';
-    } catch { try { if (pictures[0]) thumbnail = await imageData(pictures[0].file, 320); } catch { /* A preview is optional. */ } }
-    const item: SavedDirection = {id: (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `direction-${Date.now()}-${Math.random().toString(36).slice(2)}`), created: new Date().toISOString(), request, thumbnail, rating: 0, tags: []};
-    setHistory(current => [item, ...current].slice(0, HISTORY_LIMIT)); setSelectedId(item.id); setExporting(false);
-    setNotice(tr('Direction exported and saved to local history.', 'Direção exportada e salva no histórico local.', 'Dirección exportada y guardada en el historial local.'));
-  }
   function reuse(item: SavedDirection) {
     const r = item.request;
     removeVideo(); pictures.forEach(p => URL.revokeObjectURL(p.url)); setPictures([]);
@@ -244,7 +229,6 @@ export default function Studio() {
   }
   const dateLabel = (value: string) => new Intl.DateTimeFormat({en: 'en', pt: 'pt-BR', es: 'es'}[lang], {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'}).format(new Date(value));
   const feedbackLabels = [tr('Clear identity', 'Identidade definida', 'Identidad definida'), tr('Clear motion', 'Movimento definido', 'Movimiento definido'), tr('Clear preservation', 'Preservação definida', 'Conservación definida'), tr('Prompt ready', 'Prompt pronto', 'Prompt listo')];
-  const exportLabel = tr('Export direction', 'Exportar direção', 'Exportar dirección');
   const historyTitle = tr('Your directions', 'Suas direções', 'Tus direcciones');
 
   return <div className={`app-shell mode-${mode}`} style={style}>
@@ -298,18 +282,18 @@ export default function Studio() {
           </div>
           {video?.range && <SubjectBindings subjects={subjects} onChange={setSubjects} representation={guideRepresentation} onRepresentation={setGuideRepresentation} pictures={pictures} lang={lang} pickingId={pickingId} onPick={setPickingId} onPrompt={() => setNative(true)}/>}
           {subjects.length > 0 && subjectErrors && <p className="validation" role="status">{tr('Mark each subject inside the selected interval and attach its references.', 'Marque cada personagem dentro do intervalo selecionado e vincule suas referências.', 'Marca cada personaje dentro del intervalo seleccionado y vincula sus referencias.')}</p>}
-          <section className="prompt-card surface"><div className="prompt-header"><h2><Icon name="spark" size={16}/>{t.direct}</h2><div className="editor-tabs"><button aria-pressed={!auto} className={!auto ? 'active' : ''} onClick={() => setAuto(false)}>{t.write}</button><button aria-pressed={auto} className={auto ? 'active' : ''} onClick={() => setAuto(true)}>{t.auto}</button></div></div>
+          <section className="creation-card surface" aria-label={tr('Create video', 'Criar vídeo', 'Crear vídeo')}><section className="prompt-card"><div className="prompt-header"><h2><Icon name="spark" size={16}/>{t.direct}</h2><div className="editor-tabs"><button aria-pressed={!auto} className={!auto ? 'active' : ''} onClick={() => setAuto(false)}>{t.write}</button><button aria-pressed={auto} className={auto ? 'active' : ''} onClick={() => setAuto(true)}>{t.auto}</button></div></div>
             {auto && <div className="auto-brief"><label htmlFor="brief">{tr('Describe your edit', 'Descreva sua edição', 'Describe tu edición')}</label><textarea id="brief" value={intent} onChange={e => setIntent(e.target.value)} placeholder={mode === 'swap' ? tr('Replace the dancer with Picture 1. Keep the room and lighting.', 'Substitua a dançarina pela Imagem 1. Mantenha a sala e a luz.', 'Reemplaza a la bailarina por la Imagen 1. Conserva la sala y la luz.') : tr('Use the guide motion for Picture 1, on a rooftop at night.', 'Use o movimento do guia para a Imagem 1, em um telhado à noite.', 'Usa el movimiento de la guía para la Imagen 1, en una azotea de noche.')}/><div><small>{tr('The VLM reads the references and 6 guide frames; planning enters the backend queue.', 'O VLM lê referências e 6 quadros do guia; o planejamento entra na fila do backend.', 'El VLM lee referencias y 6 fotogramas; la planificación entra en la cola.')}</small><button className="quiet-button" disabled={busy || !video?.range || !pictures.length || !intent.trim()} onClick={autoPrompt}><Icon name="spark" size={14}/>{working ? tr('Building…', 'Criando…', 'Creando…') : tr('Build prompt', 'Criar prompt', 'Crear prompt')}</button></div></div>}
             <div className="prompt-editor"><textarea ref={textarea} aria-label="Execution prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={mode === 'swap' ? t.phSwap : t.phMotion}/>{query && suggestions.length > 0 && <div className="mention-menu">{suggestions.map(tag => <button key={tag} onClick={() => insertTag(tag)}>{tag}</button>)}</div>}</div>
             {invalid.length > 0 && <p className="validation" role="alert">{tr('Attach or update:', 'Anexe ou atualize:', 'Adjunta o actualiza:')} {invalid.join(', ')}</p>}
             {native && <pre className="native-preview">{nativePrompt(executionPrompt) || tr('Your H3 prompt will appear here.', 'Seu prompt H3 aparecerá aqui.', 'Tu prompt H3 aparecerá aquí.')}</pre>}
-            <div className="prompt-footer"><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div><button className="native-toggle" onClick={() => setNative(v => !v)} aria-expanded={native}><Icon name="code" size={13}/>H3</button><button className="primary export-button" disabled={!canExport} onClick={exportRequest}><Icon name="download" size={16}/>{exporting ? tr('Saving…', 'Salvando…', 'Guardando…') : exportLabel}</button></div>
+            <div className="prompt-footer"><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></div>
           </section>
           <GenerationPanel mode={mode} request={makeRequest()} video={video?.file || null} pictures={pictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
-          <p className="execution-note">{tr('Direction export stays available separately. Generation jobs and results are stored on the server.', 'A exportação da direção continua disponível separadamente. Pedidos de geração e resultados são salvos no servidor.', 'La exportación sigue disponible por separado. Los pedidos y resultados se guardan en el servidor.')}</p>
+          </section>
         </section>
 
-        <aside className="direction-panel"><section className="surface pipeline-card"><span className="eyebrow muted">{t.pipeline}</span><div className="pipeline-list">{[[!!video?.range, t.p1, t.p1s], [!!pictures.length, t.p2, `${pictures.length} ${t.p2s}`], [!!prompt.trim() && !invalid.length, t.p3, t.p3s], [canExport, tr('Export direction', 'Exportar direção', 'Exportar dirección'), tr('JSON request', 'Solicitação JSON', 'Solicitud JSON')]].map(([ok, title, sub], i) => <div className={'pipeline-item ' + (ok ? 'complete' : '')} key={String(title)}><span className="pipeline-circle">{ok && <Icon name="check" size={11}/>}</span><div><strong>{title}</strong><small>{sub}</small></div>{i === 3 && <span className="mono step-end">04</span>}</div>)}</div></section>
+        <aside className="direction-panel"><section className="surface pipeline-card"><span className="eyebrow muted">{t.pipeline}</span><div className="pipeline-list">{[[!!video?.range, t.p1, t.p1s], [!!pictures.length, t.p2, `${pictures.length} ${t.p2s}`], [!!prompt.trim() && !invalid.length, t.p3, t.p3s], [generationJob?.status === 'completed', tr('Generate video', 'Gerar vídeo', 'Generar vídeo'), generationJob?.status === 'completed' ? tr('Video ready', 'Vídeo pronto', 'Vídeo listo') : tr('Review, then generate', 'Revise e gere', 'Revisa y genera')]].map(([ok, title, sub], i) => <div className={'pipeline-item ' + (ok ? 'complete' : '')} key={String(title)}><span className="pipeline-circle">{ok && <Icon name="check" size={11}/>}</span><div><strong>{title}</strong><small>{sub}</small></div>{i === 3 && <span className="mono step-end">04</span>}</div>)}</div></section>
           <section className="surface recent-card"><div className="label-row"><span className="eyebrow muted">{t.recent}</span><button className="text-link" onClick={() => setView('history')}>{t.viewAll} →</button></div>{history.length ? history.slice(0, 3).map(h => <button className="recent-item" key={h.id} onClick={() => {setSelectedId(h.id); setView('history');}}><span className={'recent-thumb ' + (h.request.mode === 'swap' ? 'th-b' : 'th-a')}>{h.thumbnail ? <img src={h.thumbnail} alt=""/> : <Icon name="film" size={16}/>}</span><span><strong>{h.request.project}</strong><small><i style={{background: h.request.mode === 'swap' ? '#D6FF4B' : '#AA8BFF'}}/>{modeName(h.request.mode)} · {h.request.video.duration.toFixed(1)}s</small></span></button>) : <div className="recent-empty"><Icon name="clock" size={22}/><p>{tr('Your exported directions will appear here.', 'Suas direções exportadas aparecerão aqui.', 'Tus direcciones exportadas aparecerán aquí.')}</p></div>}</section>
           <p className="direction-tip"><span className="eyebrow accent">Tip</span> — {mode === 'swap' ? t.tipSwap : t.tipMotion}</p>
         </aside>
