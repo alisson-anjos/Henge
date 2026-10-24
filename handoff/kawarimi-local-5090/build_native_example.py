@@ -40,7 +40,7 @@ n(19,'SamplerCustomAdvanced',(2070,0),noise=['16',0],guider=['15',0],sampler=['1
 n(20,'LTXVSeparateAVLatent',(2070,350),av_latent=['19',0])
 n(21,'VAEDecode',(2450,0),samples=['20',0],vae=['6',0])
 n(22,'CreateVideo',(2450,230),images=['21',0],fps=24.)
-n(23,'SaveVideo',(2830,0),video=['22',0],filename_prefix='Kagemage/TARA_native_10500_v2',format='auto',**{'format.codec':'auto'})
+n(23,'SaveVideo',(2830,0),video=['22',0],filename_prefix='Kawarimi/TARA_native_10500_v2',format='auto',**{'format.codec':'auto'})
 if args.auto_prompt:
  for i in [7,8,9,11]:del g[str(i)]
  g['10']['inputs']['frame_load_cap']=0
@@ -53,7 +53,7 @@ if args.auto_prompt:
  n(28,'BFSH3BuildNativePrompt',(1990,400),request=['24',7],inventory=['26',1],guide_analysis=['27',0],metadata=['24',5],template=helper.FINAL_TEMPLATE,mode='motion_transfer')
  n(29,'TextGenerate',(2420,400),title='Generate Text 2 — final six-section H3 prompt',clip=['25',0],prompt=['28',0],max_length=3072,sampling_mode='off',thinking=False,use_default_template=True,mtp='off')
  n(14,'BFSH3NativeReferenceSetToVideo',(2850,0),title='Native H3 — same N references as writer; Video1; NO Add Guide',clip=['5',0],vae=['6',0],reference_video=['24',0],references=['26',0],prompt=['29',0],width=['24',2],height=['24',3],length=['24',4],ref_image_size='match',validate_h3_sections=True)
- g['23']['inputs']['filename_prefix']='Kagemage/TARA_native_auto_prompt'
+ g['23']['inputs']['filename_prefix']='Kawarimi/TARA_native_auto_prompt'
  for i in range(15,24):layout[i]=[layout[i][0]+1540,layout[i][1]]
  n(30,'ImageFromBatch',(3990,250),title='Trim grid padding — keep actual source duration',image=['21',0],batch_index=0,length=['24',8])
  g['22']['inputs']['images']=['30',0]
@@ -108,7 +108,7 @@ visual={'last_node_id':max(map(int,g)),'last_link_id':lid,'nodes':nodes,'links':
 # Cross-check every visual edge against API connections and declared output type.
 for l in links:
  _,src,os,dst,ins,typ=l;assert byid[dst]['inputs'][ins]['link']==l[0];assert byid[src]['outputs'][os]['type']==typ
-assert all('Bench' not in v['class_type'] and 'Kagemane' not in v['class_type'] for v in g.values())
+assert all('Bench' not in v['class_type'] and 'Kawarimi' not in v['class_type'] for v in g.values())
 assert not any(v['class_type']=='MiniMaxH3AddGuide' for v in g.values())
 (R/('tara-native-auto-prompt.api.json' if args.auto_prompt else 'tara-native-10500-v2.api.json')).write_text(json.dumps(g,indent=2))
 (R/('tara-native-auto-prompt.comfy.json' if args.auto_prompt else 'tara-native-10500-v2.comfy.json')).write_text(json.dumps(visual,indent=2))

@@ -1,19 +1,19 @@
-# Codex local: entregar Kagemage UI + ComfyUI na RTX 5090
+# Codex local: entregar Kawarimi UI + ComfyUI na RTX 5090
 
 Você está recebendo uma tarefa de implementação, não apenas de planejamento. Inspecione a máquina, faça as alterações necessárias, rode a aplicação e valide geração real na RTX 5090. Progrida sem pedir confirmação para escolhas rotineiras. Não altere treinamentos, remova modelos, resete Git ou publique credenciais. Não prometa qualidade perfeita. Leia AGENTS.md de cada repositório antes de editar.
 
 ## Objetivo e decisões já autorizadas
 
-Entregar um workflow funcional e revisável conectado ao Kagemage UI: guia em vídeo, N referências, prompt manual ou aprimorado, troca de personagens/objetos/cenário/estilo preservando performance, bindings por cor, processamento por shots, geração, progresso, cancelamento, histórico, download e comparação sincronizada.
+Entregar um workflow funcional e revisável conectado ao Kawarimi UI: guia em vídeo, N referências, prompt manual ou aprimorado, troca de personagens/objetos/cenário/estilo preservando performance, bindings por cor, processamento por shots, geração, progresso, cancelamento, histórico, download e comparação sincronizada.
 
-O nome público é **Kagemage**. O repositório ainda se chama OpenJutsu. Preserve IDs legados, chaves localStorage, nomes de classes e variáveis KAGEMANE_* para compatibilidade. **Guide Latents é o padrão.** Ofereça separadamente **TARA - Native Temporal Alignment (experimental)**. Não ative TARA silenciosamente e não faça fallback silencioso entre contratos.
+O nome público é **Kawarimi**. O repositório ainda se chama OpenJutsu. Preserve IDs legados, chaves localStorage, nomes de classes e variáveis KAWARIMI_* para compatibilidade. **Guide Latents é o padrão.** Ofereça separadamente **TARA - Native Temporal Alignment (experimental)**. Não ative TARA silenciosamente e não faça fallback silencioso entre contratos.
 
 ## Fontes e ponto de partida
 
 - UI/bridge: https://github.com/alisson-anjos/OpenJutsu, branch main. Commit de política/branding: 5fc6e9a; use main atual e inspecione diferenças locais antes de atualizar.
 - BFS: https://github.com/alisson-anjos/ComfyUI-BFSNodes, branch main. Release TARA experimental: 1.115.19, commit 3c00387. Não precisa trocar para a branch experimental antiga.
 - A instalação local conhecida do usuário é ~/tools/ComfyUI, com custom_nodes/bfsnodes (algumas instalações antigas usavam bfsnode). Descubra caminhos reais; evite duas cópias do mesmo plugin.
-- Máquina de desenvolvimento remota usava /data/OpenJutsu e /data/kagemane-comfy-backend. Esses caminhos NÃO são requisitos locais.
+- Máquina de desenvolvimento remota usava /data/OpenJutsu e /data/kawarimi-comfy-backend. Esses caminhos NÃO são requisitos locais.
 - Hardware local: RTX 5090, 32 GB VRAM. Verifique driver, PyTorch/CUDA, ComfyUI e kernels efetivamente instalados antes de escolher backend. Não instale wheels incompatíveis nem faça git reset --hard.
 
 Arquivos a estudar no repo UI:
@@ -22,7 +22,7 @@ Arquivos a estudar no repo UI:
 - app/api/prompt/route.ts: enhancement opcional; app/api/backend/[...path]/route.ts: proxy.
 - backend/server.py: jobs persistentes, VLM, aprovação, FFmpeg, segmentação, execução.
 - backend/workflows.py: construtores reais dos grafos.
-- backend/comfy_nodes/kagemane/__init__.py: loaders, guia 2D/3D, conditioning e saída.
+- backend/comfy_nodes/kawarimi/__init__.py: loaders, guia 2D/3D, conditioning e saída.
 - scripts/start_backend.py, scripts/download_backend_models.py, .env.example, backend/extra_model_paths.yaml.
 - docs/prompt-format.md, docs/roadmap.md, docs/competition.md.
 
@@ -30,13 +30,13 @@ No BFS: H3_NATIVE_TEMPORAL.md, minimax_h3_native_temporal.py, minimax_h3_clip_vi
 
 ## Estado real e lacunas conhecidas
 
-Já existe UI + FastAPI + grafos API; não comece outra aplicação. Testes CPU não comprovam geração GPU. O README registra limitações de validação. O construtor h3_graph atual usa KagemaneH3Conditioning, que chama Add Guide. Ainda precisa integrar o modo TARA de ponta a ponta.
+Já existe UI + FastAPI + grafos API; não comece outra aplicação. Testes CPU não comprovam geração GPU. O README registra limitações de validação. O construtor h3_graph atual usa KawarimiH3Conditioning, que chama Add Guide. Ainda precisa integrar o modo TARA de ponta a ponta.
 
 Os perfis atuais em backend/workflows.py apontam motion_8000, character_v1_1 e mix50. Não alegue que já usam motion 10500 ou o novo TARA. Torne modelos/LoRAs/adapters configuráveis com inventário dos arquivos locais, sem valores fictícios nem download automático de dezenas de GB. Preserve perfis existentes.
 
-O launcher atual contém caminhos /data, PYTHONPATH com separador Linux, whitelist apenas kagemane e versões fixadas de dependências. Adapte para o ambiente local; não rode cegamente, não substitua pacotes da instalação ComfyUI existente sem verificar compatibilidade. Ao usar BFS/TARA, sua whitelist precisa realmente carregar BFS. Permita conectar a um ComfyUI já em execução sem iniciar outro na mesma porta.
+O launcher atual contém caminhos /data, PYTHONPATH com separador Linux, whitelist apenas kawarimi e versões fixadas de dependências. Adapte para o ambiente local; não rode cegamente, não substitua pacotes da instalação ComfyUI existente sem verificar compatibilidade. Ao usar BFS/TARA, sua whitelist precisa realmente carregar BFS. Permita conectar a um ComfyUI já em execução sem iniciar outro na mesma porta.
 
-CRÍTICO: KagemaneH3Conditioning atualmente enumera uma lista de referências como ref_image_1, ref_image_2... Audite todo o trajeto UI → upload → job → FIBO → loader → encoder. Se o usuário envia slots 1 e 3, eles devem continuar Picture 1 e Picture 3; nunca compacte para 1 e 2. Verifique as regras do encoder H3 para slots esparsos e implemente uma representação explícita de slot/imagem ou rejeição clara caso realmente incompatível. Não corrija apenas o texto escondendo associação errada.
+CRÍTICO: KawarimiH3Conditioning atualmente enumera uma lista de referências como ref_image_1, ref_image_2... Audite todo o trajeto UI → upload → job → FIBO → loader → encoder. Se o usuário envia slots 1 e 3, eles devem continuar Picture 1 e Picture 3; nunca compacte para 1 e 2. Verifique as regras do encoder H3 para slots esparsos e implemente uma representação explícita de slot/imagem ou rejeição clara caso realmente incompatível. Não corrija apenas o texto escondendo associação errada.
 
 ## Contratos dos dois modos
 
@@ -50,7 +50,7 @@ Vídeo guia como referência NATIVA <Video 1>, com seus tokens/latentes de refer
 
 Defaults do patch: motion_video_index=1, strength=2.0, window_seconds=0.2, falloff_seconds=0.25, max_penalty=6.0. Grade temporal atual 24 fps; vídeo e saída precisam de duração/tempo alinhados. Exponha reference/downscale factor independente da resolução final. Comece 1.0; 0.75/0.5 são testes com compromisso de detalhe, não melhorias garantidas.
 
-Use o patch BFS existente e descubra o schema dos nós em /object_info. O node solto só modifica MODEL: NÃO carrega LoRA, NÃO codifica vídeo e NÃO cria positive. A cadeia precisa fornecer os três corretamente. Não use o mesmo KagemaneH3Conditioning atual sem modificá-lo: ele sempre aplica Add Guide.
+Use o patch BFS existente e descubra o schema dos nós em /object_info. O node solto só modifica MODEL: NÃO carrega LoRA, NÃO codifica vídeo e NÃO cria positive. A cadeia precisa fornecer os três corretamente. Não use o mesmo KawarimiH3Conditioning atual sem modificá-lo: ele sempre aplica Add Guide.
 
 O MODEL patch deve ser request-local. Teste TARA ON → Guide → TARA OFF no mesmo processo sem vazamento de patch/cache. Defina a diferença entre desabilitar o patch e zerar apenas a força do viés: RoPE e bias são componentes distintos.
 
@@ -80,7 +80,7 @@ Original/2D/3D são representações de guia, não métodos de conditioning. Man
 
 Faça seleção validada de modelo, LoRA, adapter, força, steps, seed, canvas, fps, modo, escala e backend atravessar UI → request → plano → grafo → histórico. Mostre prompt efetivo e modelo efetivo antes da execução. Assinatura de cache precisa incluir essas configurações, refs, intervalo, bindings e representação. Mudanças precisam invalidar só o necessário.
 
-Portas são configuráveis; padrões do desenvolvimento: UI 3000, bridge 8766, Comfy isolado 8189. Instalação Comfy existente pode estar 8188. Não confunda esses serviços. Variáveis legadas: KAGEMANE_BACKEND_URL, COMFY_BASE_URL, COMFY_ROOT, KAGEMANE_DATA_DIR, KAGEMANE_PYTHON. Credenciais VLM_CHAT_URL/VLM_MODEL/VLM_API_KEY só servidor. Confirme quais são lidas por cada processo; .env.local do Next não configura automaticamente Python.
+Portas são configuráveis; padrões do desenvolvimento: UI 3000, bridge 8766, Comfy isolado 8189. Instalação Comfy existente pode estar 8188. Não confunda esses serviços. Variáveis legadas: KAWARIMI_BACKEND_URL, COMFY_BASE_URL, COMFY_ROOT, KAWARIMI_DATA_DIR, KAWARIMI_PYTHON. Credenciais VLM_CHAT_URL/VLM_MODEL/VLM_API_KEY só servidor. Confirme quais são lidas por cada processo; .env.local do Next não configura automaticamente Python.
 
 O proxy atual expõe /api/backend/*; bridge tem /health, /jobs, /jobs/{id}, /approve, /cancel, /files/{name}, /workflow. Preserve os contratos e revisão humana do plano. Cancelar apenas o job da aplicação, sem interromper fila alheia. Validar limites de upload, caminhos e URLs. FFmpeg/ffprobe precisam estar disponíveis. Aplique intervalo ao áudio e vídeo juntos. Keep source audio e audio conditioning são controles independentes. Sem áudio solicitado, geração visual deve funcionar.
 

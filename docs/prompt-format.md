@@ -1,4 +1,4 @@
-# Kagemage H3 prompt format
+# Kawarimi H3 prompt format
 
 The editor's Build prompt endpoint and the backend execution planner share one policy in `lib/h3-prompt-policy.json`. Enhanced output uses the six-section [MiniMax H3 full-reference format](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md). The application adds the task trigger used by its current LoRAs: `motion_transfer:` or `body_swap:`.
 
@@ -37,7 +37,7 @@ Generated prompts are checked for the task trigger, all six nonempty sections in
 
 ## Branding compatibility
 
-The application and newly downloaded files use **Kagemage**. Existing browser storage keys, backend environment variables, ComfyUI class identifiers and repository URL are retained so that saved history and existing workflows remain usable.
+The application and newly downloaded files use **Kawarimi**. Existing browser storage keys, backend environment variables, ComfyUI class identifiers and repository URL are retained so that saved history and existing workflows remain usable.
 
 ## Staged VLM evidence (updated pipeline)
 
@@ -62,7 +62,7 @@ silently enable TARA or change LoRA profiles.
 
 Local calls use `thinking=false`, independent descriptions with a 384-token
 budget, guide analysis 1024 and final composition 3072, matching the recent BFS
-workflow budgets. Optional `KAGEMANE_VLM_CLIP` selects an installed local VLM
+workflow budgets. Optional `KAWARIMI_VLM_CLIP` selects an installed local VLM
 checkpoint (for example the user's `qwen3.5_9b_w4a8_gptq.safetensors`); the existing
 4B filename remains the default. The VLM's actual weights/model matter too: this
 pipeline change alone does not prove equal outputs across different VLMs.
@@ -86,7 +86,7 @@ video's native audio-reference channel; output soundtrack reuse remains separate
 These branches are CPU-contract tested; real UI/GPU evidence is collected in the
 integration test report rather than assumed from static tests.
 
-ComfyUI must load BFSNodes alongside the Kagemage custom nodes for TARA. The
+ComfyUI must load BFSNodes alongside the Kawarimi custom nodes for TARA. The
 launcher whitelist now includes `bfsnodes`; install/symlink that plugin under the
 same name or adapt the whitelist to your real folder name. Do not keep duplicate
 BFS copies. Existing LoRA profile paths/defaults were not changed by this option.

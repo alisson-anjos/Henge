@@ -2,7 +2,7 @@
 
 Abra `tara-native-10500-v2.comfy.json` no ComfyUI. `tara-native-10500-v2.api.json` é o equivalente para a API, não o arquivo visual.
 
-Dependências: ComfyUI recente com MiniMax H3 nativo, VideoHelperSuite (`VHS_LoadVideo`) e ComfyUI-BFSNodes main >=1.115.19 para o patch TARA. Não usa H3BenchConditioning, KagemaneH3Conditioning ou Add Guide. Não precisa do plugin privado de benchmark. "Nativo" aqui significa conditioning H3 nativo; o loader de vídeo é VHS e o patch é BFS.
+Dependências: ComfyUI recente com MiniMax H3 nativo, VideoHelperSuite (`VHS_LoadVideo`) e ComfyUI-BFSNodes main >=1.115.19 para o patch TARA. Não usa H3BenchConditioning, KawarimiH3Conditioning ou Add Guide. Não precisa do plugin privado de benchmark. "Nativo" aqui significa conditioning H3 nativo; o loader de vídeo é VHS e o patch é BFS.
 
 Copie `motion10500_plus_training_adapter_v2_exact.safetensors` para `ComfyUI/models/loras/`, escolha esse arquivo no único loader de LoRA e deixe força1. Já contém o10500 + V2, cada um em força1: não carregue V2 ou10500 novamente. Os pesos não estão incluídos no Git/pacote.
 

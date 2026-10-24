@@ -1,4 +1,4 @@
-"""Local Kagemage job bridge: durable jobs, validated VLM plans, ComfyUI API graphs."""
+"""Local Kawarimi job bridge: durable jobs, validated VLM plans, ComfyUI API graphs."""
 import asyncio,base64,json,math,os,re,shutil,subprocess,threading,time,uuid
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -13,8 +13,8 @@ from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
 
-ROOT=Path(os.environ.get('KAGEMANE_DATA_DIR','/data/kagemane-data'));JOBS=ROOT/'jobs';JOBS.mkdir(parents=True,exist_ok=True)
-COMFY=Path(os.environ.get('COMFY_ROOT','/data/kagemane-comfy-backend'));INPUT=COMFY/'input';OUTPUT=COMFY/'output';INPUT.mkdir(exist_ok=True)
+ROOT=Path(os.environ.get('KAWARIMI_DATA_DIR','/data/kawarimi-data'));JOBS=ROOT/'jobs';JOBS.mkdir(parents=True,exist_ok=True)
+COMFY=Path(os.environ.get('COMFY_ROOT','/data/kawarimi-comfy-backend'));INPUT=COMFY/'input';OUTPUT=COMFY/'output';INPUT.mkdir(exist_ok=True)
 SETTINGS=ROOT/'settings.json'
 try:stored_settings=json.loads(SETTINGS.read_text()) if SETTINGS.is_file() else {}
 except (ValueError,OSError):stored_settings={}
@@ -105,8 +105,17 @@ def validate_plan(plan,slots,options,r):
     if not set(map(int,re.findall(r'<Picture\s+(\d+)>',plan['prompt']))).issubset(slots):raise ValueError('VLM invented a picture reference')
     if options.get('enhance_prompt',True):validate_h3_prompt(plan['prompt'],r['mode'])
     roles=plan.get('picture_roles',[])
-    if sorted(x.get('slot',-1) for x in roles)!=sorted(slots) or any(x.get('role') not in ['identity','outfit','environment','style','object'] for x in roles):raise ValueError('VLM must assign one role to every attached picture')
-    selected=plan.get('fibo_picture_slots',[])
+    # Small local VLMs commonly serialize numeric JSON fields as strings. Keep
+    # strict slot coverage while canonicalizing an otherwise valid plan.
+    normalized_roles=[]
+    for item in roles:
+        raw=item.get('slot') if isinstance(item,dict) else None
+        slot=int(raw) if isinstance(raw,str) and raw.isdigit() else raw
+        normalized_roles.append({**item,'slot':slot} if isinstance(item,dict) else item)
+    roles=plan['picture_roles']=normalized_roles
+    if sorted(x.get('slot',-1) for x in roles if isinstance(x,dict))!=sorted(slots) or any(not isinstance(x,dict) or x.get('role') not in ['identity','outfit','environment','style','object'] for x in roles):raise ValueError('VLM must assign one role to every attached picture')
+    selected=[int(x) if isinstance(x,str) and x.isdigit() else x for x in plan.get('fibo_picture_slots',[])]
+    plan['fibo_picture_slots']=selected
     if not isinstance(selected,list) or len(selected)>3 or len(set(selected))!=len(selected) or not set(selected).issubset(slots):raise ValueError('Invalid FIBO reference selection')
     morphology=plan['source_kind']!=plan['target_kind'] and {plan['source_kind'],plan['target_kind']}=={'human','animal'}
     if (morphology or plan['use_fibo']) and not selected:
@@ -137,11 +146,11 @@ def execute_graph(job,graph,stage):
     async def execute():
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         folder=job_path(job['id']);(folder/(stage+'.api.json')).write_text(json.dumps(graph,indent=2))
-        client='kagemane-'+job['id'];pid=None
-        labels={'SamplerCustomAdvanced':'Sampling video','KSampler':'Preparing appearance image','KagemaneH3Conditioning':'Reading guide and references','KagemaneGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
+        client='kawarimi-'+job['id'];pid=None
+        labels={'SamplerCustomAdvanced':'Sampling video','KSampler':'Preparing appearance image','KawarimiH3Conditioning':'Reading guide and references','KawarimiGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(URL.replace('http://','ws://').replace('https://','wss://')+'/ws?clientId='+client,heartbeat=30) as ws:
-                async with session.post(URL+'/prompt',json={'prompt':graph,'client_id':client,'extra_data':{'kagemane_job':job['id'],'stage':stage}}) as res:
+                async with session.post(URL+'/prompt',json={'prompt':graph,'client_id':client,'extra_data':{'kawarimi_job':job['id'],'stage':stage}}) as res:
                     reply=await res.json()
                     if res.status!=200:raise ValueError(str(reply)[:1800])
                 pid=reply['prompt_id']
@@ -194,7 +203,7 @@ def image_from_output(outputs):
 
 def prepare_evidence(job):
     r=job['request'];assets=job['assets'];work=job_path(job['id']);cells=[]
-    inp=INPUT/'kagemane'/job['id'];inp.mkdir(parents=True,exist_ok=True)
+    inp=INPUT/'kawarimi'/job['id'];inp.mkdir(parents=True,exist_ok=True)
     pictures=[]
     for slot,rel in sorted(assets['pictures'].items(),key=lambda x:int(x[0])):
         dest=inp/f'vlm_picture_{slot}.jpg'
@@ -238,7 +247,7 @@ def planning(job):
             response.raise_for_status();raw=response.json()['choices'][0]['message']['content']
         else:
             graph=plan_graph(str(image.relative_to(INPUT)) if image is not None else None,instruction,tokens,
-                os.environ.get('KAGEMANE_VLM_CLIP','qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors'))
+                os.environ.get('KAWARIMI_VLM_CLIP','qwen3.5_9b_w4a8_gptq.safetensors'))
             outputs=execute_graph(job,graph,stage);raw=outputs.get('4',{}).get('text',[''])[0]
         if not isinstance(raw,str) or not raw.strip():raise ValueError(f'VLM returned no text during {stage}')
         text=re.sub(r'^\s*Answer:\s*','',raw,flags=re.I).strip()
@@ -256,7 +265,7 @@ def planning(job):
     save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.',step=None,step_total=None)
 
 def generate(job):
-    r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'kagemane'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
+    r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'kawarimi'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
     width,height=meta['width'],meta['height'];short={'480p':480,'720p':720,'1080p':1080}[r['quality']];scale=short/min(width,height);w=max(32,round(width*scale/32)*32);h=max(32,round(height*scale/32)*32)
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
     if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
@@ -360,8 +369,8 @@ async def configure_connection(request:Request):
         if json.loads(p.read_text())['status'] not in TERMINAL|{'awaiting_approval'}:raise HTTPException(409,'Wait for active jobs to finish before changing the ComfyUI connection')
     try:
         check=await asyncio.to_thread(requests.get,target+'/object_info',timeout=10);check.raise_for_status();info=check.json()
-        missing=[name for name in ['KagemaneLoadShot','KagemaneGuide','KagemaneH3Conditioning','KagemaneSaveVideo'] if name not in info]
-        if missing:raise HTTPException(400,'ComfyUI responds, but required Kagemane nodes are missing: '+', '.join(missing))
+        missing=[name for name in ['KawarimiLoadShot','KawarimiGuide','KawarimiH3Conditioning','KawarimiSaveVideo'] if name not in info]
+        if missing:raise HTTPException(400,'ComfyUI responds, but required Kawarimi nodes are missing: '+', '.join(missing))
     except HTTPException:raise
     except (requests.RequestException,ValueError):raise HTTPException(400,'Could not connect to the ComfyUI API at this address')
     tmp=SETTINGS.with_suffix('.tmp');tmp.write_text(json.dumps({'comfy_url':target},indent=2));tmp.replace(SETTINGS);URL=target
@@ -379,7 +388,7 @@ async def create_job(request:Request):
         if not 1<=len(pictures)<=11:raise ValueError('Attach 1–11 reference images')
         validate_request(r,options,list(pictures));video=form.get('video')
         if not hasattr(video,'read'):raise ValueError('Attach the guide video')
-        jid=uuid.uuid4().hex;work=job_path(jid);work.mkdir();inp=INPUT/'kagemane'/jid;inp.mkdir(parents=True)
+        jid=uuid.uuid4().hex;work=job_path(jid);work.mkdir();inp=INPUT/'kawarimi'/jid;inp.mkdir(parents=True)
         async def upload(file,dest,limit):
             total=0
             with dest.open('wb') as f:
@@ -396,7 +405,7 @@ async def create_job(request:Request):
             dest=inp/f'picture_{slot}.png';temp=inp/f'upload_{slot}';await upload(file,temp,25*1024*1024)
             with Image.open(temp) as im:im.convert('RGB').save(dest)
             temp.unlink();assets['pictures'][str(slot)]=str(dest.relative_to(INPUT))
-        job={'id':jid,'created':time.time(),'project':r.get('project','Kagemage'),'status':'queued_plan','stage':'queued','progress':0,'request':r,'options':options,'assets':assets,'video_info':meta,'message':'Queued for VLM planning'};save(job);return public(job)
+        job={'id':jid,'created':time.time(),'project':r.get('project','Kawarimi'),'status':'queued_plan','stage':'queued','progress':0,'request':r,'options':options,'assets':assets,'video_info':meta,'message':'Queued for VLM planning'};save(job);return public(job)
     except (ValueError,TypeError,KeyError,json.JSONDecodeError) as e:raise HTTPException(400,str(e))
 
 @app.get('/jobs/{jid}')
@@ -451,7 +460,7 @@ def comparison_with_refs(jid:str):
     with LOCK:preview_lock=COMPARISON_LOCKS.setdefault(jid,threading.Lock())
     with preview_lock:
         result=create_comparison_with_refs(work/'comparison.mp4',work/'result.mp4',refs,work/'comparison_with_refs.mp4')
-    return FileResponse(result,filename='kagemane-guide-result-references.mp4',media_type='video/mp4')
+    return FileResponse(result,filename='kawarimi-guide-result-references.mp4',media_type='video/mp4')
 
 @app.get('/jobs/{jid}/workflow')
 def workflow(jid:str):

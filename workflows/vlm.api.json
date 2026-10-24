@@ -2,7 +2,7 @@
   "1": {
     "class_type": "CLIPLoader",
     "inputs": {
-      "clip_name": "qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors",
+      "clip_name": "qwen3.5_9b_w4a8_gptq.safetensors",
       "type": "minimax",
       "device": "default"
     }
@@ -10,7 +10,7 @@
   "2": {
     "class_type": "LoadImage",
     "inputs": {
-      "image": "kagemane/validation/ref.png"
+      "image": "kawarimi/validation/ref.png"
     }
   },
   "3": {
@@ -33,7 +33,7 @@
     }
   },
   "4": {
-    "class_type": "KagemaneTextResult",
+    "class_type": "KawarimiTextResult",
     "inputs": {
       "text": [
         "3",

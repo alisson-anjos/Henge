@@ -36,11 +36,11 @@
     },
     {
       "id": "planner",
-      "repo_id": "ethanfel/Qwen3-VL-4B-Heretic-ComfyUI-ConvRot-INT8",
+      "repo_id": "Comfy-Org/MOSS-Image",
       "repo_type": "model",
       "revision": "main",
-      "filename": "qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors",
-      "destination": "text_encoders/qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors",
+      "filename": "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
+      "destination": "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
       "profiles": [
         "common"
       ]
@@ -62,7 +62,7 @@
       "repo_type": "model",
       "revision": "main",
       "filename": "loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors",
-      "destination": "loras/kagemane/character_v1_1.safetensors",
+      "destination": "loras/kawarimi/character_v1_1.safetensors",
       "profiles": [
         "character"
       ]
@@ -73,7 +73,7 @@
       "repo_type": "model",
       "revision": "main",
       "filename": "experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
-      "destination": "loras/kagemane/dmd_ref2va_8step.safetensors",
+      "destination": "loras/kawarimi/dmd_ref2va_8step.safetensors",
       "profiles": [
         "character"
       ]
@@ -84,7 +84,7 @@
       "repo_type": "model",
       "revision": "main",
       "filename": "minimax_h3_ref2va_training_adapter_v2.safetensors",
-      "destination": "loras/kagemane/training_adapter_v2.safetensors",
+      "destination": "loras/kawarimi/training_adapter_v2.safetensors",
       "profiles": [
         "motion10500",
         "motion4500"
@@ -96,7 +96,7 @@
       "repo_type": "model",
       "revision": "main",
       "filename": null,
-      "destination": "loras/kagemane/motion_10500.safetensors",
+      "destination": "loras/kawarimi/motion_10500.safetensors",
       "profiles": [
         "motion10500"
       ]
@@ -107,7 +107,7 @@
       "repo_type": "model",
       "revision": "main",
       "filename": null,
-      "destination": "loras/kagemane/motion_tara_4500.safetensors",
+      "destination": "loras/kawarimi/motion_tara_4500.safetensors",
       "profiles": [
         "motion4500"
       ]

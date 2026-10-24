@@ -43,7 +43,7 @@ The default patch backend is Flash partitions. Optional Kitchen/sparse backends 
 
 CPU tests cover actual source dimensions, portrait/landscape, FPS conversion, grid trim/pad and final-duration trim count, explicit caps, independent per-image calls, ordering/gap rejection, prompt templating without recursive substitution, six-section checks and delegation of the same reference set to the native H3 encoder. Structural checks cover visual/API link consistency. These do not establish semantic caption quality or a successful5090 render. Local GPU and browser validation remain required.
 
-The policy snapshot is `h3_native_prompt_policy.json`, copied from Kagemage's shared H3 policy at implementation time. It is packaged locally, so BFS does not require the UI repo or make a network request to load rules. Keep the snapshots in sync when intentionally changing prompt policy.
+The policy snapshot is `h3_native_prompt_policy.json`, copied from Kawarimi's shared H3 policy at implementation time. It is packaged locally, so BFS does not require the UI repo or make a network request to load rules. Keep the snapshots in sync when intentionally changing prompt policy.
 
 ### Request/reference mismatch and saved workflows
 

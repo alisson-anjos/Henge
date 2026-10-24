@@ -8,6 +8,11 @@ def structured_prompt(description='Transfer the guide performance.'):
  return 'motion_transfer: subject_definitions: <Subject 1> uses <Picture 1>. summary: [reference generation] '+description+' retention_analysis: <Subject 1>: fully_preserved - stable identity. detailed_description: [Shot 1] Transfer the guide timing and gestures. overall_soundscape: N/A non_diegetic_music: N/A'
 
 class WorkflowContracts(unittest.TestCase):
+ def test_numeric_string_picture_slots_are_normalized(self):
+  request=self.request();plan=self.plan()
+  plan['picture_roles']=[{'slot':'1','role':'identity','description':'Reference identity'}]
+  normalized=validate_plan(plan,[1],{},request)
+  self.assertEqual(normalized['picture_roles'][0]['slot'],1)
  def test_training_gate_recognizes_tara_runtime(self):
   process=Mock();process.read_bytes.return_value=b'python\0-u\0/tmp/h3-tara-motion-runtime/run.py\0config.yaml\0'
   with patch('server.Path.glob',return_value=[process]):self.assertTrue(training_busy())

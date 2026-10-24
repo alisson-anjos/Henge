@@ -1,6 +1,6 @@
 # Models and local setup
 
-Kagemage uses an existing ComfyUI installation plus its local job bridge. Model
+Kawarimi uses an existing ComfyUI installation plus its local job bridge. Model
 weights are not included in this GitHub repository. Place files under the
 ComfyUI directory configured by `COMFY_ROOT`, or expose them with ComfyUI's
 `extra_model_paths.yaml`. Restart ComfyUI after adding models.
@@ -25,9 +25,9 @@ Download the exact files below. The last column is relative to ComfyUI.
 | [H3 ref2va pruned INT8 ConvRot](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors) | `models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors` |
 | [H3 Qwen3-VL 32B text encoder](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors) | `models/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors` |
 | [H3 video VAE FP16](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors) | `models/vae/minimax_h3_video_vae_fp16.safetensors` |
-| [Character Swap v1.1](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors) | Rename to `models/loras/kagemane/character_v1_1.safetensors` |
-| [Character profile's 8-step DMD adapter](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors) | Rename to `models/loras/kagemane/dmd_ref2va_8step.safetensors` |
-| [Motion profile's training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors) | Rename to `models/loras/kagemane/training_adapter_v2.safetensors` |
+| [Character Swap v1.1](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors) | Rename to `models/loras/kawarimi/character_v1_1.safetensors` |
+| [Character profile's 8-step DMD adapter](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors) | Rename to `models/loras/kawarimi/dmd_ref2va_8step.safetensors` |
+| [Motion profile's training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors) | Rename to `models/loras/kawarimi/training_adapter_v2.safetensors` |
 | [H3 audio VAE](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors), optional for audio conditioning | `models/vae/minimax_h3_audio_vae_fp32.safetensors` |
 
 H3 conditioning uses the 32B H3 encoder even when a smaller VLM is used for prompt
@@ -37,11 +37,13 @@ writing. The writer does not replace that encoder.
 
 The Original 10500 and TARA 4500 checkpoints are private project artifacts. They
 have **not** been published by this application update. Authorized project
-maintainers can retrieve them from the [private recovery repository](https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/tree/main/pod_20261024T000050Z).
+maintainers can retrieve them from the legacy private recovery repository
+`Alissonerdx/Kagemage-Backups`, under `pod_20261024T000050Z`. This historical
+backup name predates the Kawarimi rename.
 Use these exact local names:
 
-- Original 10500: `models/loras/kagemane/motion_10500.safetensors`.
-- TARA 4500: `models/loras/kagemane/motion_tara_4500.safetensors`.
+- Original 10500: `models/loras/kawarimi/motion_10500.safetensors`.
+- TARA 4500: `models/loras/kawarimi/motion_tara_4500.safetensors`.
 
 The 4500 save is under `training/tara_h3_motion_r64_multiscale_v2/step_4500/`.
 The recovery upload includes a matched optimizer for training recovery; inference
@@ -51,8 +53,9 @@ only needs the LoRA and the configured adapter. Do not load an already merged
 ## Prompt writer / media analysis
 
 The current local planner defaults to
-[qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors](https://huggingface.co/ethanfel/Qwen3-VL-4B-Heretic-ComfyUI-ConvRot-INT8/resolve/main/qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors).
-Put it in `models/text_encoders/`. `KAGEMANE_VLM_CLIP` may select another installed
+[qwen3.5_9b_w4a8_gptq.safetensors](https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors)
+(Qwen3.5 9B, W4A8 GPTQ).
+Put it in `models/text_encoders/`. `KAWARIMI_VLM_CLIP` may select another installed
 ComfyUI-compatible vision encoder supported by TextGenerate. Selecting an
 incompatible checkpoint is not automatic model conversion.
 
@@ -95,8 +98,8 @@ The original-guide branch does not require these tracking models.
 ## Nodes and startup
 
 Install the [BFSNodes main branch](https://github.com/alisson-anjos/ComfyUI-BFSNodes)
-for TARA and link/copy `backend/comfy_nodes/kagemane` into
-`ComfyUI/custom_nodes/kagemane`. The provided launcher allows both `kagemane` and
+for TARA and link/copy `backend/comfy_nodes/kawarimi` into
+`ComfyUI/custom_nodes/kawarimi`. The provided launcher allows both `kawarimi` and
 `bfsnodes` through its custom-node whitelist. The backend API port is 8766 and
 ComfyUI is 8189; the browser connects to Next.js, which proxies the bridge.
 Configure `.env.local` for your paths and start with `python scripts/start_backend.py`.

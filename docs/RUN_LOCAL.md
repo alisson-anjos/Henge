@@ -1,4 +1,4 @@
-# Run Kagemane locally
+# Run Kawarimi locally
 
 For the Docker build/start commands and automatic model downloads, use
 [the Docker guide](../docker/README.md). For individual weight files and licenses,
@@ -20,8 +20,8 @@ container image has not been built/tested on the current pod.
 ## 1. Get the UI
 
 ```sh
-git clone https://github.com/alisson-anjos/Kagemane.git
-cd Kagemane
+git clone https://github.com/alisson-anjos/Kawarimi.git
+cd Kawarimi
 npm ci
 cp .env.example .env.local
 ```
@@ -29,11 +29,11 @@ cp .env.example .env.local
 On PowerShell, use `Copy-Item .env.example .env.local`. Edit `.env.local`:
 
 ```dotenv
-KAGEMANE_BACKEND_URL=http://127.0.0.1:8766
+KAWARIMI_BACKEND_URL=http://127.0.0.1:8766
 COMFY_BASE_URL=http://127.0.0.1:8189
 COMFY_ROOT=/absolute/path/to/ComfyUI
-KAGEMANE_DATA_DIR=/absolute/path/to/kagemane-data
-KAGEMANE_VLM_CLIP=qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors
+KAWARIMI_DATA_DIR=/absolute/path/to/kawarimi-data
+KAWARIMI_VLM_CLIP=qwen3.5_9b_w4a8_gptq.safetensors
 ```
 
 Use your own absolute paths. On Windows, forward slashes such as
@@ -43,7 +43,7 @@ Use your own absolute paths. On Windows, forward slashes such as
 
 Install [BFSNodes](https://github.com/alisson-anjos/ComfyUI-BFSNodes) into that
 ComfyUI's `custom_nodes/bfsnodes`. Copy or symlink this repository's
-`backend/comfy_nodes/kagemane` folder to `ComfyUI/custom_nodes/kagemane`.
+`backend/comfy_nodes/kawarimi` folder to `ComfyUI/custom_nodes/kawarimi`.
 Install BFSNodes' requirements using **the Python environment that runs ComfyUI**.
 Restart ComfyUI after installing/updating either custom-node package.
 
@@ -71,11 +71,11 @@ python main.py --listen 127.0.0.1 --port 8189 --lowvram --preview-method taesd
 
 The H3 sampling preview needs `models/vae_approx/taeh3.safetensors`. The UI does
 not need ComfyUI to be publicly exposed. If you use a custom-node whitelist,
-include both `kagemane` and `bfsnodes`.
+include both `kawarimi` and `bfsnodes`.
 
 ## 4. Start the job bridge
 
-In a second terminal, from Kagemane, install/run using a Python environment with
+In a second terminal, from Kawarimi, install/run using a Python environment with
 the bridge dependencies. This can be the ComfyUI environment:
 
 ```sh
@@ -96,7 +96,7 @@ port accidentally.
 
 ## 5. Start the web UI
 
-From Kagemane in a third terminal:
+From Kawarimi in a third terminal:
 
 ```sh
 npm run build
@@ -112,7 +112,7 @@ pod does not prove its public proxy is configured.
 
 The sidebar above Output has **Connection settings**. Enter the ComfyUI API
 address and click **Test and save**. The bridge checks the API and required
-Kagemane nodes, then saves the connection in its data directory. Changing the
+Kawarimi nodes, then saves the connection in its data directory. Changing the
 connection is blocked while jobs are active.
 
 The address must be reachable **from the job bridge**, not just your browser.
@@ -145,7 +145,7 @@ TARA node is registered; it is not proof a GPU kernel was benchmarked.
 4. When finished, view/download the result or the synchronized comparison with
    guide and labelled references.
 
-**Export** beside the prompt shares a Kagemane configuration, not a ComfyUI
+**Export** beside the prompt shares a Kawarimi configuration, not a ComfyUI
 workflow or video. **Import settings** in the sidebar restores the shared
 request and generation options. Attach your own media again; it is not embedded
 in the JSON. Community contains the prompt templates, rather than Studio.

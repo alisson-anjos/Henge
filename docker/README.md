@@ -1,4 +1,4 @@
-# Build and run the Kagemane image
+# Build and run the Kawarimi image
 
 This image starts the web UI, bridge and ComfyUI. **Models download on the first
 start into a persistent volume**, not into the public image layers. The image
@@ -14,8 +14,8 @@ separate from container validation.
 ## Commands
 
 ```sh
-git clone https://github.com/alisson-anjos/Kagemane.git
-cd Kagemane
+git clone https://github.com/alisson-anjos/Kawarimi.git
+cd Kawarimi
 cp config/model-repos.example.json config/model-repos.json
 docker compose build
 docker compose up -d
@@ -30,7 +30,7 @@ Do not delete the model volumes between starts.
 To build only, or use a custom tag:
 
 ```sh
-docker build -t kagemane:local .
+docker build -t kawarimi:local .
 ```
 
 On Windows PowerShell, use `Copy-Item config/model-repos.example.json
@@ -48,10 +48,10 @@ not silently replace installed weights. Remove/move the specific installed file
 or use a new destination when deliberately changing versions.
 
 Optional profiles are `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500` and
-`motion4500`. Set `KAGEMANE_MODEL_PROFILES` in an untracked `.env` beside Compose:
+`motion4500`. Set `KAWARIMI_MODEL_PROFILES` in an untracked `.env` beside Compose:
 
 ```dotenv
-KAGEMANE_MODEL_PROFILES=character,fibo,sam2d,audio
+KAWARIMI_MODEL_PROFILES=character,fibo,sam2d,audio
 ```
 
 For private motion models, configure their currently-null `repo_id` and
@@ -88,5 +88,5 @@ docker compose logs -f --tail=100
 
 The UI's Connection settings can test/save a ComfyUI API URL. The bundled API is
 `http://127.0.0.1:8189` from inside the container. Connecting to a separate ComfyUI
-server also requires shared/synchronized input/output files and its Kagemane
+server also requires shared/synchronized input/output files and its Kawarimi
 custom nodes; changing the URL alone does not synchronize remote files.

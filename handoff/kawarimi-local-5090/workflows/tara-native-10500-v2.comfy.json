@@ -1040,12 +1040,12 @@
         "Node name for S&R": "SaveVideo"
       },
       "widgets_values": [
-        "Kagemage/TARA_native_10500_v2",
+        "Kawarimi/TARA_native_10500_v2",
         "auto",
         "auto"
       ],
       "widgets_values_named": {
-        "filename_prefix": "Kagemage/TARA_native_10500_v2",
+        "filename_prefix": "Kawarimi/TARA_native_10500_v2",
         "format": "auto",
         "format.codec": "auto"
       }

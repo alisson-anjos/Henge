@@ -23,7 +23,7 @@
   "4": {
     "class_type": "LoadImage",
     "inputs": {
-      "image": "kagemane/validation/ref.png"
+      "image": "kawarimi/validation/ref.png"
     }
   },
   "5": {
@@ -99,13 +99,13 @@
         "7",
         0
       ],
-      "filename_prefix": "kagemane/validation/ref_fibo"
+      "filename_prefix": "kawarimi/validation/ref_fibo"
     }
   },
   "22": {
     "class_type": "LoadImage",
     "inputs": {
-      "image": "kagemane/validation/ref.png"
+      "image": "kawarimi/validation/ref.png"
     }
   }
 }

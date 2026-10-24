@@ -1,18 +1,18 @@
 services:
-  kagemane:
-    image: kagemane:local
+  kawarimi:
+    image: kawarimi:local
     build:
       context: .
       args:
-        PYTORCH_IMAGE: ${PYTORCH_IMAGE:-pytorch/pytorch:2.12.0-cuda13.0-cudnn9-runtime}
+        PYTORCH_IMAGE: ${PYTORCH_IMAGE:-pytorch/pytorch:2.14.0-cuda13.0-cudnn9-runtime}
     gpus: all
     ports:
       - "8188:8188"
     environment:
-      KAGEMANE_MODEL_PROFILES: ${KAGEMANE_MODEL_PROFILES:-character}
-      KAGEMANE_MODEL_MANIFEST: /app/config/model-repos.json
+      KAWARIMI_MODEL_PROFILES: ${KAWARIMI_MODEL_PROFILES:-character}
+      KAWARIMI_MODEL_MANIFEST: /app/config/model-repos.json
       HF_TOKEN: ${HF_TOKEN:-}
-      KAGEMANE_VLM_CLIP: ${KAGEMANE_VLM_CLIP:-qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors}
+      KAWARIMI_VLM_CLIP: ${KAWARIMI_VLM_CLIP:-qwen3.5_9b_w4a8_gptq.safetensors}
     volumes:
       - models:/opt/ComfyUI/models
       - state:/state

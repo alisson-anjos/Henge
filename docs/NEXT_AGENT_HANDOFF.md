@@ -1,16 +1,16 @@
-# Next agent handoff — Kagemane / H3, 2026-10-24
+# Next agent handoff — Kawarimi / H3, 2026-10-24
 
 Continue from the existing implementation; do not restart this project from zero.
 
 ## User priorities and naming
 
-- Repository renamed from OpenJutsu to https://github.com/alisson-anjos/Kagemane.
-  The checkout on this pod is still `/data/OpenJutsu`. Legacy KAGEMANE_* names,
+- Repository renamed from OpenJutsu to https://github.com/alisson-anjos/Kawarimi.
+  The checkout on this pod is still `/data/OpenJutsu`. Legacy KAWARIMI_* names,
   ComfyUI node IDs and browser storage keys remain compatible. The current
-  rendered brand still says Kagemage; the user explicitly renamed the repository.
+  rendered brand still says Kawarimi; the user explicitly renamed the repository.
 - User wants a beginner-facing UI: settings in the LEFT SIDEBAR above Output,
   only Generate and Export beside the prompt, templates in Community.
-- Export/import means sharing Kagemane settings, not a ComfyUI graph. Do not call
+- Export/import means sharing Kawarimi settings, not a ComfyUI graph. Do not call
   the request “Direction” in those controls. Shared JSON excludes media; import
   restores settings and asks for media again.
 - Character Swap uses v1.1 automatically. Motion offers Original 10500 and
@@ -29,12 +29,12 @@ Training was STOPPED at step **4500** at the user's request. Do not resume it
 without new authorization. Original fresh TARA goal was 5000 TOTAL, not +5000.
 The pod may be deleted at any moment.
 
-Private repository: `Alissonerdx/Kagemage-Backups` (dataset), prefix
+Private repository: `Alissonerdx/Kagemage-Backups` (legacy dataset name), prefix
 `pod_20261024T000050Z`. Checkpoint + optimizer + config + save_pair for step4500
 were remotely size/SHA verified. This is a private backup, not a public release.
 Local receipt/state: `/data/reports/private_hf_backup_20261024/mirror_state.json`.
-Stop/snapshot gate: `/data/reports/kagemage_e2e_20261024/checkpoint_gate.json`.
-Local matched pair snapshot: `/data/reports/kagemage_e2e_20261024/resume_step_4500/`.
+Stop/snapshot gate: `/data/reports/kagemage_e2e_20261024/checkpoint_gate.json` (legacy path).
+Local matched pair snapshot: `/data/reports/kagemage_e2e_20261024/resume_step_4500/` (legacy path).
 
 Other private backups contain 411 dataset media/manifests, original10500, V2,
 code archives and prior workflows. Memory notes are not a backup. Verify remote
@@ -45,10 +45,10 @@ optimizer (overwritten by a historical slider naming bug).
 
 - UI 8188, bridge 8766, isolated ComfyUI 8189.
 - `backend/services.json` tracks current PIDs; verify live, do not trust old PIDs.
-- Comfy root `/data/kagemane-comfy-backend`, custom nodes symlink to this repo's
-  `backend/comfy_nodes/kagemane` and `/data/ComfyUI-BFSNodes`.
+- Comfy root `/data/kawarimi-comfy-backend`, custom nodes symlink to this repo's
+  `backend/comfy_nodes/kawarimi` and `/data/ComfyUI-BFSNodes`.
 - Shared base models `/data/models/minimax-h3` and `/data/comfyui/models`.
-- Local LoRAs under isolated Comfy `models/loras/kagemane`: motion_10500 and
+- Local LoRAs under isolated Comfy `models/loras/kawarimi`: motion_10500 and
   motion_tara_4500 are symlinks to the original10500 and verified4500 snapshot.
 - Source/runtime edits require appropriate server reload; the user's active
   render must finish before restarting bridge/Comfy. Verify queue AND job state.
@@ -67,7 +67,7 @@ Both guider and scheduler receive the patched MODEL. Context uses prior native
 image reference for TARA versus AddGuide history for Guide.
 
 Settings UI can test/save a ComfyUI API URL via `/settings`, persisted in backend
-data `settings.json`. Required Kagemane nodes are checked. Active jobs block
+data `settings.json`. Required Kawarimi nodes are checked. Active jobs block
 connection changes. API URL alone does not synchronize files: COMFY_ROOT/input/
 output must be accessible to the bridge. Proxy whitelist must include new
 routes; earlier omissions broke preparation and preview until fixed.
@@ -105,7 +105,7 @@ startup have NOT been validated. Validate Compose/schema/build on a Docker host.
 
 ## Evidence / tests
 
-Evidence root `/data/reports/kagemage_e2e_20261024/`.
+Evidence root `/data/reports/kagemage_e2e_20261024/` (legacy path).
 - Native UI/backend short renders completed with Original10500 + Guide and
   TARA4500 + TARA. Two steps, 22frames24fps896x480: plumbing only, NOT quality proof.
   Jobs a1ea07d6096a40e4a0e7eed505b4b22a / c89f4ef0993e4245abf614736f736618.
