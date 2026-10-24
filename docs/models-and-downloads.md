@@ -110,7 +110,7 @@ bindings, anatomical changes, cuts and 3D guidance. Check each model's own licen
 ## Live sampling preview
 
 The launcher enables ComfyUI's `--preview-method taesd`. For H3, install a
-ComfyUI-compatible `taeh3.safetensors` in `models/vae_approx/` (the shared model
+[ComfyUI-compatible `taeh3.safetensors`](https://huggingface.co/t8star/Taeh3-Comfy/resolve/main/models/vae_approx/taeh3.safetensors) in `models/vae_approx/` (the shared model
 paths now include `vae_approx`). If the decoder is missing, ComfyUI may fall back
 to a simpler latent-to-RGB preview; it must not be described as a verified TAEH3
 preview in that configuration.
