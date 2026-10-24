@@ -1,6 +1,6 @@
 services:
-  kawarimi:
-    image: kawarimi:local
+  henge:
+    image: henge:local
     build:
       context: .
       args:
@@ -9,10 +9,10 @@ services:
     ports:
       - "8188:8188"
     environment:
-      KAWARIMI_MODEL_PROFILES: ${KAWARIMI_MODEL_PROFILES:-character,motion10500,motion4500}
-      KAWARIMI_MODEL_MANIFEST: /app/config/model-repos.json
+      HENGE_MODEL_PROFILES: ${HENGE_MODEL_PROFILES:-character,motion10500,motion4500}
+      HENGE_MODEL_MANIFEST: /app/config/model-repos.json
       HF_TOKEN: ${HF_TOKEN:-}
-      KAWARIMI_VLM_CLIP: ${KAWARIMI_VLM_CLIP:-qwen3.5_9b_w4a8_gptq.safetensors}
+      HENGE_VLM_CLIP: ${HENGE_VLM_CLIP:-qwen3.5_9b_w4a8_gptq.safetensors}
     volumes:
       - models:/opt/ComfyUI/models
       - state:/state

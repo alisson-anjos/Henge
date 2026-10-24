@@ -1,6 +1,6 @@
 """What each mode needs on disk, merged with the downloader's live status.
 
-The downloader (scripts/download_models.py) writes models/.kawarimi-downloads.json;
+The downloader (scripts/download_models.py) writes models/.henge-downloads.json;
 this module turns it into the checklist the UI shows while the pod is preparing.
 """
 import json,os,shutil
@@ -9,7 +9,7 @@ from pathlib import Path
 ADAPTER_LABELS={'training_adapter_v2.safetensors':'Motion training adapter V2','dmd_ref2va_8step.safetensors':'Turbo LoRA · DMD 8-step'}
 
 def base_files():
-    planner=os.environ.get('KAWARIMI_VLM_CLIP','qwen3.5_9b_w4a8_gptq.safetensors')
+    planner=os.environ.get('HENGE_VLM_CLIP','qwen3.5_9b_w4a8_gptq.safetensors')
     return [
         ('h3','MiniMax-H3 video model','diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors'),
         ('h3_text','H3 text encoder','text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors'),
@@ -24,7 +24,7 @@ def _folder_size(path):
     return sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
 
 def _status(models_dir):
-    try:return json.loads((models_dir/'.kawarimi-downloads.json').read_text())
+    try:return json.loads((models_dir/'.henge-downloads.json').read_text())
     except (OSError,ValueError):return {}
 
 def check(models_dir,models):
@@ -62,7 +62,7 @@ def check(models_dir,models):
     active=any(r['state'] in ('pending','downloading') for r in requirements)
     try:usage=shutil.disk_usage(models_dir);free=round(usage.free/1e9,1)
     except OSError:free=None
-    workspace=Path(os.environ.get('KAWARIMI_WORKSPACE','/workspace'))
+    workspace=Path(os.environ.get('HENGE_WORKSPACE','/workspace'))
     setup={'downloading':active,'base_ready':base_ready,'all_ready':base_ready and not active and all(mode_ready[p] for p in listed),'free_gb':free,
            'persistent_volume':workspace.is_mount() if workspace.exists() else None}
     return requirements,mode_ready,setup

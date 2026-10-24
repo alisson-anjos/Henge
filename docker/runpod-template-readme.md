@@ -1,4 +1,4 @@
-# Kawarimi — open character & motion studio
+# Henge — open character & motion studio
 
 Character swap and motion transfer for video, built on **ComfyUI** with
 **MiniMax-H3**. One pod runs the web UI, the job bridge and ComfyUI.
@@ -7,7 +7,7 @@ Character swap and motion transfer for video, built on **ComfyUI** with
 
 ## First boot
 
-The pod downloads the models into your volume at `/workspace/kawarimi/models`
+The pod downloads the models into your volume at `/workspace/henge/models`
 (≈ 65 GB with the default profiles). This takes a while the first time only;
 later boots, or a new pod on the same network volume, start straight away.
 Follow progress in **Logs** (`Downloading: …` / `Installed: …`).
@@ -33,10 +33,10 @@ The prompt planner / VLM is Qwen3.5 9B (W4A8 GPTQ), running inside ComfyUI.
 | Variable | Default | Purpose |
 |---|---|---|
 | `HF_TOKEN` | — | Hugging Face token. Required for the motion LoRAs while they are private |
-| `KAWARIMI_MODEL_PROFILES` | `character,motion10500,motion4500` | Also: `fibo`, `sam2d`, `sam3d`, `audio` |
-| `KAWARIMI_MODEL_OVERRIDES` | — | JSON to replace a model URL, e.g. `{"motion4500":{"url":"https://…"}}` |
-| `KAWARIMI_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags (`--highvram` on 80 GB GPUs) |
-| `KAWARIMI_EXPOSE_COMFY` | — | `1` also serves ComfyUI on port 8189 |
+| `HENGE_MODEL_PROFILES` | `character,motion10500,motion4500` | Also: `fibo`, `sam2d`, `sam3d`, `audio` |
+| `HENGE_MODEL_OVERRIDES` | — | JSON to replace a model URL, e.g. `{"motion4500":{"url":"https://…"}}` |
+| `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags (`--highvram` on 80 GB GPUs) |
+| `HENGE_EXPOSE_COMFY` | — | `1` also serves ComfyUI on port 8189 |
 
 A model that fails to download is skipped and its mode shows as unavailable;
 the pod keeps running.
@@ -44,9 +44,9 @@ the pod keeps running.
 ## Data on the volume
 
 ```
-/workspace/kawarimi/models       ComfyUI models
-/workspace/kawarimi/input|output ComfyUI input / output
-/workspace/kawarimi/state/jobs   job history and results
+/workspace/henge/models       ComfyUI models
+/workspace/henge/input|output ComfyUI input / output
+/workspace/henge/state/jobs   job history and results
 ```
 
-Source, setup and license (MIT): https://github.com/alisson-anjos/Kawarimi
+Source, setup and license (MIT): https://github.com/alisson-anjos/Henge

@@ -16,7 +16,7 @@ def shutdown(*_):
 
 def link_to_workspace(workspace):
     """Point ComfyUI's models/input/output and the job state at the volume."""
-    root=workspace/'kawarimi';root.mkdir(parents=True,exist_ok=True)
+    root=workspace/'henge';root.mkdir(parents=True,exist_ok=True)
     for name in ['models','input','output']:
         target=root/name;source=COMFY/name;target.mkdir(parents=True,exist_ok=True)
         if source.is_symlink():source.unlink()
@@ -26,12 +26,12 @@ def link_to_workspace(workspace):
                 if not (target/item.name).exists():shutil.move(str(item),str(target/item.name))
             shutil.rmtree(source)
         source.symlink_to(target,target_is_directory=True)
-    os.environ['KAWARIMI_DATA_DIR']=str(root/'state/jobs');Path(os.environ['KAWARIMI_DATA_DIR']).mkdir(parents=True,exist_ok=True)
+    os.environ['HENGE_DATA_DIR']=str(root/'state/jobs');Path(os.environ['HENGE_DATA_DIR']).mkdir(parents=True,exist_ok=True)
     os.environ.setdefault('HF_HOME',str(root/'huggingface'))
     manifest=root/'model-repos.json'
-    if manifest.is_file() and 'KAWARIMI_MODEL_MANIFEST_FORCE' not in os.environ:
-        os.environ['KAWARIMI_MODEL_MANIFEST']=str(manifest)
-    print('[kawarimi] persistent data on',root,flush=True)
+    if manifest.is_file() and 'HENGE_MODEL_MANIFEST_FORCE' not in os.environ:
+        os.environ['HENGE_MODEL_MANIFEST']=str(manifest)
+    print('[henge] persistent data on',root,flush=True)
 
 def start_sshd():
     """RunPod convention: PUBLIC_KEY env enables SSH over the exposed TCP 22."""
@@ -42,30 +42,30 @@ def start_sshd():
     subprocess.run(['ssh-keygen','-A'],check=False)
     Path('/run/sshd').mkdir(exist_ok=True)
     subprocess.Popen(['/usr/sbin/sshd'])
-    print('[kawarimi] sshd started',flush=True)
+    print('[henge] sshd started',flush=True)
 
 def main():
     signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
-    workspace=Path(os.environ.get('KAWARIMI_WORKSPACE','/workspace'))
-    if workspace.is_dir() and os.environ.get('KAWARIMI_WORKSPACE')!='off':link_to_workspace(workspace)
+    workspace=Path(os.environ.get('HENGE_WORKSPACE','/workspace'))
+    if workspace.is_dir() and os.environ.get('HENGE_WORKSPACE')!='off':link_to_workspace(workspace)
     if not (workspace.is_dir() and workspace.is_mount()):
-        print(f'[kawarimi] WARNING: {workspace} is not a mounted volume. Models (~65 GB) will go to the container disk and are lost when the pod is reset. Attach a volume or network volume at {workspace}.',flush=True)
+        print(f'[henge] WARNING: {workspace} is not a mounted volume. Models (~65 GB) will go to the container disk and are lost when the pod is reset. Attach a volume or network volume at {workspace}.',flush=True)
     start_sshd()
     # Services start right away; models download in the background and the UI shows
     # a setup screen with live progress until every required file is installed.
     # A failed model (e.g. a private LoRA without HF_TOKEN) never restarts the pod.
     downloader=subprocess.Popen([sys.executable,str(APP/'scripts/download_models.py')],cwd=APP)
-    comfy_host='0.0.0.0' if os.environ.get('KAWARIMI_EXPOSE_COMFY')=='1' else '127.0.0.1'
-    comfy_args=shlex.split(os.environ.get('KAWARIMI_COMFY_ARGS','--lowvram'))
-    commands=[([sys.executable,'main.py','--listen',comfy_host,'--port','8189','--preview-method','taesd',*comfy_args,'--disable-all-custom-nodes','--whitelist-custom-nodes','kawarimi','bfsnodes'],COMFY),([sys.executable,'-m','uvicorn','server:app','--host','127.0.0.1','--port','8766'],APP/'backend'),(['node','node_modules/next/dist/bin/next','start','--hostname','0.0.0.0','--port','8188'],APP)]
+    comfy_host='0.0.0.0' if os.environ.get('HENGE_EXPOSE_COMFY')=='1' else '127.0.0.1'
+    comfy_args=shlex.split(os.environ.get('HENGE_COMFY_ARGS','--lowvram'))
+    commands=[([sys.executable,'main.py','--listen',comfy_host,'--port','8189','--preview-method','taesd',*comfy_args,'--disable-all-custom-nodes','--whitelist-custom-nodes','henge','bfsnodes'],COMFY),([sys.executable,'-m','uvicorn','server:app','--host','127.0.0.1','--port','8766'],APP/'backend'),(['node','node_modules/next/dist/bin/next','start','--hostname','0.0.0.0','--port','8188'],APP)]
     for command,cwd in commands:processes.append(subprocess.Popen(command,cwd=cwd))
     try:
         reported=False
         while not stopping:
-            if any(p.poll() is not None for p in processes):raise RuntimeError('A Kawarimi service stopped; inspect the container logs')
+            if any(p.poll() is not None for p in processes):raise RuntimeError('A Henge service stopped; inspect the container logs')
             if not reported and downloader.poll() is not None:
                 reported=True
-                print('[kawarimi] model downloads finished' if downloader.returncode==0 else '[kawarimi] WARNING: some models failed to download; see the setup screen in the UI',flush=True)
+                print('[henge] model downloads finished' if downloader.returncode==0 else '[henge] WARNING: some models failed to download; see the setup screen in the UI',flush=True)
             time.sleep(1)
     finally:
         if downloader.poll() is None:downloader.terminate()

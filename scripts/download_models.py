@@ -38,11 +38,11 @@ def selected_models(manifest,profiles):
         if active.intersection(item.get('profiles',[])):yield item
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--manifest',default=os.environ.get('KAWARIMI_MODEL_MANIFEST','config/model-repos.example.json'));parser.add_argument('--models-dir',default=os.environ.get('KAWARIMI_MODELS_DIR','/opt/ComfyUI/models'));parser.add_argument('--profiles',default=os.environ.get('KAWARIMI_MODEL_PROFILES','character'));parser.add_argument('--dry-run',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--manifest',default=os.environ.get('HENGE_MODEL_MANIFEST','config/model-repos.example.json'));parser.add_argument('--models-dir',default=os.environ.get('HENGE_MODELS_DIR','/opt/ComfyUI/models'));parser.add_argument('--profiles',default=os.environ.get('HENGE_MODEL_PROFILES','character'));parser.add_argument('--dry-run',action='store_true');args=parser.parse_args()
     manifest=json.loads(Path(args.manifest).read_text());root=Path(args.models_dir)
-    # KAWARIMI_MODEL_OVERRIDES='{"motion10500":{"repo_id":"user/repo","filename":"x.safetensors"}}'
+    # HENGE_MODEL_OVERRIDES='{"motion10500":{"repo_id":"user/repo","filename":"x.safetensors"}}'
     # fills or replaces entries without editing the manifest (handy for RunPod env vars).
-    overrides=json.loads(os.environ.get('KAWARIMI_MODEL_OVERRIDES') or '{}')
+    overrides=json.loads(os.environ.get('HENGE_MODEL_OVERRIDES') or '{}')
     for item in manifest['models']:item.update(overrides.get(item['id'],{}))
     items=[resolve_source(item) for item in selected_models(manifest,args.profiles.split(','))]
     if args.dry_run:
@@ -58,7 +58,7 @@ def main():
         if dest.is_file() and dest.stat().st_size>0:print('Already installed:',item['id'],flush=True);status.set(item,'installed',total=dest.stat().st_size);continue
         hub=item.get('repo_id') and item.get('filename')
         if not hub and not item.get('url'):
-            message='No download link configured (set a url in the manifest or KAWARIMI_MODEL_OVERRIDES).'
+            message='No download link configured (set a url in the manifest or HENGE_MODEL_OVERRIDES).'
             print(f"Skipped {item['id']}: {message}",flush=True);status.set(item,'failed',error=message);failed.append(item['id']);continue
         staging=root/'.downloads'/item['id']
         try:
@@ -83,7 +83,7 @@ def main():
 class DownloadStatus:
     """Shared with the bridge (/health) so the UI can show what is missing and why."""
     def __init__(self,root,items):
-        self.path=root/'.kawarimi-downloads.json'
+        self.path=root/'.henge-downloads.json'
         self.rows={item['id']:{'id':item['id'],'destination':item['destination'],'profiles':item.get('profiles',[]),'state':'pending'} for item in items}
         self.write()
     def set(self,item,state,**extra):

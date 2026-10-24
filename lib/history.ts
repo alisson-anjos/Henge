@@ -36,7 +36,7 @@ export type SavedDirection = {
   rating: number;
   tags: string[];
 };
-export const HISTORY_KEY = 'openjutsu-history-v1';
+export const HISTORY_KEY = 'henge-history-v1';
 export const FEEDBACK = ['identity', 'motion', 'artifacts', 'prompt'] as const;
 export const HISTORY_LIMIT = 30;
 

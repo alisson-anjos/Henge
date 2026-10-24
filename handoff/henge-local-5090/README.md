@@ -1,4 +1,4 @@
-# Pacote para o Codex local — Kawarimi / RTX 5090
+# Pacote para o Codex local — Henge / RTX 5090
 
 Abra `CODEX_TASK.md` e use o conteúdo como instrução para o Codex no seu computador. Os arquivos em `workflows/` são exemplos reais atuais, não incluem modelos, credenciais ou mídia. O exemplo API usa Guide Latents; o visual é o Character Swap v1.1 usado como base. A implementação TARA da UI é uma tarefa do handoff, não está pronta nesses exemplos.
 

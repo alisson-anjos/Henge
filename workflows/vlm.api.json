@@ -10,7 +10,7 @@
   "2": {
     "class_type": "LoadImage",
     "inputs": {
-      "image": "kawarimi/validation/ref.png"
+      "image": "henge/validation/ref.png"
     }
   },
   "3": {
@@ -33,7 +33,7 @@
     }
   },
   "4": {
-    "class_type": "KawarimiTextResult",
+    "class_type": "HengeTextResult",
     "inputs": {
       "text": [
         "3",

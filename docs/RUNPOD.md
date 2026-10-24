@@ -1,4 +1,4 @@
-# Run Kawarimi on RunPod
+# Run Henge on RunPod
 
 One container runs everything: the web UI (port 8188), the bridge and ComfyUI.
 Models download on the first boot into the pod's volume at `/workspace`, so the
@@ -9,7 +9,7 @@ without downloading again.
 
 On every boot the container reads the bundled manifest
 `config/model-repos.example.json` and downloads, by `url`, every entry whose
-profile is `common` or listed in `KAWARIMI_MODEL_PROFILES`. Files already on the
+profile is `common` or listed in `HENGE_MODEL_PROFILES`. Files already on the
 volume are skipped, so only the first boot downloads. To change a link, edit
 that file (and rebuild) or override it at runtime (see below).
 
@@ -18,9 +18,9 @@ that file (and rebuild) or override it at runtime (see below).
 The GitHub Actions workflow `.github/workflows/docker.yml` builds and pushes:
 
 ```
-ghcr.io/alisson-anjos/kawarimi:latest        # main
-ghcr.io/alisson-anjos/kawarimi:<branch>      # any other branch
-ghcr.io/alisson-anjos/kawarimi:sha-<commit>  # every build
+ghcr.io/alisson-anjos/henge:latest        # main
+ghcr.io/alisson-anjos/henge:<branch>      # any other branch
+ghcr.io/alisson-anjos/henge:sha-<commit>  # every build
 ```
 
 If the GHCR package is private, add a registry credential in RunPod
@@ -34,7 +34,7 @@ RunPod → **My Templates → New Template** (type *Pod*):
 
 | Field | Value |
 |---|---|
-| Container image | `ghcr.io/alisson-anjos/kawarimi:latest` |
+| Container image | `ghcr.io/alisson-anjos/henge:latest` |
 | Container disk | 30 GB |
 | Volume disk | 100 GB (Character); 130 GB with `fibo,sam2d` |
 | Volume mount path | `/workspace` |
@@ -45,12 +45,12 @@ Environment variables (all optional):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `KAWARIMI_MODEL_PROFILES` | `character,motion10500,motion4500` | Comma list: `character`, `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500`, `motion4500` |
+| `HENGE_MODEL_PROFILES` | `character,motion10500,motion4500` | Comma list: `character`, `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500`, `motion4500` |
 | `HF_TOKEN` | — | **Required for the motion LoRAs** (private for now). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
-| `KAWARIMI_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
-| `KAWARIMI_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
-| `KAWARIMI_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. On 80 GB GPUs try `--highvram` |
-| `KAWARIMI_EXPOSE_COMFY` | — | `1` makes ComfyUI listen on `0.0.0.0:8189` for debugging |
+| `HENGE_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
+| `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
+| `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. On 80 GB GPUs try `--highvram` |
+| `HENGE_EXPOSE_COMFY` | — | `1` makes ComfyUI listen on `0.0.0.0:8189` for debugging |
 | `PUBLIC_KEY` | — | RunPod injects your SSH key; enables `sshd` |
 
 The motion LoRAs live in the private dataset `Alissonerdx/Kagemage-Backups`
@@ -59,9 +59,9 @@ until they are published, so the default profiles
 it, Character Swap still installs and the motion modes show as unavailable.
 
 To point an entry at another link without rebuilding, set
-`KAWARIMI_MODEL_OVERRIDES`, e.g.
+`HENGE_MODEL_OVERRIDES`, e.g.
 `{"motion4500":{"url":"https://huggingface.co/USER/REPO/resolve/main/file.safetensors"}}`.
-You can also drop a complete manifest at `/workspace/kawarimi/model-repos.json`;
+You can also drop a complete manifest at `/workspace/henge/model-repos.json`;
 it replaces the bundled one.
 
 ## 3. GPU
@@ -87,12 +87,12 @@ restarting in a loop.
 ## 5. Data layout on the volume
 
 ```
-/workspace/kawarimi/
+/workspace/henge/
   models/            ComfyUI models (symlinked from /opt/ComfyUI/models)
   input/  output/    ComfyUI input/output
-  state/jobs/        Kawarimi job history and artifacts
+  state/jobs/        Henge job history and artifacts
   huggingface/       HF cache
   model-repos.json   optional manifest override
 ```
 
-Set `KAWARIMI_WORKSPACE=off` to keep everything inside the container instead.
+Set `HENGE_WORKSPACE=off` to keep everything inside the container instead.

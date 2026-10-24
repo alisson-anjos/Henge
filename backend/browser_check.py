@@ -28,7 +28,7 @@ with sync_playwright() as p:
         page.locator('.generation-jobs select').select_option(jid)
         panel=page.get_by_label('Generation backend',exact=True)
         panel.get_by_text('Waiting for the active H3 training to release the GPU.',exact=True).wait_for(timeout=10000)
-        page.screenshot(path=str(root/'kawarimi-connected.png'),full_page=True)
+        page.screenshot(path=str(root/'henge-connected.png'),full_page=True)
         page.get_by_role('button',name='Cancel job',exact=True).click()
         panel.get_by_text('Cancelled by user',exact=True).wait_for(timeout=10000)
         result=dict(upload_plan_click='passed',training_gpu_guard=job['status'],cancel_click='passed',browser_errors=errors,job_id=jid)

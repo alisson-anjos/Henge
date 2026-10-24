@@ -21,6 +21,6 @@ class PromptPolicyTests(unittest.TestCase):
   fixtures=contracts.WorkflowContracts();plan=fixtures.plan();plan['preserve_objects']=['piano','keyboard','unknown']
   self.assertEqual(validate_plan(plan,[1],{},fixtures.request())['preserve_objects'],['piano','keyboard'])
  def test_both_consumers_share_policy(self):
-  self.assertIn('Kawarimi',H3_POLICY);self.assertIn('replace the entire source environment',H3_POLICY)
+  self.assertIn('Henge',H3_POLICY);self.assertIn('replace the entire source environment',H3_POLICY)
 
 if __name__=='__main__':unittest.main()

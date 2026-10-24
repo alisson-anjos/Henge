@@ -1,4 +1,4 @@
-"""Kawarimi media, guide preparation and H3 conditioning nodes. No model downloads."""
+"""Henge media, guide preparation and H3 conditioning nodes. No model downloads."""
 import json,math,os,subprocess
 from pathlib import Path
 import numpy as np
@@ -10,7 +10,7 @@ from .clip_video import clip_with_video_context
 
 def input_path(name):
     root=Path(folder_paths.get_input_directory()).resolve();p=(root/name).resolve()
-    if not p.is_relative_to(root) or not p.is_file():raise ValueError('Unknown Kawarimi input asset')
+    if not p.is_relative_to(root) or not p.is_file():raise ValueError('Unknown Henge input asset')
     return p
 
 
@@ -22,10 +22,10 @@ def read_frames(path,width,height,length):
     return torch.from_numpy(x).float()/255
 
 
-class KawarimiLoadShot:
+class HengeLoadShot:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'video':('STRING',),'pictures':('STRING',{'default':'[]'}),'width':('INT',{'default':512,'min':32,'step':32}),'height':('INT',{'default':288,'min':32,'step':32}),'length':('INT',{'default':107,'min':5,'max':362})}}
-    RETURN_TYPES=('IMAGE','KAWARIMI_REFS');FUNCTION='load';CATEGORY='Kawarimi'
+    RETURN_TYPES=('IMAGE','HENGE_REFS');FUNCTION='load';CATEGORY='Henge'
     def load(self,video,pictures,width,height,length):
         refs=[]
         for p in json.loads(pictures):
@@ -33,10 +33,10 @@ class KawarimiLoadShot:
         return read_frames(input_path(video),width,height,length),refs
 
 
-class KawarimiGuide:
+class HengeGuide:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'representation':(['original','2d','3d'],),'bindings':('STRING',{'default':'[]'}),'source_kind':(['human','animal','other'],),'segment_start':('FLOAT',{'default':0}),'sam_checkpoint':('STRING',{'default':'sam3.1_multiplex_fp16.safetensors'}),'body_model':('STRING',{'default':'sam_3d_body_dinov3_bf16.safetensors'}),'preserve_objects':('STRING',{'default':'[]'})}}
-    RETURN_TYPES=('IMAGE',);FUNCTION='prepare';CATEGORY='Kawarimi'
+    RETURN_TYPES=('IMAGE',);FUNCTION='prepare';CATEGORY='Henge'
     def prepare(self,images,representation,bindings,source_kind,segment_start,sam_checkpoint,body_model,preserve_objects="[]"):
         if representation=='original':return (images,)
         subjects=json.loads(bindings)
@@ -118,10 +118,10 @@ class KawarimiGuide:
         return (result,)
 
 
-class KawarimiH3Conditioning:
+class HengeH3Conditioning:
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'clip':('CLIP',),'vae':('VAE',),'guide':('IMAGE',),'references':('KAWARIMI_REFS',),'prompt':('STRING',{'multiline':True}),'width':('INT',{'default':512}),'height':('INT',{'default':288}),'length':('INT',{'default':107}),'clip_video_fps':('FLOAT',{'default':2,'min':.5,'max':24}),'reference_size':(['match','max'],),'guide_context':('BOOLEAN',{'default':True}),'audio_conditioning':('BOOLEAN',{'default':False}),'audio_video':('STRING',{'default':''})},'optional':{'audio_vae':('VAE',),'context_images':('IMAGE',),'context_count':('INT',{'default':0}),'conditioning_mode':(['guide','tara'],{'default':'guide'}),'reference_scale':('FLOAT',{'default':1.,'min':.25,'max':1.})}}
-    RETURN_TYPES=('CONDITIONING','LATENT');FUNCTION='encode';CATEGORY='Kawarimi'
+    def INPUT_TYPES(cls):return {'required':{'clip':('CLIP',),'vae':('VAE',),'guide':('IMAGE',),'references':('HENGE_REFS',),'prompt':('STRING',{'multiline':True}),'width':('INT',{'default':512}),'height':('INT',{'default':288}),'length':('INT',{'default':107}),'clip_video_fps':('FLOAT',{'default':2,'min':.5,'max':24}),'reference_size':(['match','max'],),'guide_context':('BOOLEAN',{'default':True}),'audio_conditioning':('BOOLEAN',{'default':False}),'audio_video':('STRING',{'default':''})},'optional':{'audio_vae':('VAE',),'context_images':('IMAGE',),'context_count':('INT',{'default':0}),'conditioning_mode':(['guide','tara'],{'default':'guide'}),'reference_scale':('FLOAT',{'default':1.,'min':.25,'max':1.})}}
+    RETURN_TYPES=('CONDITIONING','LATENT');FUNCTION='encode';CATEGORY='Henge'
     def encode(self,clip,vae,guide,references,prompt,width,height,length,clip_video_fps,reference_size,guide_context,audio_conditioning,audio_video,audio_vae=None,context_images=None,context_count=0,conditioning_mode="guide",reference_scale=1.):
         from comfy_extras.nodes_minimax_h3 import MiniMaxH3ReferenceToVideo,MiniMaxH3AddGuide
         audio=None
@@ -138,7 +138,7 @@ class KawarimiH3Conditioning:
             if reference_scale!=1.:
                 h,w=guide.shape[1:3];size=(max(32,int(h*reference_scale)//32*32),max(32,int(w*reference_scale)//32*32))
                 video=torch.nn.functional.interpolate(guide.movedim(-1,1),size=size,mode='bilinear',align_corners=False).movedim(1,-1)
-            print(f'[Kawarimi H3] TARA native Video 1; reference scale {reference_scale:g}; Add Guide OFF',flush=True)
+            print(f'[Henge H3] TARA native Video 1; reference scale {reference_scale:g}; Add Guide OFF',flush=True)
             cond,latent=MiniMaxH3ReferenceToVideo.execute(clip=clip,vae=vae,prompt=prompt,width=width,height=height,length=length,
                 ref_image_size=reference_size,ref_images=pictures,ref_videos={'ref_video_1':video},
                 audio_vae=audio_vae,ref_video_audios={'ref_video_audio_1':audio} if audio is not None else None)
@@ -154,10 +154,10 @@ class KawarimiH3Conditioning:
         return cond,latent
 
 
-class KawarimiSaveVideo:
+class HengeSaveVideo:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'filename':('STRING',),'trim_frames':('INT',{'default':107,'min':1}),'fps':('FLOAT',{'default':24})}}
-    RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Kawarimi'
+    RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Henge'
     def save(self,images,filename,trim_frames,fps):
         root=Path(folder_paths.get_output_directory()).resolve();p=(root/filename).resolve()
         if not p.is_relative_to(root) or p.suffix!='.mp4':raise ValueError('Invalid output name')
@@ -167,21 +167,21 @@ class KawarimiSaveVideo:
         if proc.returncode:raise RuntimeError(err.decode(errors='replace')[-1000:])
         return {'ui':{'videos':[{'filename':p.name,'subfolder':str(p.parent.relative_to(root)),'type':'output'}]}}
 
-NODE_CLASS_MAPPINGS={c.__name__:c for c in [KawarimiLoadShot,KawarimiGuide,KawarimiH3Conditioning,KawarimiSaveVideo]}
+NODE_CLASS_MAPPINGS={c.__name__:c for c in [HengeLoadShot,HengeGuide,HengeH3Conditioning,HengeSaveVideo]}
 
-class KawarimiTextResult:
+class HengeTextResult:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'text':('STRING',{'forceInput':True})}}
-    RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Kawarimi'
+    RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Henge'
     def save(self,text):return {'ui':{'text':[text]}}
 
-NODE_CLASS_MAPPINGS['KawarimiTextResult']=KawarimiTextResult
+NODE_CLASS_MAPPINGS['HengeTextResult']=HengeTextResult
 
 # Validate the exact API graph without adding a GPU execution to the Comfy queue.
 from server import PromptServer
 from aiohttp import web
-@PromptServer.instance.routes.post('/kawarimi/validate')
-async def validate_kawarimi_graph(request):
+@PromptServer.instance.routes.post('/henge/validate')
+async def validate_henge_graph(request):
     import execution,uuid
     body=await request.json()
     result=await execution.validate_prompt(uuid.uuid4().hex,body['prompt'],None)

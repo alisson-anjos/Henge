@@ -19,7 +19,7 @@ test('all editor reference slots remain stable', () => {
   assert.deepEqual(invalidReferences('@Picture2 @Picture11', [2]), ['@Picture11']);
 });
 test('prompt policy does not force the implementation or original scene', () => {
-  assert.ok(PROMPT_TEMPLATE.includes('Kawarimi'));
+  assert.ok(PROMPT_TEMPLATE.includes('Henge'));
   assert.ok(PROMPT_TEMPLATE.includes('replace the entire source environment'));
   assert.ok(PROMPT_TEMPLATE.includes('Inspect each labelled reference independently'));
 });

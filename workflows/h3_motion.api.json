@@ -13,7 +13,7 @@
         "1",
         0
       ],
-      "lora_name": "kawarimi/training_adapter_v2.safetensors",
+      "lora_name": "henge/training_adapter_v2.safetensors",
       "strength_model": 1.0
     }
   },
@@ -24,7 +24,7 @@
         "2",
         0
       ],
-      "lora_name": "kawarimi/motion_8000.safetensors",
+      "lora_name": "henge/motion_8000.safetensors",
       "strength_model": 1.0
     }
   },
@@ -54,17 +54,17 @@
     }
   },
   "7": {
-    "class_type": "KawarimiLoadShot",
+    "class_type": "HengeLoadShot",
     "inputs": {
-      "video": "kawarimi/validation/source.mp4",
-      "pictures": "[\"kawarimi/validation/ref.png\"]",
+      "video": "henge/validation/source.mp4",
+      "pictures": "[\"henge/validation/ref.png\"]",
       "width": 512,
       "height": 288,
       "length": 107
     }
   },
   "8": {
-    "class_type": "KawarimiGuide",
+    "class_type": "HengeGuide",
     "inputs": {
       "images": [
         "7",
@@ -79,7 +79,7 @@
     }
   },
   "9": {
-    "class_type": "KawarimiH3Conditioning",
+    "class_type": "HengeH3Conditioning",
     "inputs": {
       "clip": [
         "5",
@@ -105,7 +105,7 @@
       "reference_size": "match",
       "guide_context": true,
       "audio_conditioning": false,
-      "audio_video": "kawarimi/validation/source.mp4"
+      "audio_video": "henge/validation/source.mp4"
     }
   },
   "10": {
@@ -198,25 +198,25 @@
     }
   },
   "17": {
-    "class_type": "KawarimiSaveVideo",
+    "class_type": "HengeSaveVideo",
     "inputs": {
       "images": [
         "16",
         0
       ],
-      "filename": "kawarimi/validation/source_result.mp4",
+      "filename": "henge/validation/source_result.mp4",
       "trim_frames": 107,
       "fps": 24.0
     }
   },
   "18": {
-    "class_type": "KawarimiSaveVideo",
+    "class_type": "HengeSaveVideo",
     "inputs": {
       "images": [
         "8",
         0
       ],
-      "filename": "kawarimi/validation/source_guide.mp4",
+      "filename": "henge/validation/source_guide.mp4",
       "trim_frames": 107,
       "fps": 24.0
     }

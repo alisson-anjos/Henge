@@ -1,10 +1,10 @@
-# Kawarimi
+# Henge
 
 An open studio for **motion transfer** and **video swaps**, designed around MiniMax H3 guide-latent conditioning.
 
 ## Current milestone
 
-Kawarimi connects its studio UI to a local FastAPI bridge and an isolated ComfyUI backend. It supports guide intervals, image references, subject/color bindings, optional prompt enhancement, reviewed execution plans, conditional FIBO image preparation, segmented generation, progress, cancellation, result comparison and server history.
+Henge connects its studio UI to a local FastAPI bridge and an isolated ComfyUI backend. It supports guide intervals, image references, subject/color bindings, optional prompt enhancement, reviewed execution plans, conditional FIBO image preparation, segmented generation, progress, cancellation, result comparison and server history.
 
 The integration has passed TypeScript, production-build and CPU contract checks. End-to-end GPU generation and the quality of 2D/3D tracking still require validation. FIBO prepares a pose/appearance image; it does not perform full temporal skeleton retargeting. SAM 3D Body requires a human source.
 
@@ -43,7 +43,7 @@ The endpoint must support vision chat messages with `image_url` data URLs and re
 
 Automatic prompting in the editor and the backend planner shares `lib/h3-prompt-policy.json`. Enhanced outputs use the H3 six-section reference format, with `motion_transfer:` for motion mode and `body_swap:` for swap mode. References retain their exact indices and separate identity, outfit, object, style and environment roles. Requested scene replacements cover the entire environment while retaining the source performance and specified interaction props. Raw-prompt mode remains verbatim. See [prompt format and examples](docs/prompt-format.md).
 
-Existing browser history/storage keys, ComfyUI node identifiers and backend environment variables retain their existing names for compatibility. The public application name and new download filenames are Kawarimi.
+Henge was previously developed as OpenJutsu, Kagemane and Kawarimi. ComfyUI nodes (`Henge*`), environment variables (`HENGE_*`), model folders (`loras/henge`) and browser storage keys now all use the Henge name.
 
 ## Reference contract
 
@@ -91,12 +91,12 @@ Run the bridge inside a Python environment compatible with the selected ComfyUI 
 
 ```sh
 python -m pip install -r backend/requirements.txt
-export KAWARIMI_PYTHON=/path/to/comfy/python
+export HENGE_PYTHON=/path/to/comfy/python
 export COMFY_ROOT=/path/to/isolated/ComfyUI
 python scripts/start_backend.py
 ```
 
-The startup helper uses loopback ports 8189 for ComfyUI and 8766 for the bridge. The Next.js server proxies `/api/backend/`; credentials remain on the server. Configure `.env.local`, `backend/extra_model_paths.yaml`, and model paths in `backend/workflows.py` for your installation. The checked-in paths describe the development machine, not bundled model files. Install the `backend/comfy_nodes/kawarimi` directory as a ComfyUI custom-node package. Optional SAM, SAM 3D and MoGe dependencies/assets must be available for their selected branches. The original guide branch does not require those packages.
+The startup helper uses loopback ports 8189 for ComfyUI and 8766 for the bridge. The Next.js server proxies `/api/backend/`; credentials remain on the server. Configure `.env.local`, `backend/extra_model_paths.yaml`, and model paths in `backend/workflows.py` for your installation. The checked-in paths describe the development machine, not bundled model files. Install the `backend/comfy_nodes/henge` directory as a ComfyUI custom-node package. Optional SAM, SAM 3D and MoGe dependencies/assets must be available for their selected branches. The original guide branch does not require those packages.
 
 Model-download helpers and exported API graphs are in `scripts/` and `workflows/`. Local model weights, job uploads, generated videos and service logs are excluded from Git. The development launcher is not a production deployment configuration.
 

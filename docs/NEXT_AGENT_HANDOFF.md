@@ -1,16 +1,16 @@
-# Next agent handoff — Kawarimi / H3, 2026-10-24
+# Next agent handoff — Henge / H3, 2026-10-24
 
 Continue from the existing implementation; do not restart this project from zero.
 
 ## User priorities and naming
 
-- Repository renamed from OpenJutsu to https://github.com/alisson-anjos/Kawarimi.
-  The checkout on this pod is still `/data/OpenJutsu`. Legacy KAWARIMI_* names,
+- Repository renamed from OpenJutsu to https://github.com/alisson-anjos/Henge.
+  The checkout on this pod is still `/data/OpenJutsu`. Legacy HENGE_* names,
   ComfyUI node IDs and browser storage keys remain compatible. The current
-  rendered brand still says Kawarimi; the user explicitly renamed the repository.
+  rendered brand still says Henge; the user explicitly renamed the repository.
 - User wants a beginner-facing UI: settings in the LEFT SIDEBAR above Output,
   only Generate and Export beside the prompt, templates in Community.
-- Export/import means sharing Kawarimi settings, not a ComfyUI graph. Do not call
+- Export/import means sharing Henge settings, not a ComfyUI graph. Do not call
   the request “Direction” in those controls. Shared JSON excludes media; import
   restores settings and asks for media again.
 - Character Swap uses v1.1 automatically. Motion offers Original 10500 and
@@ -45,10 +45,10 @@ optimizer (overwritten by a historical slider naming bug).
 
 - UI 8188, bridge 8766, isolated ComfyUI 8189.
 - `backend/services.json` tracks current PIDs; verify live, do not trust old PIDs.
-- Comfy root `/data/kawarimi-comfy-backend`, custom nodes symlink to this repo's
-  `backend/comfy_nodes/kawarimi` and `/data/ComfyUI-BFSNodes`.
+- Comfy root `/data/henge-comfy-backend`, custom nodes symlink to this repo's
+  `backend/comfy_nodes/henge` and `/data/ComfyUI-BFSNodes`.
 - Shared base models `/data/models/minimax-h3` and `/data/comfyui/models`.
-- Local LoRAs under isolated Comfy `models/loras/kawarimi`: motion_10500 and
+- Local LoRAs under isolated Comfy `models/loras/henge`: motion_10500 and
   motion_tara_4500 are symlinks to the original10500 and verified4500 snapshot.
 - Source/runtime edits require appropriate server reload; the user's active
   render must finish before restarting bridge/Comfy. Verify queue AND job state.
@@ -67,7 +67,7 @@ Both guider and scheduler receive the patched MODEL. Context uses prior native
 image reference for TARA versus AddGuide history for Guide.
 
 Settings UI can test/save a ComfyUI API URL via `/settings`, persisted in backend
-data `settings.json`. Required Kawarimi nodes are checked. Active jobs block
+data `settings.json`. Required Henge nodes are checked. Active jobs block
 connection changes. API URL alone does not synchronize files: COMFY_ROOT/input/
 output must be accessible to the bridge. Proxy whitelist must include new
 routes; earlier omissions broke preparation and preview until fixed.

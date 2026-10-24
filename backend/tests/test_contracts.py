@@ -61,7 +61,7 @@ class WorkflowContracts(unittest.TestCase):
  def test_motion_profiles_load_adapter_v2_before_lora(self):
   for profile in ['motion','motion_tara4500']:
    g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0)
-   self.assertEqual(g['2']['inputs']['lora_name'],'kawarimi/training_adapter_v2.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0])
+   self.assertEqual(g['2']['inputs']['lora_name'],'henge/training_adapter_v2.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0])
  def test_reference_order_is_explicit(self):
   g=fibo_graph('guide.png',['identity.png','background.png'],'edit',42);self.assertEqual(g['22']['inputs']['image'],'identity.png');self.assertEqual(g['23']['inputs']['image'],'background.png');self.assertEqual(g['5']['inputs']['images.image_1'],['4',0]);self.assertEqual(g['5']['inputs']['images.image_2'],['22',0]);self.assertNotIn('image_1',g['5']['inputs'])
 if __name__=='__main__':unittest.main()

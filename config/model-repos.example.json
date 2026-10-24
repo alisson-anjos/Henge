@@ -44,7 +44,7 @@
     {
       "id": "character",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors",
-      "destination": "loras/kawarimi/character_v1_1.safetensors",
+      "destination": "loras/henge/character_v1_1.safetensors",
       "profiles": [
         "character"
       ]
@@ -52,7 +52,7 @@
     {
       "id": "character_adapter",
       "url": "https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
-      "destination": "loras/kawarimi/dmd_ref2va_8step.safetensors",
+      "destination": "loras/henge/dmd_ref2va_8step.safetensors",
       "profiles": [
         "character"
       ]
@@ -60,7 +60,7 @@
     {
       "id": "motion_adapter",
       "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/training_adapter_v2.safetensors",
-      "destination": "loras/kawarimi/training_adapter_v2.safetensors",
+      "destination": "loras/henge/training_adapter_v2.safetensors",
       "profiles": [
         "motion10500",
         "motion4500"
@@ -70,7 +70,7 @@
     {
       "id": "motion10500",
       "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/motion10500_original.safetensors",
-      "destination": "loras/kawarimi/motion_10500.safetensors",
+      "destination": "loras/henge/motion_10500.safetensors",
       "profiles": [
         "motion10500"
       ]
@@ -78,7 +78,7 @@
     {
       "id": "motion4500",
       "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/tara_h3_motion_r64_multiscale_v2_000004500.safetensors",
-      "destination": "loras/kawarimi/motion_tara_4500.safetensors",
+      "destination": "loras/henge/motion_tara_4500.safetensors",
       "profiles": [
         "motion4500"
       ]

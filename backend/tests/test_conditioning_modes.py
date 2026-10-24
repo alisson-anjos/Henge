@@ -16,8 +16,8 @@ class ConditioningModes(unittest.TestCase):
   g=h3_graph(*args,conditioning_mode='tara',context_video='context.mp4',context_count=5,context_prompt=False)
   self.assertEqual(g['9']['inputs']['prompt'],'  raw text  ')
  def test_native_branch_has_no_addguide_and_keeps_picture_roles(self):
-  source=Path(__file__).resolve().parents[1]/'comfy_nodes/kawarimi/__init__.py'
-  cls=next(n for n in ast.parse(source.read_text()).body if isinstance(n,ast.ClassDef) and n.name=='KawarimiH3Conditioning')
+  source=Path(__file__).resolve().parents[1]/'comfy_nodes/henge/__init__.py'
+  cls=next(n for n in ast.parse(source.read_text()).body if isinstance(n,ast.ClassDef) and n.name=='HengeH3Conditioning')
   calls=[]
   class Native:
    @classmethod
@@ -31,10 +31,10 @@ class ConditioningModes(unittest.TestCase):
   with patch.dict(sys.modules,{'comfy_extras.nodes_minimax_h3':SimpleNamespace(MiniMaxH3ReferenceToVideo=Native,MiniMaxH3AddGuide=Guide)}):
    refs=[torch.zeros(1,64,64,3),torch.ones(1,64,64,3)];video=torch.zeros(5,64,128,3)
    args=dict(clip=object(),vae=object(),guide=video,references=refs,prompt='test',width=128,height=64,length=5,clip_video_fps=2,reference_size='match',guide_context=True,audio_conditioning=False,audio_video='',context_images=torch.ones(5,64,128,3),context_count=5)
-   scope['KawarimiH3Conditioning']().encode(**args,conditioning_mode='tara',reference_scale=.5)
+   scope['HengeH3Conditioning']().encode(**args,conditioning_mode='tara',reference_scale=.5)
    self.assertEqual([name for name,_ in calls],['native'])
    kw=calls[0][1];self.assertEqual(tuple(kw['ref_videos']['ref_video_1'].shape),(5,32,64,3));self.assertIs(kw['ref_images']['ref_image_1'],refs[0]);self.assertEqual(len(kw['ref_images']),3)
-   calls.clear();scope['KawarimiH3Conditioning']().encode(**args)
+   calls.clear();scope['HengeH3Conditioning']().encode(**args)
    self.assertEqual([name for name,_ in calls],['clip_context','native','guide','guide'])
    self.assertNotIn('ref_videos',calls[1][1])
 
