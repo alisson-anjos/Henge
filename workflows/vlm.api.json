@@ -27,7 +27,7 @@
       "prompt": "Return JSON",
       "max_length": 2500,
       "sampling_mode": "off",
-      "thinking": true,
+      "thinking": false,
       "use_default_template": true,
       "mtp": "off"
     }

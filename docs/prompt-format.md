@@ -13,7 +13,7 @@ Plain instructions can still work with H3. This structure is the default for **g
 5. `overall_soundscape`: supported sound description, or `N/A` when unavailable.
 6. `non_diegetic_music`: supplied/requested background music, or `N/A`.
 
-The backend emits a picture-role inventory before composing its final prompt. Each reference is described separately. Picture count is not character count: several views can define one identity; clothing, environments and objects have their own roles. Supplied indices stay fixed, including when the setting is Picture 1 and the character is Picture 2. Color markers bind tracks and are not output skin or clothing colors.
+The backend and editor automatic-prompt endpoint now use the same staged sequence as the recent BFS native workflows: one isolated image per reference-description call, a guide-only analysis call, then a text-only H3 composition call. The backend runs a separate text-only runtime-routing call afterward; it cannot overwrite the composed execution prompt. Each reference is described separately. Picture count is not character count: several views can define one identity; clothing, environments and objects have their own roles. Supplied indices stay fixed, including when the setting is Picture 1 and the character is Picture 2. Color markers bind tracks and are not output skin or clothing colors.
 
 A requested environment replaces the entire source setting, including incompatible room walls, floor and ceiling. Keep only the specified interaction props and contacts. Preserve performance timing and source camera behavior unless the user explicitly changes the camera. Avoid blanket preservation instructions that contradict a requested background or style change. Prompt structure cannot guarantee model compliance or compensate for inadequate conditioning.
 
@@ -38,3 +38,33 @@ Generated prompts are checked for the task trigger, all six nonempty sections in
 ## Branding compatibility
 
 The application and newly downloaded files use **Kagemage**. Existing browser storage keys, backend environment variables, ComfyUI class identifiers and repository URL are retained so that saved history and existing workflows remain usable.
+
+## Staged VLM evidence (updated pipeline)
+
+`lib/h3-prompt-policy.json` is synchronized to the BFS native workflow policy v3,
+including explicit preservation of the observed source background when the user
+does not request a setting change. `lib/h3-vlm-stages.json` shares the reference,
+guide, composition context and final consistency-check wording across Python
+and the editor endpoint. No token/embedding-weight feature is part of this change.
+
+The backend resizes each analysis reference independently to at most 1024px,
+without changing the original generation reference. Up to 12 labelled guide
+frames from the selected interval form a separate contact sheet. Reference
+pictures never appear in that guide sheet. Composition receives descriptions,
+guide observations, request/bindings, exact Picture indices and video metadata;
+it receives no combined media collage. No audio is sent to the visual planner.
+
+A plan retains `prompt_evidence` and stage-specific `.txt` / `.api.json` files
+for review. Runtime species/FIBO/prop decisions remain separate from prompt
+writing. Enhancement OFF skips composition and preserves the exact user string.
+Guide Latents remains the existing generation path; this prompt update does not
+silently enable TARA or change LoRA profiles.
+
+Local calls use `thinking=false`, independent descriptions with a 384-token
+budget, guide analysis 1024 and final composition 3072, matching the recent BFS
+workflow budgets. Optional `KAGEMANE_VLM_CLIP` selects an installed local VLM
+checkpoint (for example the user's `qwen3.5_9b_w4a8_gptq.safetensors`); the existing
+4B filename remains the default. The VLM's actual weights/model matter too: this
+pipeline change alone does not prove equal outputs across different VLMs.
+Restart the backend and rebuild/restart the frontend after updating; running
+services do not hot-load these Python changes.

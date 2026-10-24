@@ -53,8 +53,13 @@ def fibo_graph(image,refs,instruction,seed):
     for i,p in enumerate(refs,2):g[str(20+i)]=node('LoadImage',image=p);g['5']['inputs'][f'image_{i}']=[str(20+i),0]
     return g
 
-def plan_graph(collage,instructions):
-    return {'1':node('CLIPLoader',clip_name='qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors',type='minimax',device='default'),'2':node('LoadImage',image=collage),'3':node('TextGenerate',clip=['1',0],image=['2',0],prompt=instructions,max_length=2500,sampling_mode='off',thinking=True,use_default_template=True,mtp='off'),'4':node('KagemaneTextResult',text=['3',0])}
+def plan_graph(image,instructions,max_tokens=2500,clip_name='qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors'):
+    g={'1':node('CLIPLoader',clip_name=clip_name,type='minimax',device='default'),
+       '3':node('TextGenerate',clip=['1',0],prompt=instructions,max_length=max_tokens,sampling_mode='off',thinking=False,use_default_template=True,mtp='off'),
+       '4':node('KagemaneTextResult',text=['3',0])}
+    if image is not None:
+        g['2']=node('LoadImage',image=image);g['3']['inputs']['image']=['2',0]
+    return g
 
 
 def split_on_cuts(total,per_shot,context,cuts):
