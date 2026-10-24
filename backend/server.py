@@ -350,7 +350,7 @@ def health():
     try:info=api('GET','/object_info',timeout=10);online=True
     except Exception:info={};online=False
     installed=info.get('LoraLoaderModelOnly',{}).get('input',{}).get('required',{}).get('lora_name',[[]])[0]
-    models={key:{**value,'available':value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed)} for key,value in MODELS.items()}
+    models={key:{**value,'available':value['lora'] in installed and value['adapter'] in installed} for key,value in MODELS.items()}
     return {'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')

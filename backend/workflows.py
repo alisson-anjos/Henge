@@ -4,8 +4,7 @@ Only branches selected in a validated plan are added: unused loaders never execu
 import json,math
 from pathlib import Path
 MODELS={
- # 10500 ships with training adapter V2 already merged in, so it must not load V2 again (adapter=None).
- 'motion':{'label':'Original · 10500','task':'motion','lora':'kawarimi/motion_10500_v2_merged.safetensors','adapter':None,'clip_context':True},
+ 'motion':{'label':'Original · 10500','task':'motion','lora':'kawarimi/motion_10500.safetensors','adapter':'kawarimi/training_adapter_v2.safetensors','clip_context':True},
  'motion_tara4500':{'label':'TARA-trained · 4500','task':'motion','lora':'kawarimi/motion_tara_4500.safetensors','adapter':'kawarimi/training_adapter_v2.safetensors','clip_context':True},
  'character':{'task':'swap','label':'Character Swap v1.1 · published','lora':'kawarimi/character_v1_1.safetensors','adapter':'kawarimi/dmd_ref2va_8step.safetensors','clip_context':False},
  'mix50':{'label':'Character Swap v1.0 + v1.1 · 50/50 Dyn95','lora':'kawarimi/character_mix50_dyn95.safetensors','adapter':'kawarimi/dmd_ref2va_8step.safetensors','clip_context':False},
@@ -27,7 +26,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name='minimax_h3_ref2va_pruned_int8_convrot.safetensors',weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=model['adapter'],strength_model=1.),
-      '3':node('LoraLoaderModelOnly',model=['2',0] if model['adapter'] else ['1',0],lora_name=model['lora'],strength_model=1.),
+      '3':node('LoraLoaderModelOnly',model=['2',0],lora_name=model['lora'],strength_model=1.),
       '4':node('MiniMaxH3SigmaShift',model=['3',0],shift_video=12.,shift_audio=3.),
       '5':node('CLIPLoader',clip_name='qwen3vl_32b_minimax_h3_int8_convrot.safetensors',type='minimax',device='default'),
       '6':node('VAELoader',vae_name='minimax_h3_video_vae_fp16.safetensors'),
@@ -44,7 +43,6 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
       '17':node('KawarimiSaveVideo',images=['16',0],filename=video.replace('.mp4','_result.mp4'),trim_frames=trim_frames,fps=24.),
       '18':node('KawarimiSaveVideo',images=['8',0],filename=video.replace('.mp4','_guide.mp4'),trim_frames=trim_frames,fps=24.),
     }
-    if not model['adapter']:del g['2']
     g['9']['inputs'].update(conditioning_mode=conditioning_mode,reference_scale=reference_scale)
     if conditioning_mode=='tara':
         g['21']=node('BFSMiniMaxH3NativeTemporal',model=['4',0],motion_video_index=1,strength=2.,window_seconds=.2,falloff_seconds=.25,max_penalty=6.,attention_backend='flash partitions (no compile)')

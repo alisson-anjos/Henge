@@ -58,11 +58,10 @@ class WorkflowContracts(unittest.TestCase):
   g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,'motion',42,8,'original',[],'human',0)
   self.assertNotIn('VAELoader',[v['class_type'] for k,v in g.items() if k=='19']);self.assertNotIn('20',g)
   self.assertFalse(any(v['class_type']=='TextEncodeFibo2' for v in g.values()))
- def test_merged_motion_lora_skips_separate_adapter(self):
-  g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,'motion',42,8,'original',[],'human',0)
-  self.assertNotIn('2',g);self.assertEqual(g['3']['inputs']['model'],['1',0])
-  g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,'motion_tara4500',42,8,'original',[],'human',0)
-  self.assertEqual(g['2']['inputs']['lora_name'],'kawarimi/training_adapter_v2.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0])
+ def test_motion_profiles_load_adapter_v2_before_lora(self):
+  for profile in ['motion','motion_tara4500']:
+   g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0)
+   self.assertEqual(g['2']['inputs']['lora_name'],'kawarimi/training_adapter_v2.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0])
  def test_reference_order_is_explicit(self):
   g=fibo_graph('guide.png',['identity.png','background.png'],'edit',42);self.assertEqual(g['22']['inputs']['image'],'identity.png');self.assertEqual(g['23']['inputs']['image'],'background.png');self.assertEqual(g['5']['inputs']['images.image_1'],['4',0]);self.assertEqual(g['5']['inputs']['images.image_2'],['22',0]);self.assertNotIn('image_1',g['5']['inputs'])
 if __name__=='__main__':unittest.main()
