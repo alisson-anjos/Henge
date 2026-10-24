@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from PIL import Image,ImageDraw,ImageOps
 from workflows import MODELS,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
+from requirements_check import check as check_requirements
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -350,8 +351,10 @@ def health():
     try:info=api('GET','/object_info',timeout=10);online=True
     except Exception:info={};online=False
     installed=info.get('LoraLoaderModelOnly',{}).get('input',{}).get('required',{}).get('lora_name',[[]])[0]
-    models={key:{**value,'available':value['lora'] in installed and value['adapter'] in installed} for key,value in MODELS.items()}
-    return {'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
+    requirements,mode_ready,setup=check_requirements(COMFY/'models',MODELS)
+    # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
+    models={key:{**value,'available':value['lora'] in installed and value['adapter'] in installed and mode_ready[key]} for key,value in MODELS.items()}
+    return {'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}

@@ -48,20 +48,27 @@ def main():
     signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
     workspace=Path(os.environ.get('KAWARIMI_WORKSPACE','/workspace'))
     if workspace.is_dir() and os.environ.get('KAWARIMI_WORKSPACE')!='off':link_to_workspace(workspace)
+    if not (workspace.is_dir() and workspace.is_mount()):
+        print(f'[kawarimi] WARNING: {workspace} is not a mounted volume. Models (~65 GB) will go to the container disk and are lost when the pod is reset. Attach a volume or network volume at {workspace}.',flush=True)
     start_sshd()
-    # A model that fails to download (e.g. a private LoRA without HF_TOKEN) must not
-    # put the pod into a restart loop; /health reports the missing profile instead.
-    result=subprocess.run([sys.executable,str(APP/'scripts/download_models.py')],cwd=APP)
-    if result.returncode:print('[kawarimi] WARNING: some models failed to download; affected profiles stay unavailable',flush=True)
+    # Services start right away; models download in the background and the UI shows
+    # a setup screen with live progress until every required file is installed.
+    # A failed model (e.g. a private LoRA without HF_TOKEN) never restarts the pod.
+    downloader=subprocess.Popen([sys.executable,str(APP/'scripts/download_models.py')],cwd=APP)
     comfy_host='0.0.0.0' if os.environ.get('KAWARIMI_EXPOSE_COMFY')=='1' else '127.0.0.1'
     comfy_args=shlex.split(os.environ.get('KAWARIMI_COMFY_ARGS','--lowvram'))
     commands=[([sys.executable,'main.py','--listen',comfy_host,'--port','8189','--preview-method','taesd',*comfy_args,'--disable-all-custom-nodes','--whitelist-custom-nodes','kawarimi','bfsnodes'],COMFY),([sys.executable,'-m','uvicorn','server:app','--host','127.0.0.1','--port','8766'],APP/'backend'),(['node','node_modules/next/dist/bin/next','start','--hostname','0.0.0.0','--port','8188'],APP)]
     for command,cwd in commands:processes.append(subprocess.Popen(command,cwd=cwd))
     try:
+        reported=False
         while not stopping:
             if any(p.poll() is not None for p in processes):raise RuntimeError('A Kawarimi service stopped; inspect the container logs')
+            if not reported and downloader.poll() is not None:
+                reported=True
+                print('[kawarimi] model downloads finished' if downloader.returncode==0 else '[kawarimi] WARNING: some models failed to download; see the setup screen in the UI',flush=True)
             time.sleep(1)
     finally:
+        if downloader.poll() is None:downloader.terminate()
         shutdown()
         for p in processes:
             try:p.wait(timeout=20)

@@ -1,5 +1,5 @@
 """Download selected profiles from a local manifest; never publish model weights."""
-import argparse,json,os,re
+import argparse,json,os,re,shutil,time
 from pathlib import Path,PurePosixPath
 from urllib.parse import unquote
 
@@ -51,21 +51,56 @@ def main():
     from huggingface_hub import hf_hub_download
     token=os.environ.get('HF_TOKEN') or None
     if os.environ.get('HF_TOKEN_FILE'):token=Path(os.environ['HF_TOKEN_FILE']).read_text().strip()
+    status=DownloadStatus(root,items)
     failed=[]
     for item in items:
         dest=root/item['destination'];dest.parent.mkdir(parents=True,exist_ok=True)
-        if dest.is_file() and dest.stat().st_size>0:print('Already installed:',item['id'],flush=True);continue
+        if dest.is_file() and dest.stat().st_size>0:print('Already installed:',item['id'],flush=True);status.set(item,'installed',total=dest.stat().st_size);continue
         hub=item.get('repo_id') and item.get('filename')
         if not hub and not item.get('url'):
-            print(f"Skipped {item['id']}: set a url (or repo_id/filename) in the manifest or KAWARIMI_MODEL_OVERRIDES, or mount {dest}. This artifact is not publicly bundled.",flush=True);failed.append(item['id']);continue
-        print('Downloading:',item['id'],flush=True)
+            message='No download link configured (set a url in the manifest or KAWARIMI_MODEL_OVERRIDES).'
+            print(f"Skipped {item['id']}: {message}",flush=True);status.set(item,'failed',error=message);failed.append(item['id']);continue
+        staging=root/'.downloads'/item['id']
         try:
+            total=remote_size(item,token)
+            free=shutil.disk_usage(dest.parent).free
+            if total and total>free:raise OSError(f'Not enough disk space: needs {total/1e9:.1f} GB, {free/1e9:.1f} GB free in {dest.parent}. Attach a larger volume at /workspace.')
+            print(f"Downloading: {item['id']}"+(f' ({total/1e9:.2f} GB)' if total else ''),flush=True)
+            status.set(item,'downloading',total=total,staging=str(staging if hub else dest.with_name(dest.name+'.part')))
             if hub:
-                staging=root/'.downloads'/item['id']
                 downloaded=hf_hub_download(repo_id=item['repo_id'],filename=item['filename'],repo_type=item.get('repo_type','model'),revision=item.get('revision','main'),local_dir=str(staging),token=token)
-                os.replace(downloaded,dest)
+                os.replace(downloaded,dest);shutil.rmtree(staging,ignore_errors=True)
             else:download_url(item['url'],dest,token)
-        except Exception as error:print(f"Failed {item['id']}: {error}",flush=True);failed.append(item['id']);continue
+        except Exception as error:
+            message=str(error).splitlines()[0]
+            if ('401' in message or '403' in message) and not token:message='Access denied: this model is private and HF_TOKEN is not set.'
+            elif 'No space left' in message:message=f'No space left on device in {dest.parent}. Attach a larger volume at /workspace.'
+            print(f"Failed {item['id']}: {message}",flush=True);status.set(item,'failed',error=message);failed.append(item['id']);continue
+        status.set(item,'installed',total=dest.stat().st_size)
         print('Installed:',item['destination'],flush=True)
     if failed:raise SystemExit('Models not installed: '+', '.join(failed))
+
+class DownloadStatus:
+    """Shared with the bridge (/health) so the UI can show what is missing and why."""
+    def __init__(self,root,items):
+        self.path=root/'.kawarimi-downloads.json'
+        self.rows={item['id']:{'id':item['id'],'destination':item['destination'],'profiles':item.get('profiles',[]),'state':'pending'} for item in items}
+        self.write()
+    def set(self,item,state,**extra):
+        row=self.rows[item['id']];row.update(state=state,**extra)
+        if state!='downloading':row.pop('staging',None)
+        self.write()
+    def write(self):
+        tmp=self.path.with_suffix('.tmp');tmp.write_text(json.dumps({'updated':time.time(),'models':list(self.rows.values())},indent=1));tmp.replace(self.path)
+
+def remote_size(item,token):
+    try:
+        if item.get('repo_id'):
+            from huggingface_hub import get_hf_file_metadata,hf_hub_url
+            return get_hf_file_metadata(hf_hub_url(item['repo_id'],item['filename'],repo_type=item.get('repo_type','model'),revision=item.get('revision','main')),token=token).size
+        import requests
+        return int(requests.head(item['url'],allow_redirects=True,timeout=30).headers.get('content-length') or 0) or None
+    except Exception as error:
+        if '401' in str(error) or '403' in str(error) or '404' in str(error):raise
+        return None
 if __name__=='__main__':main()

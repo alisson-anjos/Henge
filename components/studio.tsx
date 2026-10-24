@@ -11,6 +11,7 @@ import GenerationPanel, {type GenerationJob} from './generation-panel';
 import {jobStatusLabel} from '../lib/job-status';
 import SubjectBindings, {SubjectVideo} from './subject-bindings';
 import {bindingPrompt, readSubjectBindings, type SubjectBinding, type GuideRepresentation} from '../lib/subject-bindings';
+import SetupScreen from './setup-screen';
 
 function Icon({name, size = 20}: {name: string; size?: number}) {
   const paths: Record<string, React.ReactNode> = {
@@ -42,7 +43,7 @@ export default function Studio() {
   const importSettingsInput = useRef<HTMLInputElement>(null);
   const [importedSettings, setImportedSettings] = useState<Record<string, unknown>>({});
   const [importRevision, setImportRevision] = useState(0);
-  const [lang, setLang] = useState<Language>('pt');
+  const [lang, setLang] = useState<Language>('en');
   const [mode, setMode] = useState<Mode>('swap');
   const [view, setView] = useState<View>('studio');
   const [pictures, setPictures] = useState<Picture[]>([]);
@@ -248,6 +249,7 @@ export default function Studio() {
   const historyTitle = tr('Your directions', 'Suas direções', 'Tus direcciones');
 
   return <div className={`app-shell mode-${mode}`} style={style}>
+    <SetupScreen lang={lang}/>
     {editingVideo && video && <VideoTrimModal file={video.file} url={video.url} initial={video.range} onConfirm={(range, duration) => {setVideo(v => v ? {...v, range, duration} : v); setEditingVideo(false);}} onCancel={() => {if (!video.range) removeVideo(); setEditingVideo(false);}}/>}
     <header className="topbar">
       <button className="wordmark" onClick={() => setView('studio')} aria-label="Kawarimi Studio"><span className="brandmark"><Icon name="spark" size={23}/></span><strong>Kawarimi</strong><span className="alpha mono">Studio · α</span></button>
