@@ -50,7 +50,7 @@ export function readHistory(raw: string | null): SavedDirection[] {
       const item = value as SavedDirection, r = item.request;
       return typeof item.id === 'string' && typeof item.created === 'string'
         && Number.isFinite(Date.parse(item.created)) && !!r
-        && typeof r.project === 'string' && ['swap', 'motion'].includes(r.mode)
+        && typeof r.project === 'string' && ['swap', 'motion', 'headswap', 'sharpness'].includes(r.mode)
         && ['480p', '720p', '1080p'].includes(r.quality)
         && typeof r.editor_prompt === 'string' && typeof r.prompt === 'string'
         && !!r.video && typeof r.video.name === 'string'

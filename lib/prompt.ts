@@ -1,6 +1,9 @@
 import policy from './h3-prompt-policy.json' with {type: 'json'};
 
-export type Mode = "motion" | "swap";
+export type Mode = "motion" | "swap" | "headswap" | "sharpness";
+/** Modes with a fixed published recipe: the backend writes the prompt. */
+export const FIXED_RECIPE_MODES: Mode[] = ["headswap", "sharpness"];
+export const isFixedRecipe = (mode: Mode) => FIXED_RECIPE_MODES.includes(mode);
 export const MAX_PICTURES = 11;
 export function nativePrompt(text: string): string {
   return text.replace(/@Picture(1[01]|[1-9])\b/g, (_, n) => `<Picture ${n}>`)

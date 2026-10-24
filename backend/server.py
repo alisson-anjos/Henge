@@ -10,6 +10,7 @@ from PIL import Image,ImageDraw,ImageOps
 from workflows import MODELS,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
+from edit_modes import MODES,FIXED_RECIPE,LMS_CAPTION,FACE_INSTRUCTION,head_swap_prompt,fixed_plan,head_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -45,7 +46,11 @@ def save(job,**patch):
     return job
 
 def public(job):
-    return {k:v for k,v in job.items() if k not in ['assets','request']}
+    out={k:v for k,v in job.items() if k not in ['assets','request']}
+    request=job.get('request') or {}
+    out.setdefault('mode',request.get('mode'));out.setdefault('project',request.get('project'))
+    if isinstance(request.get('video'),dict):out['duration']=request['video'].get('duration')
+    return out
 
 def training_busy():
     for p in Path('/proc').glob('[0-9]*/cmdline'):
@@ -68,12 +73,21 @@ def clamp_float(value,lo,hi,label):
     return value
 
 def validate_request(r,options,slots):
-    if not isinstance(r,dict) or r.get('mode') not in ['motion','swap'] or not isinstance(r.get('prompt'),str) or not r['prompt'].strip() or len(r['prompt'])>16000:raise ValueError('Provide a valid direction and prompt')
+    if not isinstance(r,dict) or r.get('mode') not in MODES or not isinstance(r.get('prompt'),str) or len(r['prompt'])>16000:raise ValueError('Provide a valid direction and prompt')
+    profile,low,high=MODES[r['mode']]
+    if r['mode'] in FIXED_RECIPE:
+        # Fixed-recipe modes build their own prompt; the profile is implied by the mode.
+        r['prompt']=r['prompt'] or r['mode'];options['profile']=profile;options['conditioning_mode']='guide';options['enhance_prompt']=True
+    elif not r['prompt'].strip():raise ValueError('Provide a valid direction and prompt')
+    if not low<=len(slots)<=high:raise ValueError('Attach exactly one face picture' if r['mode']=='headswap' else 'Sharpness uses only the video; remove the reference pictures' if r['mode']=='sharpness' else 'Attach 1–11 reference images')
     if r.get('quality') not in ['480p','720p','1080p']:raise ValueError('Choose 480p, 720p or 1080p')
     video=r.get('video',{});start=clamp_float(video.get('start_seconds'),0,86400,'start');end=clamp_float(video.get('end_seconds'),0,86400,'end')
     if end<=start:raise ValueError('End must be after start')
     if not isinstance(options.get('enhance_prompt',True),bool):raise ValueError('Enhance prompt must be a boolean')
+    if not isinstance(options.get('auto_approve',False),bool):raise ValueError('Auto-approve must be a boolean')
+    if options.get('attention','comfy kitchen attention') not in ['comfy kitchen attention','pytorch attention']:raise ValueError('Unknown attention backend')
     if options.get('profile','motion') not in MODELS:raise ValueError('Unknown model profile')
+    if r['mode'] not in FIXED_RECIPE and options.get('profile','motion') in ('headswap','sharpness'):raise ValueError('This model belongs to another mode')
     if options.get('conditioning_mode','guide') not in ['guide','tara']:raise ValueError('Unknown conditioning mode')
     clamp_float(options.get('reference_scale',1.),.25,1.,'native reference scale')
     clamp_float(options.get('seed',42),0,2**32-1,'seed');clamp_float(options.get('steps',8),1,60,'steps');clamp_float(options.get('clip_fps',2),.5,24,'CLIP video fps')
@@ -140,15 +154,16 @@ def validate_plan(plan,slots,options,r):
 def api(method,path,**kw):
     result=requests.request(method,URL+path,timeout=kw.pop('timeout',30),**kw)
     if not result.ok:raise RuntimeError(f'ComfyUI HTTP {result.status_code}: {result.text[:1500]}')
-    return result.json()
+    # /interrupt and /queue deletes answer 200 with an empty body.
+    return result.json() if result.content.strip() else {}
 
 def execute_graph(job,graph,stage):
     import aiohttp
     async def execute():
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         folder=job_path(job['id']);(folder/(stage+'.api.json')).write_text(json.dumps(graph,indent=2))
-        client='henge-'+job['id'];pid=None
-        labels={'SamplerCustomAdvanced':'Sampling video','KSampler':'Preparing appearance image','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
+        client='henge-'+job['id'];pid=None;pace={}
+        labels={'SamplerCustomAdvanced':'Loading the video model into the GPU (the first run after a restart can take minutes)','KSampler':'Preparing appearance image','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(URL.replace('http://','ws://').replace('https://','wss://')+'/ws?clientId='+client,heartbeat=30) as ws:
                 async with session.post(URL+'/prompt',json={'prompt':graph,'client_id':client,'extra_data':{'henge_job':job['id'],'stage':stage}}) as res:
@@ -156,7 +171,7 @@ def execute_graph(job,graph,stage):
                     if res.status!=200:raise ValueError(str(reply)[:1800])
                 pid=reply['prompt_id']
                 try:
-                    save(job,prompt_id=pid,stage=stage,status='running',step=None,step_total=None)
+                    save(job,prompt_id=pid,stage=stage,status='running',step=None,step_total=None,eta_seconds=None,seconds_per_step=None)
                     started=time.monotonic();last_poll=0
                     while time.monotonic()-started<12*3600:
                         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
@@ -170,6 +185,16 @@ def execute_graph(job,graph,stage):
                                         if label:save(job,message=label,step=None,step_total=None)
                                     elif event.get('type')=='progress':
                                         maximum=max(1,int(data.get('max',1)));value=int(data.get('value',0));patch={'step':value,'step_total':maximum}
+                                        if graph.get(str(data.get('node')),{}).get('class_type')=='SamplerCustomAdvanced':
+                                            patch['message']='Sampling video'
+                                            # Measured pace after the first step (model loading excluded) -> remaining time.
+                                            now=time.monotonic();pace.setdefault('first',(value,now))
+                                            first_value,first_time=pace['first']
+                                            if value>first_value:
+                                                per_step=(now-first_time)/(value-first_value)
+                                                left_segments=max(0,job.get('total_segments',1)-job.get('segment',1))
+                                                patch['eta_seconds']=round((maximum-value)*per_step+10+left_segments*(maximum*per_step+25))
+                                                patch['seconds_per_step']=round(per_step,2)
                                         if stage.startswith('h3_segment_'):patch['progress']=(job.get('segment',1)-1+min(1,value/maximum))/max(1,job.get('total_segments',1))
                                         save(job,**patch)
                             elif message.type==aiohttp.WSMsgType.BINARY and stage.startswith('h3_segment_'):
@@ -230,6 +255,10 @@ def prepare_evidence(job):
 
 
 def planning(job):
+    if job['request']['mode']=='sharpness':
+        # LMS uses one fixed caption and no references: nothing to review, render directly.
+        plan=fixed_plan('sharpness',LMS_CAPTION,'Sharpen the selected interval with the LMS LoRA; motion, framing and timing come from the source video.')
+        save(job,plan=plan,status='queued_render',stage='queued',progress=0,message='Queued for sharpening',step=None,step_total=None);return
     pictures,guide,metadata=prepare_evidence(job);r=job['request'];slots=[slot for slot,_ in pictures]
     work=job_path(job['id'])
     def ask(instruction,image,stage,tokens):
@@ -255,6 +284,10 @@ def planning(job):
         if not text:raise ValueError(f'VLM returned no text during {stage}')
         (work/(stage+'.txt')).write_text(text)
         return text
+    if r['mode']=='headswap':
+        face=ask(FACE_INSTRUCTION,pictures[0][1],'vlm_picture_1',512)
+        plan=fixed_plan('headswap',head_swap_prompt(face),'Replace only the head of the person in the video with the face from Picture 1; body, clothing, motion and scene stay unchanged.',face)
+        save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the facial details before generating.',step=None,step_total=None);return
     evidence=prompt_pipeline(ask,r['prompt'],r['mode'],pictures,guide,metadata,job['options'].get('enhance_prompt',True))
     (work/'vlm_evidence.json').write_text(json.dumps(evidence,indent=2,ensure_ascii=False))
     routing=dict(mode=r['mode'],request=r['prompt'],bindings=r.get('subject_guidance',{}),options=job['options'],
@@ -267,6 +300,7 @@ def planning(job):
 
 def generate(job):
     r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'henge'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
+    if r['mode']=='headswap':refs=[str(head_reference(INPUT/refs[0],inp/'head_reference.png').relative_to(INPUT))]
     width,height=meta['width'],meta['height'];short={'480p':480,'720p':720,'1080p':1080}[r['quality']];scale=short/min(width,height);w=max(32,round(width*scale/32)*32);h=max(32,round(height*scale/32)*32)
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
     if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
@@ -301,7 +335,7 @@ def generate(job):
         if previous is not None:
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True))
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'))
         execute_graph(job,graph,f'h3_segment_{i:03d}')
         rendered=OUTPUT/relative.replace('.mp4','_result.mp4');guide=OUTPUT/relative.replace('.mp4','_guide.mp4')
         if not rendered.is_file():raise ValueError('ComfyUI finished without the expected video')
@@ -318,7 +352,7 @@ def generate(job):
     args+=['-t',str(end-start),'-movflags','+faststart','-y',str(output)];run(args)
     # Comparison uses the exact selected source interval and result duration.
     compare=work/'comparison.mp4';run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(output),'-filter_complex',f'[0:v]fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2[a];[a][1:v]hstack=shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
-    save(job,status='completed',stage='complete',progress=1,result_url=f"/api/backend/jobs/{job['id']}/files/result.mp4",comparison_url=f"/api/backend/jobs/{job['id']}/files/comparison.mp4",message='Generation complete',prompt_id=None)
+    save(job,status='completed',stage='complete',progress=1,eta_seconds=None,seconds_per_step=None,result_url=f"/api/backend/jobs/{job['id']}/files/result.mp4",comparison_url=f"/api/backend/jobs/{job['id']}/files/comparison.mp4",message='Generation complete',prompt_id=None)
 
 def worker():
     while not STOP.wait(2):
@@ -331,7 +365,11 @@ def worker():
                     continue
                 status=job.get('resume_status',job['status']) if job['status']=='waiting_gpu' else job['status']
                 save(job,status='running',stage='planning' if status=='queued_plan' else 'preparing',message='Analyzing the guide and references' if status=='queued_plan' else 'Preparing generation')
-                if status=='queued_plan':planning(job)
+                if status=='queued_plan':
+                    planning(job)
+                    # Auto-approve keeps the plan's own recommendation for reference preparation.
+                    if job['options'].get('auto_approve') is True and job['status']=='awaiting_approval':
+                        save(job,status='queued_render',stage='queued',message='Plan auto-approved; queued for generation')
                 else:generate(job)
             except InterruptedError:pass
             except Exception as e:
@@ -388,7 +426,7 @@ async def create_job(request:Request):
     try:
         r=json.loads(str(form.get('direction','{}')));options=json.loads(str(form.get('options','{}')))
         pictures={int(k.split('_')[1]):v for k,v in form.items() if re.fullmatch(r'picture_\d+',k)}
-        if not 1<=len(pictures)<=11:raise ValueError('Attach 1–11 reference images')
+        if len(pictures)>11:raise ValueError('Attach up to 11 reference images')
         validate_request(r,options,list(pictures));video=form.get('video')
         if not hasattr(video,'read'):raise ValueError('Attach the guide video')
         jid=uuid.uuid4().hex;work=job_path(jid);work.mkdir();inp=INPUT/'henge'/jid;inp.mkdir(parents=True)

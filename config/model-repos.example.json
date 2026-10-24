@@ -58,8 +58,27 @@
       "url": "https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
       "destination": "loras/henge/dmd_ref2va_8step.safetensors",
       "profiles": [
-        "character"
+        "character",
+        "headswap",
+        "sharpness"
       ]
+    },
+    {
+      "id": "headswap",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_head_swap_v1.0_r32.safetensors",
+      "destination": "loras/henge/head_swap_v1_0_r32.safetensors",
+      "profiles": [
+        "headswap"
+      ]
+    },
+    {
+      "id": "sharpness",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/lms_v1_fro_dyn95.safetensors",
+      "destination": "loras/henge/lms_v1_fro_dyn95.safetensors",
+      "profiles": [
+        "sharpness"
+      ],
+      "note": "LMS sharpness LoRA extracted with Frobenius/SVD (dyn95). Private dataset: needs HF_TOKEN."
     },
     {
       "id": "motion_adapter",

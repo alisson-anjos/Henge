@@ -8,6 +8,10 @@ MODELS={
  'motion_tara4500':{'label':'TARA-trained · 4500','task':'motion','lora':'henge/motion_tara_4500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
  'character':{'task':'swap','label':'Character Swap v1.1 · published','lora':'henge/character_v1_1.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','clip_context':False},
  'mix50':{'label':'Character Swap v1.0 + v1.1 · 50/50 Dyn95','lora':'henge/character_mix50_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','clip_context':False},
+ # Head Swap and Sharpness follow the published workflows: the whole source video is an
+ # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
+ 'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/head_swap_v1_0_r32.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','clip_context':False,'scheduler':'beta'},
+ 'sharpness':{'task':'sharpness','label':'LMS Sharpness v1 · fro dyn95','lora':'henge/lms_v1_fro_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','clip_context':False},
 }
 def node(kind,**inputs):return {'class_type':kind,'inputs':inputs}
 def grid_frames(n):return max(5,math.ceil((n-5)/17)*17+5)
@@ -22,12 +26,14 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention"):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name='minimax_h3_ref2va_pruned_int8_convrot.safetensors',weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=model['adapter'],strength_model=1.),
       '3':node('LoraLoaderModelOnly',model=['2',0],lora_name=model['lora'],strength_model=1.),
-      '4':node('MiniMaxH3SigmaShift',model=['3',0],shift_video=12.,shift_audio=3.),
+      # Published H3 workflows run dense attention on Comfy Kitchen (INT8); TARA detects it.
+      '22':node('ModelAttentionBackend',model=['3',0],attention=attention),
+      '4':node('MiniMaxH3SigmaShift',model=['22',0],shift_video=12.,shift_audio=3.),
       '5':node('CLIPLoader',clip_name='qwen3vl_32b_minimax_h3_int8_convrot.safetensors',type='minimax',device='default'),
       '6':node('VAELoader',vae_name='minimax_h3_video_vae_fp16.safetensors'),
       '7':node('HengeLoadShot',video=video,pictures=json.dumps(refs),width=width,height=height,length=length),
@@ -36,7 +42,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
       '10':node('CFGGuider',model=['4',0],positive=['9',0],negative=['9',0],cfg=1.),
       '11':node('RandomNoise',noise_seed=seed),
       '12':node('KSamplerSelect',sampler_name='euler'),
-      '13':node('BasicScheduler',model=['4',0],scheduler='simple',steps=steps,denoise=1.),
+      '13':node('BasicScheduler',model=['4',0],scheduler=model.get('scheduler','simple'),steps=steps,denoise=1.),
       '14':node('SamplerCustomAdvanced',noise=['11',0],guider=['10',0],sampler=['12',0],sigmas=['13',0],latent_image=['9',1]),
       '15':node('LTXVSeparateAVLatent',av_latent=['14',0]),
       '16':node('VAEDecode',samples=['15',0],vae=['6',0]),

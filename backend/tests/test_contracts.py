@@ -62,6 +62,23 @@ class WorkflowContracts(unittest.TestCase):
   for profile in ['motion','motion_tara4500']:
    g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0)
    self.assertEqual(g['2']['inputs']['lora_name'],'henge/training_adapter_v2.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0])
+ def test_fixed_recipe_modes_pick_profile_and_picture_count(self):
+  for mode,slots,profile in [('headswap',[1],'headswap'),('sharpness',[],'sharpness')]:
+   r={**self.request(),'mode':mode,'prompt':''};options={'profile':'motion','conditioning_mode':'tara'}
+   validate_request(r,options,slots);self.assertEqual(options['profile'],profile);self.assertEqual(options['conditioning_mode'],'guide')
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'headswap'},{},[1,2])
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'sharpness'},{},[1])
+  with self.assertRaises(ValueError):validate_request(self.request(),{'profile':'sharpness'},[1])
+ def test_fixed_recipe_graphs(self):
+  g=h3_graph('v.mp4',[],'Enhance this video.',512,288,107,107,'sharpness',42,8,'original',[],'human',0)
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/lms_v1_fro_dyn95.safetensors');self.assertEqual(g['7']['inputs']['pictures'],'[]');self.assertEqual(g['13']['inputs']['scheduler'],'simple')
+  g=h3_graph('v.mp4',['face.png'],'head_swap:',512,288,107,107,'headswap',42,8,'original',[],'human',0)
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/head_swap_v1_0_r32.safetensors');self.assertEqual(g['13']['inputs']['scheduler'],'beta');self.assertFalse(g['9']['inputs']['guide_context'])
+ def test_head_swap_prompt_template(self):
+  from edit_modes import head_swap_prompt
+  text=head_swap_prompt(' "Male, round face,\n short black hair" ')
+  self.assertTrue(text.startswith('head_swap:\n\nsubject_definitions:'));self.assertIn('Facial details of <Subject 1>:\nMale, round face, short black hair\n',text)
+  with self.assertRaises(ValueError):head_swap_prompt('  ')
  def test_reference_order_is_explicit(self):
   g=fibo_graph('guide.png',['identity.png','background.png'],'edit',42);self.assertEqual(g['22']['inputs']['image'],'identity.png');self.assertEqual(g['23']['inputs']['image'],'background.png');self.assertEqual(g['5']['inputs']['images.image_1'],['4',0]);self.assertEqual(g['5']['inputs']['images.image_2'],['22',0]);self.assertNotIn('image_1',g['5']['inputs'])
 if __name__=='__main__':unittest.main()
