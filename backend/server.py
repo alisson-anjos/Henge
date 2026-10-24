@@ -240,6 +240,16 @@ def image_from_output(outputs):
     if not p.is_relative_to(root):raise ValueError('Invalid ComfyUI output')
     return p
 
+def grab_frame(video,t,dest,floor=0.):
+    """One still at t. The container duration can run past the last video frame (longer audio,
+    trailing edit), where ffmpeg exits cleanly without writing anything, so step back until a frame exists."""
+    for back in (0,.1,.25,.5,1.,2.):
+        at=max(floor,t-back);dest.unlink(missing_ok=True)
+        run(['ffmpeg','-v','error','-ss',f'{at:.3f}','-i',str(video),'-frames:v','1','-threads','1','-y',str(dest)])
+        if dest.is_file() and dest.stat().st_size:return at
+        if at<=floor:break
+    return None
+
 def prepare_evidence(job):
     r=job['request'];assets=job['assets'];work=job_path(job['id']);cells=[]
     inp=INPUT/'henge'/job['id'];inp.mkdir(parents=True,exist_ok=True)
@@ -253,8 +263,10 @@ def prepare_evidence(job):
     count=min(12,max(1,math.ceil((end-start)*24)));last=max(start,end-min(.02,(end-start)/2));times=[]
     for i in range(count):
         t=start+(last-start)*i/max(1,count-1);times.append(t)
-        dest=work/f'evidence_{i}.jpg';run(['ffmpeg','-v','error','-ss',str(t),'-i',str(INPUT/assets['video']),'-frames:v','1','-threads','1','-y',str(dest)])
+        dest=work/f'evidence_{i}.jpg';t=grab_frame(INPUT/assets['video'],t,dest,start)
+        if t is None:continue
         cells.append((f'Video 1 frame {round((t-start)*24)} at {t:.3f}s',dest))
+    if not cells:raise ValueError('Could not read any frame from the selected video interval')
     canvas=Image.new('RGB',(4*320,math.ceil(len(cells)/4)*208),'#202020');draw=ImageDraw.Draw(canvas)
     for i,(label,path) in enumerate(cells):
         with Image.open(path) as image:
