@@ -10,7 +10,7 @@ import {jobStatusLabel,jobStageLabel} from '../lib/job-status';
 
 type Plan = {summary: string; prompt: string; source_kind: string; target_kind: string; use_fibo: boolean; representation: string; preparation_reason?: string; preparation_recommended?: boolean; warnings: string[]; picture_roles: {slot: number; role: string; description: string}[]};
 export type GenerationJob = {id: string; project: string; status: string; stage: string; message?: string; error?: string; progress: number; segment?: number; total_segments?: number; plan?: Plan; sampling_preview_url?: string; result_url?: string; comparison_url?: string; guide_preview_url?: string; fibo_preview_url?: string; created: number; step?: number; step_total?: number; eta_seconds?: number | null; seconds_per_step?: number | null};
-type Health = {comfy_url?: string; online: boolean; training_busy: boolean; tara_ready?: boolean; fibo_ready: boolean; models: Record<string, {label: string; task?: string; available?: boolean}>};
+type Health = {comfy_url?: string; online: boolean; training_busy: boolean; tara_ready?: boolean; fibo_ready: boolean; models: Record<string, {label: string; task?: string; available?: boolean}>; turbos?: Record<string, {label: string; steps: number; available: boolean}>};
 const finished = ['completed', 'failed', 'cancelled', 'awaiting_approval'];
 const formatEta = (seconds: number) => seconds >= 90 ? `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s` : `${Math.max(1, Math.round(seconds))}s`;
 export default function GenerationPanel({initialSettings = {}, onShareSettings, onImportSettings, mode, request, video, pictures, canSubmit, lang, onResult, requestedJobId}: {initialSettings?: Record<string, unknown>; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null}) {
@@ -38,6 +38,7 @@ export default function GenerationPanel({initialSettings = {}, onShareSettings, 
   const [detectCuts, setDetectCuts] = useState(initialSettings.detect_cuts !== false);
   const [enhancePrompt, setEnhancePrompt] = useState(initialSettings.enhance_prompt !== false);
   const [autoApprove, setAutoApprove] = useState(initialSettings.auto_approve === true);
+  const [turbo, setTurbo] = useState(typeof initialSettings.turbo === 'string' ? initialSettings.turbo : 'dmd8');
   const [attention, setAttention] = useState(initialSettings.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention');
   const fixedRecipe = isFixedRecipe(mode);
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
@@ -63,7 +64,7 @@ export default function GenerationPanel({initialSettings = {}, onShareSettings, 
     if (!request || !video || !canSubmit || submitting) return;
     setError(''); setSubmitting(true);
     try {
-      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention})); body.set('video', video);
+      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, ...(mode === 'motion' ? {} : {turbo})})); body.set('video', video);
       pictures.forEach(p => body.set(`picture_${p.slot}`, p.file));
       const response = await fetch('/api/backend/jobs', {method: 'POST', body}); const result = await readJson(response);
       if (!response.ok) throw Error(result.detail || result.error || 'Unable to create job');
@@ -112,12 +113,13 @@ export default function GenerationPanel({initialSettings = {}, onShareSettings, 
       <label>{tr('Prepare reference automatically', 'Preparar referência automaticamente', 'Preparar referencia automáticamente')}<input type="checkbox" checked={fibo === 'auto'} onChange={e => setFibo(e.target.checked ? 'auto' : 'off')}/><small>{tr('Suggest a compatible pose when the guide and reference have different anatomy.', 'Sugere uma pose compatível quando o guia e a referência têm anatomias diferentes.', 'Sugiere una pose compatible cuando la guía y la referencia tienen anatomías diferentes.')}</small></label>
       <label>Seed<input type="number" min="0" max="4294967295" value={seed} onChange={e => setSeed(Math.min(4294967295, Math.max(0, Math.round(Number(e.target.value) || 0))))}/></label>
       <label>Steps<input type="number" min="1" max="60" value={steps} onChange={e => setSteps(Math.min(60, Math.max(1, Math.round(Number(e.target.value) || 8))))}/></label>
+      {mode !== 'motion' && <label>Turbo LoRA<select value={turbo} onChange={e => {setTurbo(e.target.value); const recommended = health?.turbos?.[e.target.value]?.steps; if (recommended) setSteps(recommended);}}>{Object.entries(health?.turbos || {dmd8: {label: 'DMD 8-step (drbaph)', steps: 8, available: true}}).map(([id, item]) => <option key={id} value={id} disabled={!item.available}>{item.label}{item.available ? '' : tr(' · not installed', ' · não instalado', ' · no instalado')}</option>)}</select></label>}
       <label>{tr('Attention', 'Atenção', 'Atención')}<select value={attention} onChange={e => setAttention(e.target.value)}><option value="comfy kitchen attention">Comfy Kitchen (INT8)</option><option value="pytorch attention">PyTorch</option></select></label>
       <label>CLIP video FPS<select value={activeConditioning === 'tara' ? 2 : clipFps} disabled={activeConditioning === 'tara'} onChange={e => setClipFps(Number(e.target.value))}>{[1, 2, 4, 8].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
       <label>{tr('Detect camera cuts', 'Detectar cortes de câmera', 'Detectar cortes de cámara')}<input type="checkbox" checked={detectCuts} onChange={e => setDetectCuts(e.target.checked)}/></label>
     </div>{onImportSettings && <button className="quiet-button import-settings-button" onClick={onImportSettings}>{tr('Import settings', 'Importar configuração', 'Importar configuración')}</button>}</details>
   </div>;
-  const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention};
+  const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo};
   const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button><button className="primary" disabled={!health?.online || health?.models[profile]?.available === false || !canSubmit || submitting} onClick={submit}>{submitting ? tr('Sending…', 'Enviando…', 'Enviando…') : tr('Generate', 'Gerar', 'Generar')}</button></>;
   return <section className="generation-panel" aria-label={tr('Generation backend', 'Geração no backend', 'Generación en backend')}>
     {settingsTarget ? createPortal(settings, settingsTarget) : null}

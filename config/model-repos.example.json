@@ -64,6 +64,28 @@
       ]
     },
     {
+      "id": "turbo_dmad4",
+      "url": "https://huggingface.co/Kijai/MiniMax-H3-experimental/resolve/main/loras/minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
+      "destination": "loras/henge/turbo_dmad_4step.safetensors",
+      "profiles": [
+        "character",
+        "headswap",
+        "sharpness"
+      ],
+      "note": "Optional turbo LoRA (4 steps)."
+    },
+    {
+      "id": "turbo_taomate3",
+      "url": "https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_taomate_3step_lora_avg_rank_19_bf16.safetensors",
+      "destination": "loras/henge/turbo_taomate_3step.safetensors",
+      "profiles": [
+        "character",
+        "headswap",
+        "sharpness"
+      ],
+      "note": "Optional turbo LoRA (3 steps)."
+    },
+    {
       "id": "headswap",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_head_swap_v1.0_r32.safetensors",
       "destination": "loras/henge/head_swap_v1_0_r32.safetensors",

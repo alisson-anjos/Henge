@@ -6,12 +6,19 @@ from pathlib import Path
 MODELS={
  'motion':{'label':'Original · 10500','task':'motion','lora':'henge/motion_10500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
  'motion_tara4500':{'label':'TARA-trained · 4500','task':'motion','lora':'henge/motion_tara_4500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
- 'character':{'task':'swap','label':'Character Swap v1.1 · published','lora':'henge/character_v1_1.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','clip_context':False},
- 'mix50':{'label':'Character Swap v1.0 + v1.1 · 50/50 Dyn95','lora':'henge/character_mix50_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','clip_context':False},
+ 'character':{'task':'swap','label':'Character Swap v1.1 · published','lora':'henge/character_v1_1.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
+ 'mix50':{'label':'Character Swap v1.0 + v1.1 · 50/50 Dyn95','lora':'henge/character_mix50_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
- 'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/head_swap_v1_0_r32.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','clip_context':False,'scheduler':'beta'},
- 'sharpness':{'task':'sharpness','label':'LMS Sharpness v1 · fro dyn95','lora':'henge/lms_v1_fro_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','clip_context':False},
+ 'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/head_swap_v1_0_r32.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False,'scheduler':'beta'},
+ 'sharpness':{'task':'sharpness','label':'LMS Sharpness v1 · fro dyn95','lora':'henge/lms_v1_fro_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
+}
+# Swappable speed LoRAs for the modes whose adapter is a turbo LoRA (not Motion: its
+# training adapter V2 is what the motion LoRAs were trained on).
+TURBOS={
+ 'dmd8':{'label':'DMD 8-step (drbaph)','lora':'henge/dmd_ref2va_8step.safetensors','steps':8},
+ 'dmad4':{'label':'DMAD 4-step (Kijai)','lora':'henge/turbo_dmad_4step.safetensors','steps':4},
+ 'taomate3':{'label':'TaoMate 3-step (Kijai)','lora':'henge/turbo_taomate_3step.safetensors','steps':3},
 }
 def node(kind,**inputs):return {'class_type':kind,'inputs':inputs}
 def grid_frames(n):return max(5,math.ceil((n-5)/17)*17+5)
@@ -26,10 +33,10 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention"):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8"):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name='minimax_h3_ref2va_pruned_int8_convrot.safetensors',weight_dtype='default'),
-      '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=model['adapter'],strength_model=1.),
+      '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
       '3':node('LoraLoaderModelOnly',model=['2',0],lora_name=model['lora'],strength_model=1.),
       # Published H3 workflows run dense attention on Comfy Kitchen (INT8); TARA detects it.
       '22':node('ModelAttentionBackend',model=['3',0],attention=attention),

@@ -7,7 +7,7 @@ import requests
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse
 from PIL import Image,ImageDraw,ImageOps
-from workflows import MODELS,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import MODELS,TURBOS,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import MODES,FIXED_RECIPE,LMS_CAPTION,FACE_INSTRUCTION,head_swap_prompt,fixed_plan,head_reference
@@ -85,6 +85,7 @@ def validate_request(r,options,slots):
     if end<=start:raise ValueError('End must be after start')
     if not isinstance(options.get('enhance_prompt',True),bool):raise ValueError('Enhance prompt must be a boolean')
     if not isinstance(options.get('auto_approve',False),bool):raise ValueError('Auto-approve must be a boolean')
+    if options.get('turbo','dmd8') not in TURBOS:raise ValueError('Unknown turbo LoRA')
     if options.get('attention','comfy kitchen attention') not in ['comfy kitchen attention','pytorch attention']:raise ValueError('Unknown attention backend')
     if options.get('profile','motion') not in MODELS:raise ValueError('Unknown model profile')
     if r['mode'] not in FIXED_RECIPE and options.get('profile','motion') in ('headswap','sharpness'):raise ValueError('This model belongs to another mode')
@@ -335,7 +336,7 @@ def generate(job):
         if previous is not None:
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'))
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'))
         execute_graph(job,graph,f'h3_segment_{i:03d}')
         rendered=OUTPUT/relative.replace('.mp4','_result.mp4');guide=OUTPUT/relative.replace('.mp4','_guide.mp4')
         if not rendered.is_file():raise ValueError('ComfyUI finished without the expected video')
@@ -392,7 +393,8 @@ def health():
     requirements,mode_ready,setup=check_requirements(COMFY/'models',MODELS)
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
     models={key:{**value,'available':value['lora'] in installed and value['adapter'] in installed and mode_ready[key]} for key,value in MODELS.items()}
-    return {'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
+    turbos={key:{'label':value['label'],'steps':value['steps'],'available':value['lora'] in installed} for key,value in TURBOS.items()}
+    return {'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
