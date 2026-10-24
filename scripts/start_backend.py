@@ -12,7 +12,7 @@ PYTHON=os.environ.get('KAGEMANE_PYTHON','/data/comfyui/.venv/bin/python');COMFY=
 if not DEPS.exists():
  DEPS.mkdir(parents=True)
  subprocess.run(['uv','pip','install','--python',PYTHON,'--target',str(DEPS),'--no-deps','comfy-kitchen==0.2.39','comfy-aimdo==0.5.6','comfyui-frontend-package==1.57.1'],check=True)
-services=[('comfy','http://127.0.0.1:8189/system_stats',[PYTHON,'-u',COMFY+'/main.py','--listen','127.0.0.1','--port','8189','--disable-all-custom-nodes','--whitelist-custom-nodes','kagemane','--extra-model-paths-config',str(ROOT/'backend/extra_model_paths.yaml'),'--disable-api-nodes','--lowvram','--preview-method','none'],COMFY),('bridge','http://127.0.0.1:8766/health',[PYTHON,'-m','uvicorn','server:app','--host','127.0.0.1','--port','8766'],str(ROOT/'backend'))]
+services=[('comfy','http://127.0.0.1:8189/system_stats',[PYTHON,'-u',COMFY+'/main.py','--listen','127.0.0.1','--port','8189','--disable-all-custom-nodes','--whitelist-custom-nodes','kagemane','bfsnodes','--extra-model-paths-config',str(ROOT/'backend/extra_model_paths.yaml'),'--disable-api-nodes','--lowvram','--preview-method','none'],COMFY),('bridge','http://127.0.0.1:8766/health',[PYTHON,'-m','uvicorn','server:app','--host','127.0.0.1','--port','8766'],str(ROOT/'backend'))]
 state=ROOT/'backend/services.json';pids=json.loads(state.read_text()) if state.exists() else {}
 for name,url,args,cwd in services:
  try:urllib.request.urlopen(url,timeout=2);print(name,'already online');continue

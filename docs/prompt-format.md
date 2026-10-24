@@ -68,3 +68,25 @@ checkpoint (for example the user's `qwen3.5_9b_w4a8_gptq.safetensors`); the exis
 pipeline change alone does not prove equal outputs across different VLMs.
 Restart the backend and rebuild/restart the frontend after updating; running
 services do not hot-load these Python changes.
+
+## UI conditioning choice
+
+The generation panel now offers **Guide Latents** (unchanged default) and
+**TARA · experimental** when the connected ComfyUI registers the BFS TARA node.
+TARA routes native Video 1 conditioning and the patched MODEL to both guider and
+scheduler, with no Add Guide call. Native reference scale can be reduced
+independently of output resolution. Native Qwen video context uses its standard
+2fps; the Guide-only CLIP FPS control is disabled while TARA is selected.
+
+Guide continuity retains its existing overlap guide. TARA continuity appends the
+previous generated last frame as a native image, never as a latent head guide.
+Its shot-level prompt annotation is included only with enhancement enabled;
+raw prompt text remains unchanged. Native audio conditioning uses the guide
+video's native audio-reference channel; output soundtrack reuse remains separate.
+These branches are CPU-contract tested; real UI/GPU evidence is collected in the
+integration test report rather than assumed from static tests.
+
+ComfyUI must load BFSNodes alongside the Kagemage custom nodes for TARA. The
+launcher whitelist now includes `bfsnodes`; install/symlink that plugin under the
+same name or adapt the whitelist to your real folder name. Do not keep duplicate
+BFS copies. Existing LoRA profile paths/defaults were not changed by this option.

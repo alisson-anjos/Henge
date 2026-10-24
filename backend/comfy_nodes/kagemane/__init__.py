@@ -44,7 +44,8 @@ class KagemaneGuide:
         if representation=='3d' and source_kind!='human':raise ValueError('SAM 3D Body supports human sources. Use a 2D color guide for animals.')
         from comfy_extras.nodes_sam3 import SAM3_VideoTrack
         from comfy.ldm.sam3.tracker import unpack_masks
-        sam,clip,_=comfy.sd.load_checkpoint_guess_config(folder_paths.get_full_path_or_raise('checkpoints',sam_checkpoint),output_vae=False)
+        loaded=comfy.sd.load_checkpoint_guess_config(folder_paths.get_full_path_or_raise('checkpoints',sam_checkpoint),output_vae=False)
+        sam,clip=loaded[:2]
         cond=clip.encode_from_tokens_scheduled(clip.tokenize('person' if source_kind=='human' else 'animal'))
         # Track identity before choosing colors; coordinates are normalized source-image coordinates.
         tracks=SAM3_VideoTrack.execute(images=images,model=sam,conditioning=cond,detection_threshold=.4,max_objects=8,detect_interval=1)[0]
@@ -119,18 +120,32 @@ class KagemaneGuide:
 
 class KagemaneH3Conditioning:
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'clip':('CLIP',),'vae':('VAE',),'guide':('IMAGE',),'references':('KAGEMANE_REFS',),'prompt':('STRING',{'multiline':True}),'width':('INT',{'default':512}),'height':('INT',{'default':288}),'length':('INT',{'default':107}),'clip_video_fps':('FLOAT',{'default':2,'min':.5,'max':24}),'reference_size':(['match','max'],),'guide_context':('BOOLEAN',{'default':True}),'audio_conditioning':('BOOLEAN',{'default':False}),'audio_video':('STRING',{'default':''})},'optional':{'audio_vae':('VAE',),'context_images':('IMAGE',),'context_count':('INT',{'default':0})}}
+    def INPUT_TYPES(cls):return {'required':{'clip':('CLIP',),'vae':('VAE',),'guide':('IMAGE',),'references':('KAGEMANE_REFS',),'prompt':('STRING',{'multiline':True}),'width':('INT',{'default':512}),'height':('INT',{'default':288}),'length':('INT',{'default':107}),'clip_video_fps':('FLOAT',{'default':2,'min':.5,'max':24}),'reference_size':(['match','max'],),'guide_context':('BOOLEAN',{'default':True}),'audio_conditioning':('BOOLEAN',{'default':False}),'audio_video':('STRING',{'default':''})},'optional':{'audio_vae':('VAE',),'context_images':('IMAGE',),'context_count':('INT',{'default':0}),'conditioning_mode':(['guide','tara'],{'default':'guide'}),'reference_scale':('FLOAT',{'default':1.,'min':.25,'max':1.})}}
     RETURN_TYPES=('CONDITIONING','LATENT');FUNCTION='encode';CATEGORY='Kagemage'
-    def encode(self,clip,vae,guide,references,prompt,width,height,length,clip_video_fps,reference_size,guide_context,audio_conditioning,audio_video,audio_vae=None,context_images=None,context_count=0):
+    def encode(self,clip,vae,guide,references,prompt,width,height,length,clip_video_fps,reference_size,guide_context,audio_conditioning,audio_video,audio_vae=None,context_images=None,context_count=0,conditioning_mode="guide",reference_scale=1.):
         from comfy_extras.nodes_minimax_h3 import MiniMaxH3ReferenceToVideo,MiniMaxH3AddGuide
-        if guide_context:clip=clip_with_video_context(clip,{'guide':guide},length,context_fps=clip_video_fps)
-        cond,latent=MiniMaxH3ReferenceToVideo.execute(clip=clip,vae=vae,prompt=prompt,width=width,height=height,length=length,ref_image_size=reference_size,ref_images={f'ref_image_{i+1}':r for i,r in enumerate(references)})
         audio=None
         if audio_conditioning:
             if audio_vae is None:raise ValueError('Audio conditioning needs the H3 audio VAE')
             import comfy.audio
             waveform,sample_rate=comfy.audio.load(str(input_path(audio_video)))
             audio={'waveform':waveform.unsqueeze(0),'sample_rate':sample_rate}
+        pictures={f'ref_image_{i+1}':r for i,r in enumerate(references)}
+        if conditioning_mode=='tara':
+            if context_images is not None and context_count>=5:
+                pictures[f'ref_image_{len(pictures)+1}']=context_images[-1:]
+            video=guide
+            if reference_scale!=1.:
+                h,w=guide.shape[1:3];size=(max(32,int(h*reference_scale)//32*32),max(32,int(w*reference_scale)//32*32))
+                video=torch.nn.functional.interpolate(guide.movedim(-1,1),size=size,mode='bilinear',align_corners=False).movedim(1,-1)
+            print(f'[Kagemage H3] TARA native Video 1; reference scale {reference_scale:g}; Add Guide OFF',flush=True)
+            cond,latent=MiniMaxH3ReferenceToVideo.execute(clip=clip,vae=vae,prompt=prompt,width=width,height=height,length=length,
+                ref_image_size=reference_size,ref_images=pictures,ref_videos={'ref_video_1':video},
+                audio_vae=audio_vae,ref_video_audios={'ref_video_audio_1':audio} if audio is not None else None)
+            return cond,latent
+        if conditioning_mode!='guide':raise ValueError('Unknown H3 conditioning mode')
+        if guide_context:clip=clip_with_video_context(clip,{'guide':guide},length,context_fps=clip_video_fps)
+        cond,latent=MiniMaxH3ReferenceToVideo.execute(clip=clip,vae=vae,prompt=prompt,width=width,height=height,length=length,ref_image_size=reference_size,ref_images=pictures)
         cond=MiniMaxH3AddGuide.execute(positive=cond,latent=latent,frame_idx=0,vae=vae,image=guide,audio_vae=audio_vae,audio=audio)[0]
         # Previous generated frames anchor the next segment on the same timeline, not a new reference identity.
         if context_images is not None and context_count>=5:

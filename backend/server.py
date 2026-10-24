@@ -65,6 +65,8 @@ def validate_request(r,options,slots):
     if end<=start:raise ValueError('End must be after start')
     if not isinstance(options.get('enhance_prompt',True),bool):raise ValueError('Enhance prompt must be a boolean')
     if options.get('profile','motion') not in MODELS:raise ValueError('Unknown model profile')
+    if options.get('conditioning_mode','guide') not in ['guide','tara']:raise ValueError('Unknown conditioning mode')
+    clamp_float(options.get('reference_scale',1.),.25,1.,'native reference scale')
     clamp_float(options.get('seed',42),0,2**32-1,'seed');clamp_float(options.get('steps',8),1,60,'steps');clamp_float(options.get('clip_fps',2),.5,24,'CLIP video fps')
     p=r.get('processing',{});clamp_float(p.get('requested_seconds_per_shot',4.5),1,15,'segment length')
     if p.get('context_frames',22) not in [5,22,39]:raise ValueError('Unsupported context length')
@@ -268,7 +270,7 @@ def generate(job):
         if previous is not None:
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]))
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True))
         execute_graph(job,graph,f'h3_segment_{i:03d}')
         rendered=OUTPUT/relative.replace('.mp4','_result.mp4');guide=OUTPUT/relative.replace('.mp4','_guide.mp4')
         if not rendered.is_file():raise ValueError('ComfyUI finished without the expected video')
@@ -317,7 +319,7 @@ app=FastAPI(lifespan=lifespan)
 def health():
     try:info=api('GET','/object_info',timeout=10);online=True
     except Exception:info={};online=False
-    return {'online':online,'training_busy':training_busy(),'models':MODELS,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'online':online,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':MODELS,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/jobs')
 def list_jobs():return [public(json.loads(p.read_text())) for p in sorted(JOBS.glob('*/job.json'),key=lambda p:p.stat().st_mtime,reverse=True)][:50]

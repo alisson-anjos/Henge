@@ -6,7 +6,7 @@ import type {Language} from '../lib/design-copy';
 
 type Plan = {summary: string; prompt: string; source_kind: string; target_kind: string; use_fibo: boolean; representation: string; warnings: string[]; picture_roles: {slot: number; role: string; description: string}[]};
 export type GenerationJob = {id: string; project: string; status: string; stage: string; message?: string; error?: string; progress: number; segment?: number; total_segments?: number; plan?: Plan; result_url?: string; comparison_url?: string; guide_preview_url?: string; fibo_preview_url?: string; created: number; step?: number; step_total?: number};
-type Health = {online: boolean; training_busy: boolean; fibo_ready: boolean; models: Record<string, {label: string}>};
+type Health = {online: boolean; training_busy: boolean; tara_ready?: boolean; fibo_ready: boolean; models: Record<string, {label: string}>};
 const finished = ['completed', 'failed', 'cancelled', 'awaiting_approval'];
 export default function GenerationPanel({request, video, pictures, canSubmit, lang, onResult, requestedJobId}: {request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null}) {
   const [health, setHealth] = useState<Health | null>(null);
@@ -16,6 +16,8 @@ export default function GenerationPanel({request, video, pictures, canSubmit, la
   const [error, setError] = useState('');
   const [profile, setProfile] = useState('motion');
   const [fibo, setFibo] = useState('auto');
+  const [conditioningMode, setConditioningMode] = useState('guide');
+  const [referenceScale, setReferenceScale] = useState(1);
   const [seed, setSeed] = useState(42);
   const [steps, setSteps] = useState(8);
   const [clipFps, setClipFps] = useState(2);
@@ -43,7 +45,7 @@ export default function GenerationPanel({request, video, pictures, canSubmit, la
     if (!request || !video || !canSubmit || submitting) return;
     setError(''); setSubmitting(true);
     try {
-      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: clipFps, detect_cuts: detectCuts, enhance_prompt: enhancePrompt})); body.set('video', video);
+      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: conditioningMode === 'tara' ? 2 : clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt})); body.set('video', video);
       pictures.forEach(p => body.set(`picture_${p.slot}`, p.file));
       const response = await fetch('/api/backend/jobs', {method: 'POST', body}); const result = await response.json();
       if (!response.ok) throw Error(result.detail || result.error || 'Unable to create job');
@@ -63,11 +65,13 @@ export default function GenerationPanel({request, video, pictures, canSubmit, la
     <div className="label-row"><h2>{tr('Generate with Kagemage', 'Gerar com Kagemage', 'Generar con Kagemage')}</h2><span className="mono muted">{health?.online ? health.training_busy ? tr('Waiting for training', 'GPU reservada ao treino', 'GPU reservada al entrenamiento') : 'ComfyUI online' : 'Backend offline'}</span></div>
     <div className="generation-options">
       <label>{tr('Video model', 'Modelo de vídeo', 'Modelo de vídeo')}<select value={profile} onChange={e => setProfile(e.target.value)}>{Object.entries(health?.models || {motion: {label: 'Motion transfer · checkpoint 8000'}, character: {label: 'Character Swap v1.1'}, mix50: {label: 'Character Swap 50/50 Dyn95'}}).map(([id, m]) => <option key={id} value={id}>{m.label}</option>)}</select></label>
+      <label>{tr('Motion conditioning', 'Condicionamento de movimento', 'Condicionamiento de movimiento')}<select value={conditioningMode} onChange={e => setConditioningMode(e.target.value)}><option value="guide">Guide Latents</option><option value="tara" disabled={!health?.tara_ready}>TARA · experimental{!health?.tara_ready ? ' · BFSNodes required' : ''}</option></select></label>
+      {conditioningMode === 'tara' && <label>{tr('Native reference scale', 'Escala da referência nativa', 'Escala de referencia nativa')}<select value={referenceScale} onChange={e => setReferenceScale(Number(e.target.value))}>{[1, .75, .5].map(n => <option key={n} value={n}>{n}</option>)}</select></label>}
       <label>FIBO 2.0 Edit<select value={fibo} onChange={e => setFibo(e.target.value)}><option value="auto">{tr('Automatic · VLM decision', 'Automático · decisão do VLM', 'Automático · decisión del VLM')}</option><option value="on">{tr('Prepare image', 'Preparar imagem', 'Preparar imagen')}</option><option value="off">{tr('Off', 'Desativado', 'Desactivado')}</option></select></label>
       <label>Enhance prompt<input type="checkbox" checked={enhancePrompt} onChange={e => setEnhancePrompt(e.target.checked)}/><small>{tr('On: adapt to H3. Off: send your exact text.', 'Ligado: adaptar ao H3. Desligado: enviar seu texto exato.', 'Activado: adaptar a H3. Desactivado: enviar tu texto exacto.')}</small></label>
       <label>Seed<input type="number" min="0" max="4294967295" value={seed} onChange={e => setSeed(Math.min(4294967295, Math.max(0, Math.round(Number(e.target.value) || 0))))}/></label>
       <label>Steps<input type="number" min="1" max="60" value={steps} onChange={e => setSteps(Math.min(60, Math.max(1, Math.round(Number(e.target.value) || 8))))}/></label>
-      <label>CLIP video FPS<select value={clipFps} onChange={e => setClipFps(Number(e.target.value))}>{[1, 2, 4, 8].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
+      <label>CLIP video FPS<select value={conditioningMode === 'tara' ? 2 : clipFps} disabled={conditioningMode === 'tara'} onChange={e => setClipFps(Number(e.target.value))}>{[1, 2, 4, 8].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
       <label>{tr('Detect camera cuts', 'Detectar cortes de câmera', 'Detectar cortes de cámara')}<input type="checkbox" checked={detectCuts} onChange={e => setDetectCuts(e.target.checked)}/></label>
     </div>
     <p className="micro-copy">{tr('The VLM reads your guide, references and direction. Review its plan, then generate. Species changes can add a FIBO appearance/pose image; this is not full skeletal retargeting.', 'O VLM lê guia, referências e intenção. Revise o plano e gere. Mudanças de espécie podem incluir uma imagem de aparência/pose com FIBO; isso não é retargeting completo do esqueleto.', 'El VLM analiza guía, referencias e intención. Revisa el plan y genera. Cambios de especie pueden añadir una imagen de apariencia/pose con FIBO; no es retargeting completo del esqueleto.')}</p>

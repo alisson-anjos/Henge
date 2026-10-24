@@ -21,7 +21,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name='minimax_h3_ref2va_pruned_int8_convrot.safetensors',weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=model['adapter'],strength_model=1.),
@@ -42,10 +42,17 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
       '17':node('KagemaneSaveVideo',images=['16',0],filename=video.replace('.mp4','_result.mp4'),trim_frames=trim_frames,fps=24.),
       '18':node('KagemaneSaveVideo',images=['8',0],filename=video.replace('.mp4','_guide.mp4'),trim_frames=trim_frames,fps=24.),
     }
+    g['9']['inputs'].update(conditioning_mode=conditioning_mode,reference_scale=reference_scale)
+    if conditioning_mode=='tara':
+        g['21']=node('BFSMiniMaxH3NativeTemporal',model=['4',0],motion_video_index=1,strength=2.,window_seconds=.2,falloff_seconds=.25,max_penalty=6.,attention_backend='flash partitions (no compile)')
+        g['10']['inputs']['model']=['21',0];g['13']['inputs']['model']=['21',0]
+    elif conditioning_mode!='guide':raise ValueError('Unknown conditioning mode')
     if audio:g['19']=node('VAELoader',vae_name='minimax_h3_audio_vae_fp32.safetensors');g['9']['inputs']['audio_vae']=['19',0]
     if context_video:
         g['20']=node('KagemaneLoadShot',video=context_video,pictures='[]',width=width,height=height,length=context_count)
         g['9']['inputs'].update(context_images=['20',0],context_count=context_count)
+        if conditioning_mode=='tara' and context_prompt:
+            g['9']['inputs']['prompt']+=f' <Picture {len(refs)+1}> is the preceding generated final frame, used only for scene/identity continuity. Follow the current Video 1 performance and timing; do not freeze its pose or override the assigned reference identities.'
     return g
 
 def fibo_graph(image,refs,instruction,seed):
