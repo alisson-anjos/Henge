@@ -17,3 +17,7 @@ scripts/__pycache__/
 
 __pycache__/
 *.py[cod]
+
+config/model-repos.json
+config/*.local.json
+secrets/

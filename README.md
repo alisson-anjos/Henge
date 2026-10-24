@@ -8,6 +8,12 @@ Kagemage connects its studio UI to a local FastAPI bridge and an isolated ComfyU
 
 The integration has passed TypeScript, production-build and CPU contract checks. End-to-end GPU generation and the quality of 2D/3D tracking still require validation. FIBO prepares a pose/appearance image; it does not perform full temporal skeleton retargeting. SAM 3D Body requires a human source.
 
+## Setup guides
+
+- [Run locally: UI, bridge, ComfyUI and connection settings](docs/RUN_LOCAL.md)
+- [Build/run with Docker and configure automatic downloads](docker/README.md)
+- [Models and download links](docs/models-and-downloads.md)
+
 ## Run locally
 
 Node.js 22.6 or newer:

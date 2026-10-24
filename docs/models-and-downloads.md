@@ -121,3 +121,14 @@ This is an approximate **frame** that updates across sampling steps, not a
 playback of every generated video frame. The final video still uses the full
 video VAE. Previews are tied to their job, and malformed or foreign-job metadata
 is discarded. CPU protocol checks are separate from real GPU preview validation.
+
+## Finished preview and downloads
+
+Once a job finishes, the result player offers **Result** and **Guide + result +
+references**. The second view is one synchronized MP4 containing the original
+guide, generated result and labelled original Picture thumbnails. It can also
+be downloaded with **Download comparison + references**. The first request
+creates and caches that comparison on CPU; existing completed jobs with their
+uploaded references can use it too. Audio follows the finished result. Preview
+width is capped at 1600 pixels to keep the comparison manageable; the separate
+result download retains its original resolution.

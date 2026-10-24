@@ -1,0 +1,29 @@
+services:
+  kagemane:
+    image: kagemane:local
+    build:
+      context: .
+      args:
+        PYTORCH_IMAGE: ${PYTORCH_IMAGE:-pytorch/pytorch:2.12.0-cuda13.0-cudnn9-runtime}
+    gpus: all
+    ports:
+      - "8188:8188"
+    environment:
+      KAGEMANE_MODEL_PROFILES: ${KAGEMANE_MODEL_PROFILES:-character}
+      KAGEMANE_MODEL_MANIFEST: /app/config/model-repos.json
+      HF_TOKEN: ${HF_TOKEN:-}
+      KAGEMANE_VLM_CLIP: ${KAGEMANE_VLM_CLIP:-qwen3-vl-4b-heretic_int8_dynamic_convrot.safetensors}
+    volumes:
+      - models:/opt/ComfyUI/models
+      - state:/state
+      - inputs:/opt/ComfyUI/input
+      - outputs:/opt/ComfyUI/output
+      - ./config/model-repos.json:/app/config/model-repos.json:ro
+    shm_size: "8gb"
+    init: true
+    restart: unless-stopped
+volumes:
+  models:
+  state:
+  inputs:
+  outputs:
