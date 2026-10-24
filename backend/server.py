@@ -381,7 +381,8 @@ def generate(job):
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
     if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
     context=min(r['processing'].get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17));shots=split_frames(total,per,context)
-    if options.get('detect_cuts',True):
+    # Cut detection only shapes the shot split; a single render follows the guide straight through its cuts.
+    if options.get('detect_cuts',True) and r['processing'].get('mode')!='single':
         cut_run=subprocess.run(['ffmpeg','-v','info','-ss',str(start),'-i',str(INPUT/assets['video']),'-t',str(end-start),'-vf',"select='gt(scene,0.35)',showinfo",'-an','-f','null','-'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=300)
         if cut_run.returncode:raise ValueError('Camera-cut analysis failed')
         cuts=[round(float(t)*24) for t in re.findall(r'pts_time:([0-9.]+)',cut_run.stderr.decode(errors='replace'))]
