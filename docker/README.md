@@ -40,9 +40,12 @@ prompt-writer and preview models. Motion LoRAs are not publicly supplied here.
 
 ## Configure model repositories
 
-Edit `config/model-repos.json` before starting. Each entry has `repo_id`,
-`repo_type`, `filename`, `revision`, `destination` and `profiles`. Destinations are
-relative to ComfyUI's models directory. Use pinned commit revisions if you want
+Edit `config/model-repos.json` before starting. Each entry has `id`, `url`,
+`destination` and `profiles`. `url` is any direct HTTP(S) download link;
+Hugging Face links (`/resolve/` or `/blob/`) use the faster Hub/Xet downloader
+and `HF_TOKEN` for private repos. `repo_id`/`filename`/`repo_type`/`revision`
+are still accepted instead of `url`. Destinations are relative to ComfyUI's
+models directory. Put a commit hash in place of `main` in the URL for
 reproducible downloads. Existing files are reused; changing the manifest does
 not silently replace installed weights. Remove/move the specific installed file
 or use a new destination when deliberately changing versions.

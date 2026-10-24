@@ -5,6 +5,14 @@ Models download on the first boot into the pod's volume at `/workspace`, so the
 next boots (or a new pod with a different GPU on the same network volume) start
 without downloading again.
 
+## Models
+
+On every boot the container reads the bundled manifest
+`config/model-repos.example.json` and downloads, by `url`, every entry whose
+profile is `common` or listed in `KAWARIMI_MODEL_PROFILES`. Files already on the
+volume are skipped, so only the first boot downloads. To change a link, edit
+that file (and rebuild) or override it at runtime (see below).
+
 ## 1. Image
 
 The GitHub Actions workflow `.github/workflows/docker.yml` builds and pushes:
@@ -48,8 +56,8 @@ Environment variables (all optional):
 Private motion LoRAs, until they are published:
 
 ```json
-{"motion10500":{"repo_id":"Alissonerdx/REPO","filename":"motion_10500.safetensors"},
- "motion4500":{"repo_id":"Alissonerdx/REPO","filename":"motion_tara_4500.safetensors"}}
+{"motion10500":{"url":"https://huggingface.co/Alissonerdx/REPO/resolve/main/motion_10500.safetensors"},
+ "motion4500":{"url":"https://huggingface.co/Alissonerdx/REPO/resolve/main/motion_tara_4500.safetensors"}}
 ```
 
 Put that JSON in `KAWARIMI_MODEL_OVERRIDES`, add `motion10500,motion4500` to

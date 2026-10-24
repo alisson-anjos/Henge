@@ -3,10 +3,7 @@
   "models": [
     {
       "id": "h3",
-      "repo_id": "Comfy-Org/MiniMax-H3",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
       "destination": "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
       "profiles": [
         "common"
@@ -14,10 +11,7 @@
     },
     {
       "id": "h3_text",
-      "repo_id": "Comfy-Org/MiniMax-H3",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
       "destination": "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
       "profiles": [
         "common"
@@ -25,10 +19,7 @@
     },
     {
       "id": "h3_vae",
-      "repo_id": "Comfy-Org/MiniMax-H3",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "vae/minimax_h3_video_vae_fp16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors",
       "destination": "vae/minimax_h3_video_vae_fp16.safetensors",
       "profiles": [
         "common"
@@ -36,10 +27,7 @@
     },
     {
       "id": "planner",
-      "repo_id": "Comfy-Org/MOSS-Image",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
       "destination": "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors",
       "profiles": [
         "common"
@@ -47,10 +35,7 @@
     },
     {
       "id": "preview",
-      "repo_id": "t8star/Taeh3-Comfy",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "models/vae_approx/taeh3.safetensors",
+      "url": "https://huggingface.co/t8star/Taeh3-Comfy/resolve/main/models/vae_approx/taeh3.safetensors",
       "destination": "vae_approx/taeh3.safetensors",
       "profiles": [
         "common"
@@ -58,10 +43,7 @@
     },
     {
       "id": "character",
-      "repo_id": "Alissonerdx/Minimax-H3-ComfyUI",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors",
       "destination": "loras/kawarimi/character_v1_1.safetensors",
       "profiles": [
         "character"
@@ -69,10 +51,7 @@
     },
     {
       "id": "character_adapter",
-      "repo_id": "drbaph/MiniMax-H3-Turbo-Lora-ComfyUI",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
+      "url": "https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
       "destination": "loras/kawarimi/dmd_ref2va_8step.safetensors",
       "profiles": [
         "character"
@@ -80,10 +59,7 @@
     },
     {
       "id": "motion_adapter",
-      "repo_id": "ostris/minimax_h3_training_adapter",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "minimax_h3_ref2va_training_adapter_v2.safetensors",
+      "url": "https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors",
       "destination": "loras/kawarimi/training_adapter_v2.safetensors",
       "profiles": [
         "motion10500",
@@ -92,10 +68,7 @@
     },
     {
       "id": "motion10500",
-      "repo_id": null,
-      "repo_type": "model",
-      "revision": "main",
-      "filename": null,
+      "url": null,
       "destination": "loras/kawarimi/motion_10500.safetensors",
       "profiles": [
         "motion10500"
@@ -103,10 +76,7 @@
     },
     {
       "id": "motion4500",
-      "repo_id": null,
-      "repo_type": "model",
-      "revision": "main",
-      "filename": null,
+      "url": null,
       "destination": "loras/kawarimi/motion_tara_4500.safetensors",
       "profiles": [
         "motion4500"
@@ -114,10 +84,7 @@
     },
     {
       "id": "fibo_diffusion_models",
-      "repo_id": "Comfy-Org/Fibo-2.0",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors",
       "destination": "diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors",
       "profiles": [
         "fibo"
@@ -125,10 +92,7 @@
     },
     {
       "id": "fibo_text_encoders",
-      "repo_id": "Comfy-Org/Fibo-2.0",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "text_encoders/qwen3vl_4b_int8_convrot.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/text_encoders/qwen3vl_4b_int8_convrot.safetensors",
       "destination": "text_encoders/qwen3vl_4b_int8_convrot.safetensors",
       "profiles": [
         "fibo"
@@ -136,10 +100,7 @@
     },
     {
       "id": "fibo_vae",
-      "repo_id": "Comfy-Org/Fibo-2.0",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "vae/flux2-vae.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/vae/flux2-vae.safetensors",
       "destination": "vae/flux2-vae.safetensors",
       "profiles": [
         "fibo"
@@ -147,10 +108,7 @@
     },
     {
       "id": "sam31",
-      "repo_id": "Comfy-Org/SAM3.1",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "checkpoints/sam3.1_multiplex_fp16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/SAM3.1/resolve/main/checkpoints/sam3.1_multiplex_fp16.safetensors",
       "destination": "checkpoints/sam3.1_multiplex_fp16.safetensors",
       "profiles": [
         "sam2d",
@@ -159,10 +117,7 @@
     },
     {
       "id": "sam3d",
-      "repo_id": "Comfy-Org/sam-3d-body",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "detection/sam_3d_body_dinov3_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/sam-3d-body/resolve/main/detection/sam_3d_body_dinov3_bf16.safetensors",
       "destination": "detection/sam_3d_body_dinov3_bf16.safetensors",
       "profiles": [
         "sam3d"
@@ -170,10 +125,7 @@
     },
     {
       "id": "moge",
-      "repo_id": null,
-      "repo_type": "model",
-      "revision": "main",
-      "filename": null,
+      "url": null,
       "destination": "geometry_estimation/moge_2_vitl_normal_fp16.safetensors",
       "profiles": [
         "sam3d"
@@ -181,10 +133,7 @@
     },
     {
       "id": "audio",
-      "repo_id": "Comfy-Org/MiniMax-H3",
-      "repo_type": "model",
-      "revision": "main",
-      "filename": "vae/minimax_h3_audio_vae_fp32.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors",
       "destination": "vae/minimax_h3_audio_vae_fp32.safetensors",
       "profiles": [
         "audio"
