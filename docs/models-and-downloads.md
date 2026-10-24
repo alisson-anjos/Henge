@@ -106,3 +106,18 @@ adapt them for your local environment. It is not a one-click Windows installer.
 Model registration and CPU graph checks do not prove every optional GPU branch
 works on every machine. Review actual results, especially multi-character
 bindings, anatomical changes, cuts and 3D guidance. Check each model's own license.
+
+## Live sampling preview
+
+The launcher enables ComfyUI's `--preview-method taesd`. For H3, install a
+ComfyUI-compatible `taeh3.safetensors` in `models/vae_approx/` (the shared model
+paths now include `vae_approx`). If the decoder is missing, ComfyUI may fall back
+to a simpler latent-to-RGB preview; it must not be described as a verified TAEH3
+preview in that configuration.
+
+During video sampling the bridge receives ComfyUI's per-client binary image
+previews and the studio displays them beside the guide and under progress.
+This is an approximate **frame** that updates across sampling steps, not a
+playback of every generated video frame. The final video still uses the full
+video VAE. Previews are tied to their job, and malformed or foreign-job metadata
+is discarded. CPU protocol checks are separate from real GPU preview validation.

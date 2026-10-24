@@ -9,6 +9,7 @@ from PIL import Image,ImageDraw,ImageOps
 from workflows import MODELS,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from vlm_pipeline import prompt_pipeline
+from sampling_preview import preview_jpeg
 
 ROOT=Path(os.environ.get('KAGEMANE_DATA_DIR','/data/kagemane-data'));JOBS=ROOT/'jobs';JOBS.mkdir(parents=True,exist_ok=True)
 COMFY=Path(os.environ.get('COMFY_ROOT','/data/kagemane-comfy-backend'));INPUT=COMFY/'input';OUTPUT=COMFY/'output';INPUT.mkdir(exist_ok=True)
@@ -154,6 +155,12 @@ def execute_graph(job,graph,stage):
                                         maximum=max(1,int(data.get('max',1)));value=int(data.get('value',0));patch={'step':value,'step_total':maximum}
                                         if stage.startswith('h3_segment_'):patch['progress']=(job.get('segment',1)-1+min(1,value/maximum))/max(1,job.get('total_segments',1))
                                         save(job,**patch)
+                            elif message.type==aiohttp.WSMsgType.BINARY and stage.startswith('h3_segment_'):
+                                image=preview_jpeg(message.data,pid)
+                                if image:
+                                    tmp=folder/'sampling_preview.tmp';tmp.write_bytes(image);tmp.replace(folder/'sampling_preview.jpg')
+                                    version=time.time_ns()
+                                    save(job,sampling_preview_url=f"/api/backend/jobs/{job['id']}/files/sampling_preview.jpg?v={version}",sampling_preview_updated=version)
                             elif message.type in [aiohttp.WSMsgType.CLOSED,aiohttp.WSMsgType.ERROR]:raise RuntimeError('ComfyUI progress connection closed')
                         except asyncio.TimeoutError:pass
                         if time.monotonic()-last_poll>=2:
@@ -398,10 +405,10 @@ def cancel(jid:str):
 
 @app.get('/jobs/{jid}/files/{name}')
 def file(jid:str,name:str):
-    if name not in ['result.mp4','comparison.mp4','guide_preview.mp4','fibo_preview.png']:raise HTTPException(404,'Unknown output')
+    if name not in ['result.mp4','comparison.mp4','guide_preview.mp4','fibo_preview.png','sampling_preview.jpg']:raise HTTPException(404,'Unknown output')
     load(jid);p=job_path(jid)/name
     if not p.is_file():raise HTTPException(404,'Output not yet available')
-    return FileResponse(p,filename=name,media_type='image/png' if p.suffix=='.png' else 'video/mp4')
+    return FileResponse(p,filename=name,media_type='image/jpeg' if p.suffix=='.jpg' else 'image/png' if p.suffix=='.png' else 'video/mp4')
 
 @app.get('/jobs/{jid}/workflow')
 def workflow(jid:str):

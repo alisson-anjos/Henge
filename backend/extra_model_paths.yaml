@@ -4,6 +4,7 @@ shared:
   diffusion_models: diffusion_models
   text_encoders: text_encoders
   vae: vae
+  vae_approx: vae_approx
   loras: loras
   detection: detection
   geometry_estimation: geometry_estimation
