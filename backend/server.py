@@ -138,7 +138,7 @@ def execute_graph(job,graph,stage):
                     if res.status!=200:raise ValueError(str(reply)[:1800])
                 pid=reply['prompt_id']
                 try:
-                    save(job,prompt_id=pid,stage=stage,status='running')
+                    save(job,prompt_id=pid,stage=stage,status='running',step=None,step_total=None)
                     started=time.monotonic();last_poll=0
                     while time.monotonic()-started<12*3600:
                         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
@@ -149,7 +149,7 @@ def execute_graph(job,graph,stage):
                                 if data.get('prompt_id',pid)==pid:
                                     if event.get('type')=='executing' and str(data.get('node')) in graph:
                                         label=labels.get(graph[str(data['node'])]['class_type'])
-                                        if label:save(job,message=label)
+                                        if label:save(job,message=label,step=None,step_total=None)
                                     elif event.get('type')=='progress':
                                         maximum=max(1,int(data.get('max',1)));value=int(data.get('value',0));patch={'step':value,'step_total':maximum}
                                         if stage.startswith('h3_segment_'):patch['progress']=(job.get('segment',1)-1+min(1,value/maximum))/max(1,job.get('total_segments',1))
@@ -239,7 +239,7 @@ def planning(job):
     raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw.strip());plan=json.loads(raw)
     plan['prompt']=evidence['prompt']
     plan=validate_plan(plan,slots,job['options'],r)
-    save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.')
+    save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.',step=None,step_total=None)
 
 def generate(job):
     r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'kagemane'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
