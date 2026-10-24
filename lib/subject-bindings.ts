@@ -4,7 +4,7 @@ export const SUBJECT_COLORS = [
   {name: 'magenta', hex: '#CD37B4'}, {name: 'cyan', hex: '#1EC8CD'},
   {name: 'orange', hex: '#F08223'}, {name: 'purple', hex: '#874BD2'},
 ] as const;
-export type GuideRepresentation = 'original' | '2d' | '3d';
+export type GuideRepresentation = 'original' | '2d' | '3d' | 'mask';
 export type SubjectAnchor = {x: number; y: number; time_seconds: number; frame_width: number; frame_height: number};
 export type SubjectBinding = {id: string; label: string; color: string; picture_slots: number[]; anchors: SubjectAnchor[]};
 
@@ -25,7 +25,7 @@ export function readSubjectBindings(value: unknown): SubjectBinding[] {
 }
 
 export function bindingPrompt(subjects: SubjectBinding[], representation: GuideRepresentation): string {
-  if (representation === 'original') return subjects.map((s, i) => `<Subject ${i + 1}> uses the identity and appearance from ${s.picture_slots.map(n => `@Picture${n}`).join(', ')} and follows its selected performer in @Video1. Keep this assignment through position changes, occlusion and cuts.`).join(' ');
+  if (representation === 'original' || representation === 'mask') return subjects.map((s, i) => `<Subject ${i + 1}> uses the identity and appearance from ${s.picture_slots.map(n => `@Picture${n}`).join(', ')} and follows its selected performer in @Video1. Keep this assignment through position changes, occlusion and cuts.`).join(' ');
   return subjects.map((s, i) => `<Subject ${i + 1}> uses the identity and appearance from ${s.picture_slots.map(n => `@Picture${n}`).join(', ')} and follows the subject marked in ${s.color} in @Video1. Keep this assignment through position changes, occlusion and camera cuts.`).join(' ')
     + ' Guide colors identify subjects only; do not transfer marker colors or materials onto skin, fur, clothing, eyes or objects. Transfer the assigned movement, mouth articulation, blinking and gaze.';
 }

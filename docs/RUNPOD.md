@@ -36,7 +36,7 @@ RunPod → **My Templates → New Template** (type *Pod*):
 |---|---|
 | Container image | `ghcr.io/alisson-anjos/henge:latest` |
 | Container disk | 30 GB |
-| Volume disk | 100 GB (Character); 130 GB with `fibo,sam2d` |
+| Volume disk | 150 GB (default profiles incl. OmniRef) |
 | Volume mount path | `/workspace` |
 | Expose HTTP ports | `8188` (add `8189` to open ComfyUI too) |
 | Expose TCP ports | `22` |
@@ -45,7 +45,7 @@ Environment variables (all optional):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HENGE_MODEL_PROFILES` | `character,motion10500,motion4500,headswap,sharpness` | Comma list: `character`, `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500`, `motion4500` |
+| `HENGE_MODEL_PROFILES` | `character,motion10500,motion4500,headswap,sharpness,omniref` | Comma list: `character`, `omniref` (+22 GB base), `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500`, `motion4500` |
 | `HF_TOKEN` | — | **Required for the motion LoRAs** (private for now). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
@@ -55,7 +55,7 @@ Environment variables (all optional):
 
 The motion LoRAs live in the private dataset `Alissonerdx/Kagemage-Backups`
 until they are published, so the default profiles
-(`character,motion10500,motion4500,headswap,sharpness`) need `HF_TOKEN` with read access. Without
+(`character,motion10500,motion4500,headswap,sharpness,omniref`) need `HF_TOKEN` with read access. Without
 it, Character Swap still installs and the motion modes show as unavailable.
 
 To point an entry at another link without rebuilding, set
@@ -96,3 +96,11 @@ restarting in a loop.
 ```
 
 Set `HENGE_WORKSPACE=off` to keep everything inside the container instead.
+
+## Optional base model: FastH3 OmniRef
+
+Add `omniref` to `HENGE_MODEL_PROFILES` to download
+[FastVideo/FastH3-Omni-Comfy](https://huggingface.co/FastVideo/FastH3-Omni-Comfy)
+(`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; use a 150 GB volume). Pick it in
+**Advanced → Base model**; it is already distilled to 8 steps, so Turbo LoRA switches to
+**None**. The task LoRAs (Character Swap, Head Swap, LMS, Motion) still load on top.

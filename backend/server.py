@@ -5,12 +5,12 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 import requests
 from fastapi import FastAPI,Request,HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageOps
-from workflows import MODELS,TURBOS,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import MODELS,TURBOS,BASES,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
-from edit_modes import MODES,FIXED_RECIPE,LMS_CAPTION,FACE_INSTRUCTION,head_swap_prompt,fixed_plan,head_reference
+from edit_modes import MODES,FIXED_RECIPE,LMS_CAPTION,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -85,11 +85,23 @@ def validate_request(r,options,slots):
     if end<=start:raise ValueError('End must be after start')
     if not isinstance(options.get('enhance_prompt',True),bool):raise ValueError('Enhance prompt must be a boolean')
     if not isinstance(options.get('auto_approve',False),bool):raise ValueError('Auto-approve must be a boolean')
+    if not isinstance(options.get('prepare_references',True),bool):raise ValueError('Reference preparation must be a boolean')
+    clamp_float(options.get('cfg',1.),1,12,'CFG')
+    mask=options.get('mask') or {}
+    if not isinstance(mask,dict) or set(mask)-{'threshold','shape','padding','expand','fill_holes','temporal_expand','blockify','invert','strength'}:raise ValueError('Invalid latent mask settings')
+    if mask.get('shape','box') not in ['box','silhouette']:raise ValueError('Unknown mask shape')
+    clamp_float(mask.get('threshold',.5),.05,.95,'mask threshold');clamp_float(mask.get('padding',.15),0,1,'mask padding');clamp_float(mask.get('expand',16),0,128,'mask expand')
+    clamp_float(mask.get('temporal_expand',2),0,24,'mask temporal expand');clamp_float(mask.get('blockify',0),0,64,'mask blockify');clamp_float(mask.get('strength',1.),0,1,'mask strength')
+    for key in ('fill_holes','invert'):
+        if not isinstance(mask.get(key,False),bool):raise ValueError(f'Mask {key} must be a boolean')
+    if options.get('base','h3') not in BASES:raise ValueError('Unknown base model')
     if options.get('turbo','dmd8') not in TURBOS:raise ValueError('Unknown turbo LoRA')
     if options.get('attention','comfy kitchen attention') not in ['comfy kitchen attention','pytorch attention']:raise ValueError('Unknown attention backend')
     if options.get('profile','motion') not in MODELS:raise ValueError('Unknown model profile')
     if r['mode'] not in FIXED_RECIPE and options.get('profile','motion') in ('headswap','sharpness'):raise ValueError('This model belongs to another mode')
     if options.get('conditioning_mode','guide') not in ['guide','tara']:raise ValueError('Unknown conditioning mode')
+    # Head Swap and Sharpness follow their published Add Guide workflows; TARA stays available for Swap and Motion.
+    if r['mode'] in FIXED_RECIPE:options['conditioning_mode']='guide'
     clamp_float(options.get('reference_scale',1.),.25,1.,'native reference scale')
     clamp_float(options.get('seed',42),0,2**32-1,'seed');clamp_float(options.get('steps',8),1,60,'steps');clamp_float(options.get('clip_fps',2),.5,24,'CLIP video fps')
     p=r.get('processing',{});clamp_float(p.get('requested_seconds_per_shot',4.5),1,15,'segment length')
@@ -99,7 +111,9 @@ def validate_request(r,options,slots):
     used=set(map(int,re.findall(r'<Picture\s+(\d+)>',r['prompt'])))
     if not used.issubset(slots):raise ValueError('Prompt references an unattached picture')
     guidance=r.get('subject_guidance',{});representation=guidance.get('representation','original')
-    if representation not in ['original','2d','3d']:raise ValueError('Invalid guide representation')
+    if representation not in ['original','2d','3d','mask']:raise ValueError('Invalid guide representation')
+    if representation=='mask' and r['mode']!='swap':raise ValueError('Latent mask is available for Character Swap')
+    if representation=='mask' and not guidance.get('bindings'):raise ValueError('Latent mask needs the subject to replace marked in the video')
     colors=set()
     for s in guidance.get('bindings',[]):
         if s.get('color') not in COLORS or s['color'] in colors:raise ValueError('Each subject needs a distinct color')
@@ -255,6 +269,22 @@ def prepare_evidence(job):
     return pictures,guide,metadata
 
 
+def mask_preview(job):
+    """Render the first shot's latent-mask region over the source (small size) for review before generating."""
+    r=job['request'];assets=job['assets'];meta=job['video_info'];inp=INPUT/'henge'/job['id'];work=job_path(job['id'])
+    scale=384/min(meta['width'],meta['height']);w=max(32,round(meta['width']*scale/32)*32);h=max(32,round(meta['height']*scale/32)*32)
+    start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24))
+    per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
+    if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
+    frames=min(per,total);clip=inp/'mask_preview_source.mp4'
+    run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-t',str(frames/24),'-vf',f'fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2','-an','-c:v','libx264','-threads','2','-crf','20','-pix_fmt','yuv420p','-y',str(clip)])
+    bindings=[{**s,'hex':COLORS[s['color']]} for s in r.get('subject_guidance',{}).get('bindings',[])]
+    save(job,message='Building the latent mask preview')
+    relative=str(clip.relative_to(INPUT));out=relative.replace('.mp4','_overlay.mp4')
+    execute_graph(job,mask_preview_graph(relative,w,h,grid_frames(frames),frames,bindings,job['plan'].get('source_kind','human'),start,job['plan'].get('preserve_objects',[]),job['options'].get('mask'),out),'mask_preview')
+    shutil.copyfile(OUTPUT/out,work/'mask_preview.mp4')
+    save(job,mask_preview_url=f"/api/backend/jobs/{job['id']}/files/mask_preview.mp4?v={time.time_ns()}")
+
 def planning(job):
     if job['request']['mode']=='sharpness':
         # LMS uses one fixed caption and no references: nothing to review, render directly.
@@ -285,6 +315,20 @@ def planning(job):
         if not text:raise ValueError(f'VLM returned no text during {stage}')
         (work/(stage+'.txt')).write_text(text)
         return text
+    bindings=r.get('subject_guidance',{}).get('bindings',[])
+    if r['mode']=='swap' and len(pictures)==1 and len(bindings)<=1 and job['options'].get('enhance_prompt',True):
+        # One character, no bindings: the Character Swap v1.1 training-format prompt.
+        details=ask(CHARACTER_INSTRUCTION,pictures[0][1],'vlm_picture_1',1024)
+        plan=fixed_plan('headswap',character_swap_prompt(details),'Replace the main subject of the guide video with the character from Picture 1, keeping scene, camera and performance (Character Swap v1.1 prompt format).',details)
+        # Keep the user's guide choice (original / 2d / 3d / latent mask) for the marked subject.
+        if bindings:plan['representation']=r.get('subject_guidance',{}).get('representation','original')
+        if plan['representation']!='original':
+            # Props the performer holds must stay out of the regenerated region (masks) or keep their pixels (2D/3D).
+            raw=ask('Look at these frames of a video. Which of these objects does the main person hold or play: phone, microphone, guitar, ukulele, cup, bottle, bicycle, torch, piano, keyboard? Answer with a JSON array of the matching words only, for example ["guitar"], or [] if none.',guide,'vlm_guide',64)
+            found=re.findall(r'phone|microphone|guitar|ukulele|cup|bottle|bicycle|torch|piano|keyboard',raw.lower())
+            plan['preserve_objects']=sorted(set(found))
+        if plan['representation']=='mask' and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
+        save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the character description before generating.',step=None,step_total=None);return
     if r['mode']=='headswap':
         face=ask(FACE_INSTRUCTION,pictures[0][1],'vlm_picture_1',512)
         plan=fixed_plan('headswap',head_swap_prompt(face),'Replace only the head of the person in the video with the face from Picture 1; body, clothing, motion and scene stay unchanged.',face)
@@ -297,11 +341,20 @@ def planning(job):
     raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw.strip());plan=json.loads(raw)
     plan['prompt']=evidence['prompt']
     plan=validate_plan(plan,slots,job['options'],r)
+    if plan['representation']=='mask' and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
     save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.',step=None,step_total=None)
 
 def generate(job):
     r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'henge'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
     if r['mode']=='headswap':refs=[str(head_reference(INPUT/refs[0],inp/'head_reference.png').relative_to(INPUT))]
+    if r['mode']=='swap' and options.get('prepare_references',True):
+        prepared=[]
+        for i,ref in enumerate(refs,1):
+            save(job,message=f'Removing the background of Picture {i}')
+            outputs=execute_graph(job,mask_graph(ref,f'henge/{job["id"]}/mask_{i}'),f'reference_{i}')
+            dest=character_reference(INPUT/ref,image_from_output(outputs),inp/f'reference_{i}_prepared.png')
+            shutil.copyfile(dest,work/f'reference_{i}_prepared.png');prepared.append(str(dest.relative_to(INPUT)))
+        refs=prepared;save(job,prepared_reference_urls=[f"/api/backend/jobs/{job['id']}/files/reference_{i}_prepared.png" for i in range(1,len(prepared)+1)])
     width,height=meta['width'],meta['height'];short={'480p':480,'720p':720,'1080p':1080}[r['quality']];scale=short/min(width,height);w=max(32,round(width*scale/32)*32);h=max(32,round(height*scale/32)*32)
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
     if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
@@ -316,8 +369,13 @@ def generate(job):
     for s in r.get('subject_guidance',{}).get('bindings',[]):bindings.append({**s,'hex':COLORS[s['color']]})
     if plan['representation']!='original':
         for shot in shots:
+            t0,t1=start+shot['start']/24,start+(shot['start']+shot['frames'])/24
             for s in bindings:
-                if not any(start+shot['start']/24<=a['time_seconds']<start+(shot['start']+shot['frames'])/24 for a in s['anchors']):raise ValueError(f"Add an anchor for {s['label']} in segment starting at {start+shot['start']/24:.2f}s, or use the original guide.")
+                if not any(t0<=a['time_seconds']<t1 for a in s['anchors']):
+                    # Unmarked shot: reuse the nearest marked point at the shot's first frame. HengeGuide still rejects
+                    # an ambiguous person-to-track match, so a wrong guess fails loudly instead of swapping someone else.
+                    near=min(s['anchors'],key=lambda a:min(abs(a['time_seconds']-t0),abs(a['time_seconds']-t1)))
+                    s['anchors']=s['anchors']+[{**near,'time_seconds':round(t0,3)}]
     prompt=plan['prompt'];fibo_ref=None
     if plan['use_fibo']:
         frame=inp/'fibo_source.png';run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-frames:v','1','-threads','1','-y',str(frame)])
@@ -336,7 +394,7 @@ def generate(job):
         if previous is not None:
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'))
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'))
         execute_graph(job,graph,f'h3_segment_{i:03d}')
         rendered=OUTPUT/relative.replace('.mp4','_result.mp4');guide=OUTPUT/relative.replace('.mp4','_guide.mp4')
         if not rendered.is_file():raise ValueError('ComfyUI finished without the expected video')
@@ -360,12 +418,15 @@ def worker():
         for path in sorted(JOBS.glob('*/job.json'),key=lambda p:p.stat().st_mtime):
             try:
                 job=json.loads(path.read_text())
-                if job['status'] not in ['queued_plan','queued_render','waiting_gpu']:continue
+                if job['status'] not in ['queued_plan','queued_render','queued_mask','waiting_gpu']:continue
                 if training_busy():
                     if job['status']!='waiting_gpu':save(job,resume_status=job['status'],status='waiting_gpu',message='Waiting for the active H3 training to release the GPU.')
                     continue
                 status=job.get('resume_status',job['status']) if job['status']=='waiting_gpu' else job['status']
                 save(job,status='running',stage='planning' if status=='queued_plan' else 'preparing',message='Analyzing the guide and references' if status=='queued_plan' else 'Preparing generation')
+                if status=='queued_mask':
+                    mask_preview(job);save(job,status='awaiting_approval',stage='plan_ready',message='Mask preview updated. Review it, then generate.')
+                    continue
                 if status=='queued_plan':
                     planning(job)
                     # Auto-approve keeps the plan's own recommendation for reference preparation.
@@ -393,8 +454,10 @@ def health():
     requirements,mode_ready,setup=check_requirements(COMFY/'models',MODELS)
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
     models={key:{**value,'available':value['lora'] in installed and value['adapter'] in installed and mode_ready[key]} for key,value in MODELS.items()}
-    turbos={key:{'label':value['label'],'steps':value['steps'],'available':value['lora'] in installed} for key,value in TURBOS.items()}
-    return {'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
+    turbos={key:{'label':value['label'],'steps':value['steps'],'available':value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
+    unets=info.get('UNETLoader',{}).get('input',{}).get('required',{}).get('unet_name',[[]])[0]
+    bases={key:{'label':value['label'],'available':value['unet'] in unets} for key,value in BASES.items()}
+    return {'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -468,6 +531,18 @@ async def preparation(jid:str,request:Request):
         save(job,plan=plan,options=options,message='Reference preparation enabled' if enabled else 'Original reference images selected')
     return public(job)
 
+@app.post('/jobs/{jid}/mask-preview')
+async def update_mask_preview(jid:str,request:Request):
+    body=await request.json()
+    with LOCK:
+        job=load(jid)
+        if job['status']!='awaiting_approval' or job.get('plan',{}).get('representation')!='mask':raise HTTPException(409,'Only a latent-mask plan awaiting approval can be previewed')
+        options={**job['options'],'mask':body.get('mask') or {}}
+        try:validate_request(json.loads(json.dumps(job['request'])),options,list(map(int,job['assets']['pictures'])))
+        except ValueError as e:raise HTTPException(400,str(e))
+        save(job,options=options,status='queued_mask',stage='queued',message='Updating the latent mask preview')
+    return public(job)
+
 @app.post('/jobs/{jid}/approve')
 def approve(jid:str):
     with LOCK:
@@ -489,7 +564,7 @@ def cancel(jid:str):
 
 @app.get('/jobs/{jid}/files/{name}')
 def file(jid:str,name:str):
-    if name not in ['result.mp4','comparison.mp4','guide_preview.mp4','fibo_preview.png','sampling_preview.jpg']:raise HTTPException(404,'Unknown output')
+    if name not in ['result.mp4','comparison.mp4','guide_preview.mp4','fibo_preview.png','sampling_preview.jpg','mask_preview.mp4'] and not re.fullmatch(r'reference_(?:[1-9]|1[01])_prepared\.png',name):raise HTTPException(404,'Unknown output')
     load(jid);p=job_path(jid)/name
     if not p.is_file():raise HTTPException(404,'Output not yet available')
     return FileResponse(p,filename=name,media_type='image/jpeg' if p.suffix=='.jpg' else 'image/png' if p.suffix=='.png' else 'video/mp4')
@@ -506,5 +581,10 @@ def comparison_with_refs(jid:str):
     return FileResponse(result,filename='henge-guide-result-references.mp4',media_type='video/mp4')
 
 @app.get('/jobs/{jid}/workflow')
-def workflow(jid:str):
-    load(jid);graphs={p.name:json.loads(p.read_text()) for p in job_path(jid).glob('*.api.json')};return graphs
+def workflow(jid:str,stage:str|None=None):
+    load(jid);graphs={p.name:json.loads(p.read_text()) for p in job_path(jid).glob('*.api.json')}
+    if stage is None:return graphs
+    # One API-format graph, ready to drag into ComfyUI (Workflow > Open also accepts it).
+    name=stage+'.api.json'
+    if name not in graphs:raise HTTPException(404,'Unknown workflow stage')
+    return Response(json.dumps(graphs[name],indent=2),media_type='application/json',headers={'Content-Disposition':f'attachment; filename="henge-{jid[:8]}-{stage}.json"'})

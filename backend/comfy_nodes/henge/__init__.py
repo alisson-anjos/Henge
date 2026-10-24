@@ -35,10 +35,12 @@ class HengeLoadShot:
 
 class HengeGuide:
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'representation':(['original','2d','3d'],),'bindings':('STRING',{'default':'[]'}),'source_kind':(['human','animal','other'],),'segment_start':('FLOAT',{'default':0}),'sam_checkpoint':('STRING',{'default':'sam3.1_multiplex_fp16.safetensors'}),'body_model':('STRING',{'default':'sam_3d_body_dinov3_bf16.safetensors'}),'preserve_objects':('STRING',{'default':'[]'})}}
-    RETURN_TYPES=('IMAGE',);FUNCTION='prepare';CATEGORY='Henge'
-    def prepare(self,images,representation,bindings,source_kind,segment_start,sam_checkpoint,body_model,preserve_objects="[]"):
-        if representation=='original':return (images,)
+    def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'representation':(['original','2d','3d','mask'],),'bindings':('STRING',{'default':'[]'}),'source_kind':(['human','animal','other'],),'segment_start':('FLOAT',{'default':0}),'sam_checkpoint':('STRING',{'default':'sam3.1_multiplex_fp16.safetensors'}),'body_model':('STRING',{'default':'sam_3d_body_dinov3_bf16.safetensors'}),'preserve_objects':('STRING',{'default':'[]'})},'optional':{'mask_settings':('STRING',{'default':'{}'})}}
+    RETURN_TYPES=('IMAGE','MASK');FUNCTION='prepare';CATEGORY='Henge'
+    def prepare(self,images,representation,bindings,source_kind,segment_start,sam_checkpoint,body_model,preserve_objects="[]",mask_settings='{}'):
+        spec={**DEFAULT_MASK,**json.loads(mask_settings or '{}')}
+        empty=torch.zeros(images.shape[:3])
+        if representation=='original':return (images,empty)
         subjects=json.loads(bindings)
         if not subjects:raise ValueError('Color guides need a selected subject and its reference binding')
         if representation=='3d' and source_kind!='human':raise ValueError('SAM 3D Body supports human sources. Use a 2D color guide for animals.')
@@ -48,7 +50,7 @@ class HengeGuide:
         sam,clip=loaded[:2]
         cond=clip.encode_from_tokens_scheduled(clip.tokenize('person' if source_kind=='human' else 'animal'))
         # Track identity before choosing colors; coordinates are normalized source-image coordinates.
-        tracks=SAM3_VideoTrack.execute(images=images,model=sam,conditioning=cond,detection_threshold=.4,max_objects=8,detect_interval=1)[0]
+        tracks=SAM3_VideoTrack.execute(images=images,model=sam,conditioning=cond,detection_threshold=float(spec['threshold']) if representation=='mask' else .4,max_objects=8,detect_interval=1)[0]
         packed=tracks.get('packed_masks')
         if packed is None or packed.shape[1]==0:raise ValueError('SAM found no tracks. Adjust the subject selection.')
         masks=unpack_masks(packed).cpu().bool() # N,objects,h,w
@@ -75,11 +77,22 @@ class HengeGuide:
                 om=unpack_masks(objects['packed_masks']).cpu().any(dim=1).float()
                 if tuple(om.shape[-2:])!=(h,w):om=torch.nn.functional.interpolate(om[:,None],size=(h,w),mode='nearest')[:,0]
                 object_mask|=om.bool()
+        selected=torch.zeros((n,h,w),dtype=torch.bool)
+        for idx,_,_ in chosen:selected|=masks[:,idx]
+        if representation=='mask':
+            # Latent mask: keep the source pixels; only the region of the selected subjects is regenerated.
+            # Like the BFS Shot Planner, the region is one box around the subjects' whole travel in this segment
+            # (+15% margin), so a replacement with a different silhouette (hair, clothing, build) has room.
+            del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
+            # Held props (guitar, microphone...) stay as in the source instead of being regenerated with the person.
+            region=mask_region(shape_mask(selected,spec),spec)
+            if bool(object_mask.any()):region=region*(~object_mask).float()
+            return (images,region)
         result=images.clone();del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
         for idx,s,rgb in chosen:result[masks[:,idx]]=torch.tensor(rgb,dtype=result.dtype)/255
         if representation=='2d':
             result[object_mask]=images[object_mask]
-            return (result,)
+            return (result,selected.float())
         from comfy_extras.nodes_sam3d_body import SAM3DBody_Loader,SAM3DBody_Predict,SAM3DBody_FaceExpression,SAM3DBody_Smooth
         from .mesh_renderer import render
         # DINOv3's sparse body regression requires FP32 on this checkpoint.
@@ -115,7 +128,7 @@ class HengeGuide:
         mm.unload_all_models();mm.soft_empty_cache()
         result=torch.from_numpy(np.stack(output)).float()/255
         result[object_mask]=images[object_mask]
-        return (result,)
+        return (result,selected.float())
 
 
 class HengeH3Conditioning:
@@ -154,6 +167,87 @@ class HengeH3Conditioning:
         return cond,latent
 
 
+# Defaults of the BFS Shot Planner "Mask" card (feather/paste are paste-back settings, not used by a latent mask).
+DEFAULT_MASK={'threshold':.5,'shape':'box','padding':.15,'expand':16,'fill_holes':True,'temporal_expand':2,'blockify':0,'invert':False,'strength':1.}
+
+def shape_mask(masks,spec):
+    """invert -> fill holes -> temporal expand -> blockify on [N,H,W] masks (BFS Shot Planner shape_mask)."""
+    x=masks.float()
+    if spec.get('invert'):x=1-x
+    if spec.get('fill_holes'):
+        try:
+            from scipy.ndimage import binary_fill_holes
+            x=torch.from_numpy(np.stack([binary_fill_holes(f>.5) for f in x.numpy()]).astype(np.float32))
+        except ImportError:pass
+    t=int(spec.get('temporal_expand') or 0)
+    if t>0 and x.shape[0]>1:
+        N,H,W=x.shape;x=torch.nn.functional.max_pool1d(x.permute(1,2,0).reshape(-1,1,N),2*t+1,1,t).reshape(H,W,N).permute(2,0,1)
+    b=int(spec.get('blockify') or 0)
+    if b>1:
+        H,W=x.shape[1:];cov=torch.nn.functional.avg_pool2d(x[:,None],b,b,ceil_mode=True)[:,0]
+        x=(cov>=.5).float().repeat_interleave(b,1).repeat_interleave(b,2)[:,:H,:W]
+    return x>.5
+
+def mask_region(mask,spec):
+    """Region to regenerate: one padded box over the union of every frame (BFS Shot Planner default) or the
+    silhouette grown by `expand` px."""
+    padding,expand=float(spec['padding']),int(spec['expand'])
+    if not bool(mask.any()):return mask.float()
+    if spec['shape']=='silhouette':
+        k=2*expand+1;return torch.nn.functional.max_pool2d(mask.float()[:,None],k,1,expand)[:,0]
+    union=mask.any(0);ys,xs=torch.nonzero(union,as_tuple=True);H,W=union.shape
+    x0,x1,y0,y1=int(xs.min()),int(xs.max())+1,int(ys.min()),int(ys.max())+1;px,py=int((x1-x0)*padding),int((y1-y0)*padding)
+    region=torch.zeros_like(mask,dtype=torch.float32);region[:,max(0,y0-py):min(H,y1+py),max(0,x0-px):min(W,x1+px)]=1
+    return region
+
+# H3 video latent step k covers these source frames (first step 1, then 4): same grid as BFS latent_mask.
+FRAME_PER_TOKEN=(1,4,4,4,4)
+
+def latent_grid_mask(mask,latent_t,h,w,grow=1):
+    """Pixel mask [F,H,W] (1 = regenerate) -> [1,1,T,h,w] on the H3 latent grid (adapted from BFSNodes latent_mask)."""
+    m=torch.nn.functional.adaptive_max_pool2d(mask.float()[:,None],(h,w))[:,0]
+    if grow>0:m=torch.nn.functional.max_pool2d(m[:,None],2*grow+1,1,grow)[:,0]
+    out,f=[],0
+    for k in range(latent_t):
+        n=1 if k==0 else 4
+        seg=m[min(f,m.shape[0]-1):min(f+n,m.shape[0])] if f<m.shape[0] else m[-1:]
+        out.append(seg.amax(0));f+=n
+    return (torch.stack(out)[None,None]>.5).float()
+
+class HengeLatentMask:
+    """Start sampling from the encoded source video and regenerate only the masked region.
+    Per-row mixed-timestep masking for H3: credit to Neko (Nekodificador) and AbleJones, as in BFSNodes inpaint_latent."""
+    @classmethod
+    def INPUT_TYPES(cls):return {'required':{'latent':('LATENT',),'vae':('VAE',),'images':('IMAGE',),'mask':('MASK',),'grow':('INT',{'default':1,'min':0,'max':8})},'optional':{'strength':('FLOAT',{'default':1.,'min':0.,'max':1.,'step':.05})}}
+    RETURN_TYPES=('LATENT',);FUNCTION='apply';CATEGORY='Henge'
+    def apply(self,latent,vae,images,mask,grow,strength=1.):
+        import comfy.nested_tensor
+        samples=latent['samples']
+        if not getattr(samples,'is_nested',False):raise ValueError('Latent mask expects a MiniMax H3 AV latent')
+        video,audio=samples.tensors[0],samples.tensors[1];T,h,w=video.shape[2:]
+        if float(mask.max())<=0:raise ValueError('Latent mask is empty: mark the subject to replace in the video')
+        source=vae.encode(images[...,:3]).to(video)
+        if source.shape!=video.shape:raise ValueError(f'Encoded source {tuple(source.shape)} does not match the latent {tuple(video.shape)}')
+        # strength < 1: masked rows start at strength x the noise level and keep some of the source.
+        vmask=latent_grid_mask(mask.cpu(),T,h,w,grow).to(video.device)*float(min(1.,max(0.,strength)))
+        print(f'[Henge H3] latent mask: regenerating {100*float(vmask.mean()):.1f}% of the video latent',flush=True)
+        out=dict(latent);out['samples']=comfy.nested_tensor.NestedTensor((source,audio))
+        out['noise_mask']=comfy.nested_tensor.NestedTensor((vmask,torch.ones_like(audio)))
+        return (out,)
+
+class HengeMaskPreview:
+    """Source frames with the regenerated region tinted and outlined, for reviewing a latent mask."""
+    @classmethod
+    def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'mask':('MASK',)}}
+    RETURN_TYPES=('IMAGE',);FUNCTION='overlay';CATEGORY='Henge'
+    def overlay(self,images,mask):
+        m=mask.float().clamp(0,1)
+        if m.shape[1:]!=images.shape[1:3]:m=torch.nn.functional.interpolate(m[:,None],size=images.shape[1:3],mode='nearest')[:,0]
+        edge=(torch.nn.functional.max_pool2d(m[:,None],5,1,2)[:,0]-m).clamp(0,1)
+        tint=torch.tensor([.84,1.,.29],dtype=images.dtype)
+        out=images[...,:3]*(1-.45*m[...,None])+tint*.45*m[...,None]
+        return (out*(1-edge[...,None])+tint*edge[...,None],)
+
 class HengeSaveVideo:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'filename':('STRING',),'trim_frames':('INT',{'default':107,'min':1}),'fps':('FLOAT',{'default':24})}}
@@ -167,7 +261,7 @@ class HengeSaveVideo:
         if proc.returncode:raise RuntimeError(err.decode(errors='replace')[-1000:])
         return {'ui':{'videos':[{'filename':p.name,'subfolder':str(p.parent.relative_to(root)),'type':'output'}]}}
 
-NODE_CLASS_MAPPINGS={c.__name__:c for c in [HengeLoadShot,HengeGuide,HengeH3Conditioning,HengeSaveVideo]}
+NODE_CLASS_MAPPINGS={c.__name__:c for c in [HengeLoadShot,HengeGuide,HengeH3Conditioning,HengeLatentMask,HengeMaskPreview,HengeSaveVideo]}
 
 class HengeTextResult:
     @classmethod

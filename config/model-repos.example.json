@@ -46,6 +46,15 @@
       "note": "Preview only (final video uses the H3 VAE). Temporal TAEH3 from madebyollin/taehv (MIT); the 2D Kijai TAEH3 crashes core TAESD previews."
     },
     {
+      "id": "bg_removal",
+      "url": "https://huggingface.co/Comfy-Org/BiRefNet/resolve/main/background_removal/birefnet.safetensors",
+      "destination": "background_removal/birefnet.safetensors",
+      "profiles": [
+        "common"
+      ],
+      "note": "Native ComfyUI background removal (MIT). Character Swap references get a #808080 background like the v1.1 workflow."
+    },
+    {
       "id": "character",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors",
       "destination": "loras/henge/character_v1_1.safetensors",
@@ -195,6 +204,15 @@
       "profiles": [
         "audio"
       ]
+    },
+    {
+      "id": "omniref",
+      "url": "https://huggingface.co/FastVideo/FastH3-Omni-Comfy/resolve/main/diffusion_models/fasth3_omniref_8step_pruned_int8_convrot.safetensors",
+      "destination": "diffusion_models/fasth3_omniref_8step_pruned_int8_convrot.safetensors",
+      "profiles": [
+        "omniref"
+      ],
+      "note": "Optional base (22 GB): FastH3 OmniRef, distilled to 8 steps. Select it in Advanced > Base model with Turbo LoRA = None."
     }
   ]
 }

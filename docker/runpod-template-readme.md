@@ -38,7 +38,7 @@ The prompt planner / VLM is Qwen3.5 9B (W4A8 GPTQ), running inside ComfyUI.
 | Variable | Default | Purpose |
 |---|---|---|
 | `HF_TOKEN` | — | Hugging Face token. Required for the motion LoRAs while they are private |
-| `HENGE_MODEL_PROFILES` | `character,motion10500,motion4500,headswap,sharpness` | Also: `fibo`, `sam2d`, `sam3d`, `audio` |
+| `HENGE_MODEL_PROFILES` | `character,motion10500,motion4500,headswap,sharpness,omniref` | Also: `omniref` (+22 GB), `fibo`, `sam2d`, `sam3d`, `audio` |
 | `HENGE_MODEL_OVERRIDES` | — | JSON to replace a model URL, e.g. `{"motion4500":{"url":"https://…"}}` |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags (`--highvram` on 80 GB GPUs) |
 | `HENGE_EXPOSE_COMFY` | — | `1` also serves ComfyUI on port 8189 |
@@ -55,3 +55,11 @@ the pod keeps running.
 ```
 
 Source, setup and license (MIT): https://github.com/alisson-anjos/Henge
+
+## Optional base model: FastH3 OmniRef
+
+Add `omniref` to `HENGE_MODEL_PROFILES` to download
+[FastVideo/FastH3-Omni-Comfy](https://huggingface.co/FastVideo/FastH3-Omni-Comfy)
+(`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; use a 150 GB volume). Pick it in
+**Advanced → Base model**; it is already distilled to 8 steps, so Turbo LoRA switches to
+**None**. The task LoRAs (Character Swap, Head Swap, LMS, Motion) still load on top.

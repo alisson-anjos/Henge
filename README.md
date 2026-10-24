@@ -2,11 +2,21 @@
 
 An open studio for **motion transfer** and **video swaps**, designed around MiniMax H3 guide-latent conditioning.
 
-## Current milestone
+## Modes
 
-Henge connects its studio UI to a local FastAPI bridge and an isolated ComfyUI backend. It supports guide intervals, image references, subject/color bindings, optional prompt enhancement, reviewed execution plans, conditional FIBO image preparation, segmented generation, progress, cancellation, result comparison and server history.
+| Mode | What it does | Recipe |
+|---|---|---|
+| Character Swap | Replace the person in a video with a character picture | Character Swap v1.1 LoRA + turbo; v1.1 one-line `body_swap:` prompt; reference background removed (BiRefNet, #808080, 0.5 MP) |
+| Motion transfer | Drive a new character with the guide's performance | Motion 10500 or TARA 4500 LoRA + training adapter V2; Guide Latents or TARA |
+| Head Swap | Replace only the head with a face picture | Head Swap v1.0 r32 + turbo; published `head_swap:` template |
+| Sharpness | Sharpen an upload or one of your generations | LMS fro dyn95 + turbo; source video only |
 
-The integration has passed TypeScript, production-build and CPU contract checks. End-to-end GPU generation and the quality of 2D/3D tracking still require validation. FIBO prepares a pose/appearance image; it does not perform full temporal skeleton retargeting. SAM 3D Body requires a human source.
+Options: turbo LoRA (DMD 8-step, DMAD 4-step, lightx2v 8/4-step or none), base model (MiniMax H3 ref2va or
+FastH3 OmniRef 8-step), CFG, Comfy Kitchen attention, auto-approve, and segmented processing with
+continuity frames for long clips. **Latent mask** (Character Swap): mark the person in the video; SAM 3.1
+tracks them and only a box (or outline) around them is regenerated, the rest stays pixel-identical. The
+plan shows a mask preview to adjust before generating. Each job can be downloaded as the exact ComfyUI
+API graph it ran.
 
 ## Setup guides
 

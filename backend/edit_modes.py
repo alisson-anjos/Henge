@@ -16,7 +16,7 @@ FACE_INSTRUCTION=('Describe this face in a short comma-separated attribute list,
     'average-sized head with strong jawline, light brown skin, dark eyes, black tousled hair, silver hoop earring." Cover, in order: '
     'gender, head/face shape and proportions (e.g. oval/round/square/heart-shaped, narrow/wide, jaw structure, whether the head reads '
     'as small/average/large relative to the shoulders), skin tone, eye color, hair color and style, and any distinctive features '
-    '(facial hair, jewelry, makeup, glasses, etc.). Only output the description, nothing else.')
+    '(facial hair, jewelry, makeup, glasses, etc.). Never name or guess real people, celebrities or fictional characters. Only output the description, nothing else.')
 
 HEAD_SWAP_PROMPT="""head_swap:
 
@@ -66,6 +66,34 @@ Preserve the original audiovisual timing and visible action structure of <Video 
 non_diegetic_music:
 N/A"""
 
+# Character Swap v1.1 published recipe (workflows/minimax_h3_character_swap_workflow_native_nodes_v1.1.json):
+# a one-line body_swap prompt; only {details} comes from the VLM, and the guide performer is never described.
+CHARACTER_INSTRUCTION=("Analyze the character in this reference image and describe the character's complete visible appearance from head to toe "
+    "as one detailed, comma-separated attribute list, in this exact order: 1. gender, apparent height, body type, physique, shoulder width, waist "
+    "and body proportions; 2. head and face shape, jawline, facial structure, skin tone, eye color and distinctive facial characteristics; "
+    "3. hair color, hairstyle, length, texture, beard, mustache and other facial hair; 4. upper-body clothing with garment types, exact colors, fit, "
+    "fabric, textures, collars, sleeves, buttons, zippers, pockets, logos, patterns and layers; 5. lower-body clothing with colors, materials, fit and "
+    "design details; 6. footwear; 7. all visible accessories; 8. distinctive features such as tattoos, scars, wrinkles or makeup. "
+    "Describe only what is visually identifiable; never invent unseen body parts, clothing or accessories; omit what cannot be determined. "
+    "Never name or guess real people, celebrities, actors or fictional characters; describe appearance only. "
+    "Do not describe the background, camera, lighting or image composition. Start with the gender (\"Male, ...\" or \"Female, ...\"), "
+    "with no article before it and no full stop after it. Output only the comma-separated list, on one line, nothing else.")
+
+CHARACTER_SWAP_PROMPT=("body_swap: subject_definitions: <Subject 1> is the {details} shown in <Picture 1>, whose identity, face, head, hair or fur, skin, "
+    "body shape, proportions and clothing define the character in the target video. The guide video provides the scene and the performance: its "
+    "background, environment, lighting, camera, framing, body pose, hand and arm movement, head rotation, gaze direction, lip movement and facial "
+    "expression, frame by frame; only the main subject of the guide video is replaced: its face, hair, body and clothing become <Subject 1>.  "
+    "summary: [video generation + reference] Replace the guide subject with <Subject 1>, keeping the scene, camera and the complete motion and "
+    "performance of the guide video.  detailed_description: [Shot 1] <Subject 1> takes the exact place of the guide subject and moves with the same "
+    "timing, body pose, gestures, head motion, gaze, speech and facial expressions, while keeping the complete identity from <Picture 1>: facial "
+    "structure, hair or fur, skin, body shape and clothing stay stable in every frame. The background, lighting, colors and camera of the guide "
+    "video are preserved. Prevent identity drift, clothing changes, texture crawling and flicker.")
+
+def character_swap_prompt(details):
+    text=' '.join(str(details).split()).strip().strip('"').rstrip('.')
+    if not text or text.lower() in ('details','{details}'):raise ValueError('The VLM returned no character description for Picture 1')
+    return CHARACTER_SWAP_PROMPT.format(details=text[:2000])
+
 def head_swap_prompt(face_details):
     face=' '.join(str(face_details).split()).strip().strip('"')
     if not face:raise ValueError('The VLM returned no facial details for Picture 1')
@@ -82,4 +110,13 @@ def head_reference(source,dest,size=256):
     """Head Swap workflow: the face reference is letterboxed (black pad, centered) to 256x256."""
     with Image.open(source) as image:
         ImageOps.pad(image.convert('RGB'),(size,size),method=Image.LANCZOS,color=(0,0,0)).save(dest)
+    return dest
+
+def character_reference(source,mask,dest,megapixels=.5,gray=(128,128,128)):
+    """Character Swap v1.1 reference: foreground over #808080, scaled to 0.5 MP (aspect kept)."""
+    with Image.open(source) as image,Image.open(mask) as alpha:
+        rgb=image.convert('RGB');alpha=alpha.convert('L').resize(rgb.size,Image.BILINEAR)
+        flat=Image.composite(rgb,Image.new('RGB',rgb.size,gray),alpha)
+    scale=(megapixels*1024*1024/(flat.width*flat.height))**.5
+    flat.resize((max(32,round(flat.width*scale)),max(32,round(flat.height*scale))),Image.LANCZOS).save(dest)
     return dest

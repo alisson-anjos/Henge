@@ -79,6 +79,24 @@ class WorkflowContracts(unittest.TestCase):
   text=head_swap_prompt(' "Male, round face,\n short black hair" ')
   self.assertTrue(text.startswith('head_swap:\n\nsubject_definitions:'));self.assertIn('Facial details of <Subject 1>:\nMale, round face, short black hair\n',text)
   with self.assertRaises(ValueError):head_swap_prompt('  ')
+ def test_tara_allowed_for_swap_and_motion_only(self):
+  for mode in ['swap','motion']:
+   options={'conditioning_mode':'tara'};validate_request({**self.request(),'mode':mode},options,[1]);self.assertEqual(options['conditioning_mode'],'tara')
+  options={'conditioning_mode':'tara'};validate_request({**self.request(),'mode':'headswap','prompt':''},options,[1]);self.assertEqual(options['conditioning_mode'],'guide')
+ def test_character_swap_prompt_template(self):
+  from edit_modes import character_swap_prompt
+  text=character_swap_prompt('Male, tall, red afro wig, white jersey 87.')
+  self.assertTrue(text.startswith('body_swap: subject_definitions: <Subject 1> is the Male, tall, red afro wig, white jersey 87 shown in <Picture 1>,'))
+  self.assertIn('  summary: ',text);self.assertIn('  detailed_description: [Shot 1]',text);self.assertNotIn('\n',text)
+ def test_omniref_base_without_turbo(self):
+  g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0,turbo='none',base='omniref')
+  self.assertEqual(g['1']['inputs']['unet_name'],'fasth3_omniref_8step_pruned_int8_convrot.safetensors');self.assertNotIn('2',g);self.assertEqual(g['3']['inputs']['model'],['1',0])
+  g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion',1,8,'original',[],'human',0,turbo='none',base='omniref')
+  self.assertEqual(g['2']['inputs']['lora_name'],'henge/training_adapter_v2.safetensors')
+ def test_cfg_adds_zeroed_negative(self):
+  g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,30,'original',[],'human',0,turbo='none',cfg=4)
+  self.assertEqual(g['24']['class_type'],'ConditioningZeroOut');self.assertEqual(g['10']['inputs']['negative'],['24',0]);self.assertEqual(g['10']['inputs']['cfg'],4.)
+  self.assertNotIn('24',h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0))
  def test_reference_order_is_explicit(self):
   g=fibo_graph('guide.png',['identity.png','background.png'],'edit',42);self.assertEqual(g['22']['inputs']['image'],'identity.png');self.assertEqual(g['23']['inputs']['image'],'background.png');self.assertEqual(g['5']['inputs']['images.image_1'],['4',0]);self.assertEqual(g['5']['inputs']['images.image_2'],['22',0]);self.assertNotIn('image_1',g['5']['inputs'])
 if __name__=='__main__':unittest.main()
