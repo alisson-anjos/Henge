@@ -28,6 +28,10 @@ RUN python -m pip freeze | grep -iE '^(torch|torchvision|torchaudio)==' > /tmp/t
  && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt \
  && ln -s /app/backend/comfy_nodes/henge /opt/ComfyUI/custom_nodes/henge \
  && python -c "import torch;print('torch',torch.__version__,'cuda',torch.version.cuda)"
+# Optional TARA one-pass Kitchen kernel: source pinned here, the per-GPU binary is installed at boot.
+RUN git clone --quiet https://github.com/alisson-anjos/comfy-kitchen.git /opt/comfy-kitchen-tara \
+ && git -C /opt/comfy-kitchen-tara checkout --quiet 0413d43878606425a84aa400f1e5da50ed9dcdad
+ENV HENGE_TARA_SOURCE=/opt/comfy-kitchen-tara
 WORKDIR /app
 # 8188 = web UI (RunPod HTTP port). 8189 = ComfyUI, only when HENGE_EXPOSE_COMFY=1. 22 = SSH with PUBLIC_KEY.
 EXPOSE 8188 8189 22

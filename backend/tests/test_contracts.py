@@ -65,7 +65,7 @@ class WorkflowContracts(unittest.TestCase):
  def test_fixed_recipe_modes_pick_profile_and_picture_count(self):
   for mode,slots,profile in [('headswap',[1],'headswap'),('sharpness',[],'sharpness')]:
    r={**self.request(),'mode':mode,'prompt':''};options={'profile':'motion','conditioning_mode':'tara'}
-   validate_request(r,options,slots);self.assertEqual(options['profile'],profile);self.assertEqual(options['conditioning_mode'],'guide')
+   validate_request(r,options,slots);self.assertEqual(options['profile'],profile);self.assertEqual(options['conditioning_mode'],'tara')
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'headswap'},{},[1,2])
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'sharpness'},{},[1])
   with self.assertRaises(ValueError):validate_request(self.request(),{'profile':'sharpness'},[1])
@@ -79,10 +79,10 @@ class WorkflowContracts(unittest.TestCase):
   text=head_swap_prompt(' "Male, round face,\n short black hair" ')
   self.assertTrue(text.startswith('head_swap:\n\nsubject_definitions:'));self.assertIn('Facial details of <Subject 1>:\nMale, round face, short black hair\n',text)
   with self.assertRaises(ValueError):head_swap_prompt('  ')
- def test_tara_allowed_for_swap_and_motion_only(self):
+ def test_tara_allowed_in_every_mode(self):
   for mode in ['swap','motion']:
    options={'conditioning_mode':'tara'};validate_request({**self.request(),'mode':mode},options,[1]);self.assertEqual(options['conditioning_mode'],'tara')
-  options={'conditioning_mode':'tara'};validate_request({**self.request(),'mode':'headswap','prompt':''},options,[1]);self.assertEqual(options['conditioning_mode'],'guide')
+  options={'conditioning_mode':'tara'};validate_request({**self.request(),'mode':'headswap','prompt':''},options,[1]);self.assertEqual(options['conditioning_mode'],'tara')
  def test_character_swap_prompt_template(self):
   from edit_modes import character_swap_prompt
   text=character_swap_prompt('Male, tall, red afro wig, white jersey 87.')

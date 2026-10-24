@@ -75,7 +75,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         # No speed LoRA: the task LoRA loads straight onto the base.
         del g['2'];g['3']['inputs']['model']=['1',0]
     if conditioning_mode=='tara':
-        g['21']=node('BFSMiniMaxH3NativeTemporal',model=['4',0],motion_video_index=1,strength=2.,window_seconds=.2,falloff_seconds=.25,max_penalty=6.,attention_backend='flash partitions (no compile)')
+        g['21']=node('BFSMiniMaxH3NativeTemporal',model=['4',0],motion_video_index=1,strength=2.,window_seconds=.2,falloff_seconds=.25,max_penalty=6.,attention_backend='comfy kitchen (experimental)' if attention=='comfy kitchen attention' else 'flash partitions (no compile)')
         g['10']['inputs']['model']=['21',0];g['13']['inputs']['model']=['21',0]
     elif conditioning_mode!='guide':raise ValueError('Unknown conditioning mode')
     if audio:g['19']=node('VAELoader',vae_name='minimax_h3_audio_vae_fp32.safetensors');g['9']['inputs']['audio_vae']=['19',0]

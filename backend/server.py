@@ -77,7 +77,7 @@ def validate_request(r,options,slots):
     profile,low,high=MODES[r['mode']]
     if r['mode'] in FIXED_RECIPE:
         # Fixed-recipe modes build their own prompt; the profile is implied by the mode.
-        r['prompt']=r['prompt'] or r['mode'];options['profile']=profile;options['conditioning_mode']='guide';options['enhance_prompt']=True
+        r['prompt']=r['prompt'] or r['mode'];options['profile']=profile;options['enhance_prompt']=True
     elif not r['prompt'].strip():raise ValueError('Provide a valid direction and prompt')
     if not low<=len(slots)<=high:raise ValueError('Attach exactly one face picture' if r['mode']=='headswap' else 'Sharpness uses only the video; remove the reference pictures' if r['mode']=='sharpness' else 'Attach 1–11 reference images')
     if r.get('quality') not in ['480p','720p','1080p']:raise ValueError('Choose 480p, 720p or 1080p')
@@ -100,8 +100,6 @@ def validate_request(r,options,slots):
     if options.get('profile','motion') not in MODELS:raise ValueError('Unknown model profile')
     if r['mode'] not in FIXED_RECIPE and options.get('profile','motion') in ('headswap','sharpness'):raise ValueError('This model belongs to another mode')
     if options.get('conditioning_mode','guide') not in ['guide','tara']:raise ValueError('Unknown conditioning mode')
-    # Head Swap and Sharpness follow their published Add Guide workflows; TARA stays available for Swap and Motion.
-    if r['mode'] in FIXED_RECIPE:options['conditioning_mode']='guide'
     clamp_float(options.get('reference_scale',1.),.25,1.,'native reference scale')
     clamp_float(options.get('seed',42),0,2**32-1,'seed');clamp_float(options.get('steps',8),1,60,'steps');clamp_float(options.get('clip_fps',2),.5,24,'CLIP video fps')
     p=r.get('processing',{});clamp_float(p.get('requested_seconds_per_shot',4.5),1,15,'segment length')

@@ -51,6 +51,10 @@ def main():
     if not (workspace.is_dir() and workspace.is_mount()):
         print(f'[henge] WARNING: {workspace} is not a mounted volume. Models (~65 GB) will go to the container disk and are lost when the pod is reset. Attach a volume or network volume at {workspace}.',flush=True)
     start_sshd()
+    # TARA's one-pass Kitchen kernel depends on the pod's GPU (SM80...SM120), so it is installed at boot.
+    if os.environ.get('HENGE_TARA_KERNEL','1')!='0':
+        if subprocess.run([sys.executable,str(APP/'scripts/install_tara_kernel.py')],cwd='/tmp').returncode:
+            print('[henge] WARNING: TARA kernel not installed; TARA uses the frame-wise fallback',flush=True)
     # Services start right away; models download in the background and the UI shows
     # a setup screen with live progress until every required file is installed.
     # A failed model (e.g. a private LoRA without HF_TOKEN) never restarts the pod.
