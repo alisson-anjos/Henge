@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create (or recreate) the RunPod pod template with runpodctl.
+# Create the RunPod pod template with runpodctl, or update it when TEMPLATE_ID is set.
 # Needs: runpodctl configured (runpodctl doctor, or RUNPOD_API_KEY).
 # Optional: REGISTRY_AUTH_ID for a private GHCR image (runpodctl registry list).
 set -euo pipefail
@@ -17,9 +17,10 @@ print(json.dumps({
 EOF
 )
 
-args=(template create --name "$NAME" --image "$IMAGE"
-  --container-disk-in-gb 30 --volume-in-gb 100 --volume-mount-path /workspace
+common=(--name "$NAME" --image "$IMAGE" --container-disk-in-gb 30
   --ports "8188/http,8189/http,22/tcp" --port-labels "8188=Henge UI,8189=ComfyUI,22=SSH"
   --env "$ENV_JSON" --readme "$(cat docker/runpod-template-readme.md)")
+if [ -n "${TEMPLATE_ID:-}" ];then args=(template update "$TEMPLATE_ID" "${common[@]}")
+else args=(template create "${common[@]}" --volume-in-gb 100 --volume-mount-path /workspace);fi
 [ -n "${REGISTRY_AUTH_ID:-}" ] && args+=(--registry-auth-id "$REGISTRY_AUTH_ID")
 runpodctl "${args[@]}"

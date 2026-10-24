@@ -55,7 +55,9 @@ def main():
     failed=[]
     for item in items:
         dest=root/item['destination'];dest.parent.mkdir(parents=True,exist_ok=True)
-        if dest.is_file() and dest.stat().st_size>0:print('Already installed:',item['id'],flush=True);status.set(item,'installed',total=dest.stat().st_size);continue
+        if dest.is_file() and dest.stat().st_size>0:
+            if has_keys(dest,item.get('require_keys')):print('Already installed:',item['id'],flush=True);status.set(item,'installed',total=dest.stat().st_size);continue
+            print(f"Replacing {item['id']}: {dest.name} is an incompatible format",flush=True);dest.unlink()
         hub=item.get('repo_id') and item.get('filename')
         if not hub and not item.get('url'):
             message='No download link configured (set a url in the manifest or HENGE_MODEL_OVERRIDES).'
@@ -79,6 +81,15 @@ def main():
         status.set(item,'installed',total=dest.stat().st_size)
         print('Installed:',item['destination'],flush=True)
     if failed:raise SystemExit('Models not installed: '+', '.join(failed))
+
+def has_keys(path,keys):
+    """True when a safetensors file contains every required tensor name."""
+    if not keys:return True
+    try:
+        from safetensors import safe_open
+        with safe_open(str(path),'pt') as handle:names=set(handle.keys())
+    except Exception:return False
+    return all(key in names for key in keys)
 
 class DownloadStatus:
     """Shared with the bridge (/health) so the UI can show what is missing and why."""

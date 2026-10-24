@@ -35,11 +35,15 @@
     },
     {
       "id": "preview",
-      "url": "https://huggingface.co/t8star/Taeh3-Comfy/resolve/main/models/vae_approx/taeh3.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/vae_approx/taeh3.safetensors",
       "destination": "vae_approx/taeh3.safetensors",
       "profiles": [
         "common"
-      ]
+      ],
+      "require_keys": [
+        "decoder.22.bias"
+      ],
+      "note": "Preview only (final video uses the H3 VAE). Temporal TAEH3 from madebyollin/taehv (MIT); the 2D Kijai TAEH3 crashes core TAESD previews."
     },
     {
       "id": "character",

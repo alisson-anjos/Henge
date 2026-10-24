@@ -15,6 +15,7 @@ def base_files():
         ('h3_text','H3 text encoder','text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors'),
         ('h3_vae','H3 video VAE','vae/minimax_h3_video_vae_fp16.safetensors'),
         ('planner','Prompt planner (VLM)','text_encoders/'+planner),
+        ('preview','Live preview (TAEH3)','vae_approx/taeh3.safetensors'),
     ]
 
 def _folder_size(path):
