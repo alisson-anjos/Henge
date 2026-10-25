@@ -199,6 +199,13 @@ def comfy_choices(info,node,name):
 def comfy_info(path='/object_info',timeout=10):
     return RUNPOD.object_info() if RUNPOD else api('GET',path,timeout=timeout)
 
+FIBO_UNET='fibo2_edit_turbo_int8_convrot.safetensors'
+def fibo_available(info=None):
+    """FIBO needs ComfyUI's TextEncodeFibo2 node (newer ComfyUI than the image pins) and its model."""
+    try:info=comfy_info() if info is None else info
+    except Exception:return False
+    return 'TextEncodeFibo2' in info and FIBO_UNET in comfy_choices(info,'UNETLoader','unet_name')
+
 def execute_serverless(job,graph,stage):
     (job_path(job['id'])/(stage+'.api.json')).write_text(json.dumps(graph,indent=2))
     labels={'SamplerCustomAdvanced':'Sampling video','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit','RemoveBackground':'Removing the reference background'}
@@ -400,6 +407,9 @@ def planning(job):
     raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw.strip());plan=json.loads(raw)
     plan['prompt']=evidence['prompt']
     plan=validate_plan(plan,slots,job['options'],r)
+    if (plan['use_fibo'] or plan['preparation_recommended']) and not fibo_available():
+        plan['use_fibo']=plan['preparation_recommended']=False
+        plan['warnings'].append('Reference adaptation (FIBO) is not installed on this ComfyUI; the original pictures are used.')
     if plan['representation']=='mask' and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
     save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.',step=None,step_total=None)
 
@@ -538,7 +548,7 @@ def health():
     turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
     unets=comfy_choices(info,'UNETLoader','unet_name')
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
-    return {'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and 'fibo2_edit_turbo_int8_convrot.safetensors' in unets,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -609,6 +619,7 @@ async def preparation(jid:str,request:Request):
         job=load(jid)
         if job['status']!='awaiting_approval':raise HTTPException(409,'Reference preparation can only change before approval')
         plan=dict(job['plan']);enabled=body['enabled']
+        if enabled and not fibo_available():raise HTTPException(409,'Reference adaptation (FIBO) is not installed on this ComfyUI')
         if enabled and (not plan.get('fibo_picture_slots') or not plan.get('fibo_instruction','').strip()):raise HTTPException(400,'The analysis did not provide a reference preparation instruction')
         plan['use_fibo']=enabled
         options={**job['options'],'fibo':'on' if enabled else 'off'}

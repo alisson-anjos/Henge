@@ -57,7 +57,7 @@ class PreparationChoice(unittest.TestCase):
   import server
   job={'id':'a'*32,'status':'awaiting_approval','options':{'fibo':'auto'},'plan':{'use_fibo':True,'prompt':'original text','fibo_picture_slots':[1],'fibo_instruction':'Prepare upright dog'}}
   def save(current,**patches):current.update(patches);return current
-  with patch.object(server,'load',return_value=job),patch.object(server,'save',side_effect=save):
+  with patch.object(server,'load',return_value=job),patch.object(server,'save',side_effect=save),patch.object(server,'fibo_available',return_value=True):
    client=TestClient(server.app)
    for enabled in [False,True]:
     result=client.post('/jobs/'+job['id']+'/preparation',json={'enabled':enabled})
@@ -65,3 +65,10 @@ class PreparationChoice(unittest.TestCase):
     self.assertEqual(job['plan']['prompt'],'original text')
    job['status']='rendering'
    self.assertEqual(client.post('/jobs/'+job['id']+'/preparation',json={'enabled':False}).status_code,409)
+ def test_adaptation_refused_when_comfyui_lacks_fibo(self):
+  from fastapi.testclient import TestClient
+  import server
+  job={'id':'b'*32,'status':'awaiting_approval','options':{'fibo':'auto'},'plan':{'use_fibo':False,'prompt':'p','fibo_picture_slots':[1],'fibo_instruction':'Prepare upright dog'}}
+  self.assertFalse(server.fibo_available({'UNETLoader':{'input':{'required':{'unet_name':[[server.FIBO_UNET]]}}}}))
+  with patch.object(server,'load',return_value=job),patch.object(server,'save'),patch.object(server,'fibo_available',return_value=False):
+   self.assertEqual(TestClient(server.app).post('/jobs/'+job['id']+'/preparation',json={'enabled':True}).status_code,409)
