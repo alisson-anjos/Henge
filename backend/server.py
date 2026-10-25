@@ -14,14 +14,21 @@ from edit_modes import MODES,FIXED_RECIPE,LMS_CAPTION,FACE_INSTRUCTION,CHARACTER
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
+from comfy_client import ComfyFiles,output_files
 
 ROOT=Path(os.environ.get('HENGE_DATA_DIR','/data/henge-data'));JOBS=ROOT/'jobs';JOBS.mkdir(parents=True,exist_ok=True)
-COMFY=Path(os.environ.get('COMFY_ROOT','/data/henge-comfy-backend'));INPUT=COMFY/'input';OUTPUT=COMFY/'output';INPUT.mkdir(exist_ok=True)
+# Bridge-owned staging for uploads and intermediate files. ComfyUI receives what a graph needs through
+# /upload/image and returns results through /view, so it can run on another machine or a hosted backend.
+INPUT=ROOT/'input';INPUT.mkdir(exist_ok=True)
+# COMFY_ROOT is only set when ComfyUI shares this machine: its models folder then feeds the download checklist.
+COMFY=Path(os.environ['COMFY_ROOT']) if os.environ.get('COMFY_ROOT') else None
+LOCAL_MODELS=COMFY/'models' if COMFY and (COMFY/'models').is_dir() else None
 SETTINGS=ROOT/'settings.json'
 try:stored_settings=json.loads(SETTINGS.read_text()) if SETTINGS.is_file() else {}
 except (ValueError,OSError):stored_settings={}
 if not isinstance(stored_settings,dict):stored_settings={}
 URL=stored_settings.get('comfy_url',os.environ.get('COMFY_BASE_URL','http://127.0.0.1:8189')).rstrip('/');LOCK=threading.RLock();STOP=threading.Event()
+FILES=ComfyFiles(URL,INPUT)
 COLORS={'red':'#DC463C','blue':'#2D7DE1','green':'#32B45A','yellow':'#EBCD23','magenta':'#CD37B4','cyan':'#1EC8CD','orange':'#F08223','purple':'#874BD2'}
 TERMINAL={'completed','failed','cancelled'}
 COMPARISON_LOCKS={}
@@ -180,16 +187,24 @@ def api(method,path,**kw):
     # /interrupt and /queue deletes answer 200 with an empty body.
     return result.json() if result.content.strip() else {}
 
+def comfy_choices(info,node,name):
+    """Options ComfyUI lists for a combo input (old [[...]] and new ['COMBO', {'options': [...]}] formats)."""
+    spec=info.get(node,{}).get('input',{}).get('required',{}).get(name,[[]])
+    if spec and isinstance(spec[0],list):return spec[0]
+    return spec[1].get('options',[]) if len(spec)>1 and isinstance(spec[1],dict) else []
+
 def execute_graph(job,graph,stage):
     import aiohttp
     async def execute():
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
-        folder=job_path(job['id']);(folder/(stage+'.api.json')).write_text(json.dumps(graph,indent=2))
+        # The graph as ComfyUI runs it: input references follow the names its uploads were stored under.
+        sent=await asyncio.to_thread(FILES.upload_graph_inputs,graph)
+        folder=job_path(job['id']);(folder/(stage+'.api.json')).write_text(json.dumps(sent,indent=2))
         client='henge-'+job['id'];pid=None;pace={}
         labels={'SamplerCustomAdvanced':'Loading the video model into the GPU (the first run after a restart can take minutes)','KSampler':'Preparing appearance image','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(URL.replace('http://','ws://').replace('https://','wss://')+'/ws?clientId='+client,heartbeat=30) as ws:
-                async with session.post(URL+'/prompt',json={'prompt':graph,'client_id':client,'extra_data':{'henge_job':job['id'],'stage':stage}}) as res:
+                async with session.post(URL+'/prompt',json={'prompt':sent,'client_id':client,'extra_data':{'henge_job':job['id'],'stage':stage}}) as res:
                     reply=await res.json()
                     if res.status!=200:raise ValueError(str(reply)[:1800])
                 pid=reply['prompt_id']
@@ -244,12 +259,10 @@ def execute_graph(job,graph,stage):
                     api('POST','/queue',json={'delete':[pid]});raise
     return asyncio.run(execute())
 
-def image_from_output(outputs):
-    images=[image for result in outputs.values() for image in result.get('images',[])]
-    if not images:raise ValueError('FIBO returned no image')
-    image=images[0];root=OUTPUT.resolve();p=(root/image.get('subfolder','')/image['filename']).resolve()
-    if not p.is_relative_to(root):raise ValueError('Invalid ComfyUI output')
-    return p
+def image_from_output(outputs,dest):
+    images=output_files(outputs,kind='images')
+    if not images:raise ValueError('ComfyUI returned no image')
+    return FILES.download(images[0],dest)
 
 def grab_frame(video,t,dest,floor=0.):
     """One still at t. The container duration can run past the last video frame (longer audio,
@@ -302,8 +315,10 @@ def mask_preview(job):
     bindings=[{**s,'hex':COLORS[s['color']]} for s in r.get('subject_guidance',{}).get('bindings',[])]
     save(job,message='Building the latent mask preview')
     relative=str(clip.relative_to(INPUT));out=relative.replace('.mp4','_overlay.mp4')
-    execute_graph(job,mask_preview_graph(relative,w,h,grid_frames(frames),frames,bindings,job['plan'].get('source_kind','human'),start,job['plan'].get('preserve_objects',[]),job['options'].get('mask'),out),'mask_preview')
-    shutil.copyfile(OUTPUT/out,work/'mask_preview.mp4')
+    outputs=execute_graph(job,mask_preview_graph(relative,w,h,grid_frames(frames),frames,bindings,job['plan'].get('source_kind','human'),start,job['plan'].get('preserve_objects',[]),job['options'].get('mask'),out),'mask_preview')
+    videos=output_files(outputs,'4','videos')
+    if not videos:raise ValueError('ComfyUI finished without the mask preview')
+    FILES.download(videos[0],work/'mask_preview.mp4')
     save(job,mask_preview_url=f"/api/backend/jobs/{job['id']}/files/mask_preview.mp4?v={time.time_ns()}")
 
 def planning(job):
@@ -373,7 +388,7 @@ def generate(job):
         for i,ref in enumerate(refs,1):
             save(job,message=f'Removing the background of Picture {i}')
             outputs=execute_graph(job,mask_graph(ref,f'henge/{job["id"]}/mask_{i}'),f'reference_{i}')
-            dest=character_reference(INPUT/ref,image_from_output(outputs),inp/f'reference_{i}_prepared.png')
+            dest=character_reference(INPUT/ref,image_from_output(outputs,inp/f'mask_{i}.png'),inp/f'reference_{i}_prepared.png')
             shutil.copyfile(dest,work/f'reference_{i}_prepared.png');prepared.append(str(dest.relative_to(INPUT)))
         refs=prepared;save(job,prepared_reference_urls=[f"/api/backend/jobs/{job['id']}/files/reference_{i}_prepared.png" for i in range(1,len(prepared)+1)])
     width,height=meta['width'],meta['height']
@@ -381,7 +396,7 @@ def generate(job):
     short=QUALITY[r['quality']];W,H=size(short);upscale=None
     causal=r['processing'].get('mode')=='causal'
     if r['mode']=='sharpness' and options.get('latent_upscale',True) and short>UPSCALE_ABOVE and not causal:
-        if not (COMFY/'models/latent_upscale_models'/LATENT_UPSCALER).is_file():raise ValueError(f'Latent upscale needs models/latent_upscale_models/{LATENT_UPSCALER}; turn Latent upscale off in Advanced to sharpen in one pass')
+        if LATENT_UPSCALER not in comfy_choices(api('GET','/object_info/MinimaxH3LatentUpscaler3D'),'MinimaxH3LatentUpscaler3D','model_name'):raise ValueError(f'Latent upscale needs models/latent_upscale_models/{LATENT_UPSCALER}; turn Latent upscale off in Advanced to sharpen in one pass')
         upscale={'width':W,'height':H,'denoise':options.get('upscale_denoise',.5)};w,h=size(max(480,short//2))
     else:w,h=W,H
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
@@ -411,9 +426,9 @@ def generate(job):
         frame=inp/'fibo_source.png';run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-frames:v','1','-threads','1','-y',str(frame)])
         selected=[assets['pictures'][str(i)] for i in plan['fibo_picture_slots']]
         outputs=execute_graph(job,fibo_graph(str(frame.relative_to(INPUT)),selected,plan['fibo_instruction'],seed),'fibo_edit')
-        img=image_from_output(outputs);fibo_ref=inp/'fibo_prepared.png';shutil.copyfile(img,fibo_ref);refs.append(str(fibo_ref.relative_to(INPUT)));
+        fibo_ref=image_from_output(outputs,inp/'fibo_prepared.png');refs.append(str(fibo_ref.relative_to(INPUT)));
         if options.get('enhance_prompt',True):prompt+=f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities."
-        shutil.copyfile(img,work/'fibo_preview.png');save(job,fibo_preview_url=f"/api/backend/jobs/{job['id']}/files/fibo_preview.png")
+        shutil.copyfile(fibo_ref,work/'fibo_preview.png');save(job,fibo_preview_url=f"/api/backend/jobs/{job['id']}/files/fibo_preview.png")
     pieces=[];previous=None
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
@@ -425,11 +440,12 @@ def generate(job):
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
         graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),upscale=upscale,structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None)
-        execute_graph(job,graph,f'h3_segment_{i:03d}')
-        rendered=OUTPUT/relative.replace('.mp4','_result.mp4');guide=OUTPUT/relative.replace('.mp4','_guide.mp4')
-        if not rendered.is_file():raise ValueError('ComfyUI finished without the expected video')
+        outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
+        results=output_files(outputs,'17','videos');guides=output_files(outputs,'18','videos')
+        if not results:raise ValueError('ComfyUI finished without the expected video')
+        rendered=FILES.download(results[0],INPUT/relative.replace('.mp4','_result.mp4'))
         piece=work/f'piece_{i:03d}.mp4';run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','18','-y',str(piece)]);pieces.append(piece);previous=rendered
-        if i==0 and guide.is_file():shutil.copyfile(guide,work/'guide_preview.mp4');save(job,guide_preview_url=f"/api/backend/jobs/{job['id']}/files/guide_preview.mp4")
+        if i==0 and guides:FILES.download(guides[0],work/'guide_preview.mp4');save(job,guide_preview_url=f"/api/backend/jobs/{job['id']}/files/guide_preview.mp4")
     concat=work/'concat.txt';concat.write_text(''.join(f"file '{p.name}'\n" for p in pieces));joined=work/'joined.mp4';run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(concat),'-c','copy','-y',str(joined)])
     output=work/'result.mp4';args=['ffmpeg','-v','error','-i',str(joined)]
     if r.get('output_audio',{}).get('keep_source') and meta['audio']:args+=['-ss',str(start),'-i',str(INPUT/assets['video']),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac']
@@ -472,6 +488,9 @@ async def lifespan(app):
     # Never restart a partially rendered job automatically (could repeat a GPU request).
     for p in JOBS.glob('*/job.json'):
         job=json.loads(p.read_text())
+        # Jobs created before the bridge had its own staging keep their uploads in ComfyUI's input folder.
+        legacy=COMFY/'input'/'henge'/job['id'] if COMFY else None
+        if legacy and legacy.is_dir() and not (INPUT/'henge'/job['id']).exists():shutil.copytree(legacy,INPUT/'henge'/job['id'])
         if job['status']=='running':save(job,status='failed',error='Bridge restarted during execution. Inspect saved workflow/evidence and retry explicitly.')
     thread=threading.Thread(target=worker,daemon=True);thread.start();yield;STOP.set()
 app=FastAPI(lifespan=lifespan)
@@ -480,14 +499,18 @@ app=FastAPI(lifespan=lifespan)
 def health():
     try:info=api('GET','/object_info',timeout=10);online=True
     except Exception:info={};online=False
-    installed=info.get('LoraLoaderModelOnly',{}).get('input',{}).get('required',{}).get('lora_name',[[]])[0]
-    requirements,mode_ready,setup=check_requirements(COMFY/'models',MODELS)
+    installed=comfy_choices(info,'LoraLoaderModelOnly','lora_name')
+    if LOCAL_MODELS:requirements,mode_ready,setup=check_requirements(LOCAL_MODELS,MODELS)
+    else:
+        # Remote ComfyUI: no download checklist; availability comes from the files ComfyUI lists.
+        requirements,mode_ready=[],{key:online for key in MODELS}
+        setup={'downloading':False,'base_ready':online,'all_ready':online,'free_gb':None,'persistent_volume':None}
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
     models={key:{**value,'available':value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed) and mode_ready[key]} for key,value in MODELS.items()}
     turbos={key:{'label':value['label'],'steps':value['steps'],'available':value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
-    unets=info.get('UNETLoader',{}).get('input',{}).get('required',{}).get('unet_name',[[]])[0]
+    unets=comfy_choices(info,'UNETLoader','unet_name')
     bases={key:{'label':value['label'],'available':value['unet'] in unets} for key,value in BASES.items()}
-    return {'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and (COMFY/'models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors').is_file(),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and 'fibo2_edit_turbo_int8_convrot.safetensors' in unets,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -509,7 +532,7 @@ async def configure_connection(request:Request):
         if missing:raise HTTPException(400,'ComfyUI responds, but required Henge nodes are missing: '+', '.join(missing))
     except HTTPException:raise
     except (requests.RequestException,ValueError):raise HTTPException(400,'Could not connect to the ComfyUI API at this address')
-    tmp=SETTINGS.with_suffix('.tmp');tmp.write_text(json.dumps({'comfy_url':target},indent=2));tmp.replace(SETTINGS);URL=target
+    tmp=SETTINGS.with_suffix('.tmp');tmp.write_text(json.dumps({'comfy_url':target},indent=2));tmp.replace(SETTINGS);URL=target;FILES.url=target
     return {'comfy_url':URL,'connected':True,'message':'Connection saved'}
 
 @app.get('/jobs')

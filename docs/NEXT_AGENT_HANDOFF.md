@@ -68,8 +68,10 @@ image reference for TARA versus AddGuide history for Guide.
 
 Settings UI can test/save a ComfyUI API URL via `/settings`, persisted in backend
 data `settings.json`. Required Henge nodes are checked. Active jobs block
-connection changes. API URL alone does not synchronize files: COMFY_ROOT/input/
-output must be accessible to the bridge. Proxy whitelist must include new
+connection changes. Files move through the ComfyUI API only (backend/comfy_client.py:
+staged under HENGE_DATA_DIR/input, uploaded via /upload/image, results via /view), so
+a remote ComfyUI needs no shared disk. COMFY_ROOT is optional: when set, its models
+folder feeds the download checklist; otherwise availability comes from /object_info. Proxy whitelist must include new
 routes; earlier omissions broke preparation and preview until fixed.
 
 Finished preview supports a cached CPU-encoded guide/result/labelled-reference

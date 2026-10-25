@@ -90,6 +90,7 @@ docker compose logs -f --tail=100
 ```
 
 The UI's Connection settings can test/save a ComfyUI API URL. The bundled API is
-`http://127.0.0.1:8189` from inside the container. Connecting to a separate ComfyUI
-server also requires shared/synchronized input/output files and its Henge
-custom nodes; changing the URL alone does not synchronize remote files.
+`http://127.0.0.1:8189` from inside the container. A separate ComfyUI server works
+too: the bridge sends each graph's input files through `/upload/image` and fetches
+results through `/view`, so no shared folders are needed. That server still needs
+the Henge (and, for TARA, BFSNodes) custom nodes and the models.

@@ -36,7 +36,9 @@ HENGE_DATA_DIR=/absolute/path/to/henge-data
 HENGE_VLM_CLIP=qwen3.5_9b_w4a8_gptq.safetensors
 ```
 
-Use your own absolute paths. On Windows, forward slashes such as
+`COMFY_ROOT` is optional: set it when ComfyUI runs on the same machine to get the
+model download checklist; a remote ComfyUI only needs `COMFY_BASE_URL`, since the
+bridge moves files through the ComfyUI API. Use your own absolute paths. On Windows, forward slashes such as
 `C:/AI/ComfyUI` avoid backslash escaping. Keep `.env.local` out of Git.
 
 ## 2. Install the nodes and models
