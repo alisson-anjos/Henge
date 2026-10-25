@@ -74,6 +74,10 @@ It prints the endpoint id. To change settings later (new image, more workers):
 
 ## 3. Run the UI on your computer
 
+The UI and its bridge need no GPU. Run them with Docker (A) or directly with Node and Python (B).
+
+### A. With Docker
+
 ```sh
 docker run -p 8188:8188 -v henge-state:/state \
   -e HENGE_BACKEND=runpod \
@@ -84,6 +88,69 @@ docker run -p 8188:8188 -v henge-state:/state \
 
 Open http://localhost:8188 and use Henge as usual. The `henge-state` volume keeps your job
 history between restarts. The API key stays on your machine: only the bridge uses it.
+
+On Windows this is the simplest way: install Docker Desktop and run the same command in PowerShell
+(write it on one line, or end the lines with a backtick instead of `\`).
+
+### B. Without Docker
+
+Needs Node 22.6+, Python 3.10+ and `ffmpeg` on the `PATH`.
+
+**Linux, macOS or WSL:**
+
+```sh
+git clone -b runpod-template https://github.com/alisson-anjos/Henge.git && cd Henge
+npm ci && npm run build
+python3 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt
+```
+
+Create `.env.local` in the repository root (both the bridge and the UI read it):
+
+```dotenv
+HENGE_BACKEND=runpod
+RUNPOD_ENDPOINT_ID=<endpoint id>
+RUNPOD_API_KEY=<your RunPod API key>
+HENGE_DATA_DIR=/absolute/path/to/henge-data
+# HENGE_PASSWORD=choose-one   # optional, see the README
+```
+
+Start, check and stop:
+
+```sh
+PYTHON=.venv/bin/python scripts/local_stack.sh start
+scripts/local_stack.sh status
+scripts/local_stack.sh stop
+```
+
+Open http://localhost:8188. Logs are in `.runtime/logs/`.
+
+**Windows (PowerShell):** install the tools with
+`winget install OpenJS.NodeJS.LTS Python.Python.3.12 Gyan.FFmpeg Git.Git`, open a new PowerShell, then:
+
+```powershell
+git clone -b runpod-template https://github.com/alisson-anjos/Henge.git; cd Henge
+npm ci; npm run build
+py -3.12 -m venv .venv; .venv\Scripts\pip install -r backend\requirements.txt
+```
+
+Create `.env.local` as above (use a Windows path such as `HENGE_DATA_DIR=C:/henge-data`), then start the
+bridge and the UI in two PowerShell windows, both from the `Henge` folder:
+
+```powershell
+cd backend; ..\.venv\Scripts\python -m uvicorn server:app --host 127.0.0.1 --port 8766 --env-file ..\.env.local
+```
+
+```powershell
+npx next start --hostname 127.0.0.1 --port 8188
+```
+
+Close both windows to stop.
+
+### Sharing the UI
+
+To let someone else use it, open a tunnel to port 8188, e.g.
+`cloudflared tunnel --url http://localhost:8188`, and set `HENGE_PASSWORD` first: every job runs on your
+endpoint and is billed to your account.
 
 ## How a job runs
 
