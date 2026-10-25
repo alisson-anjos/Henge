@@ -540,7 +540,7 @@ async def lifespan(app):
         # Jobs created before the bridge had its own staging keep their uploads in ComfyUI's input folder.
         legacy=COMFY/'input'/'henge'/job['id'] if COMFY else None
         if legacy and legacy.is_dir() and not (INPUT/'henge'/job['id']).exists():shutil.copytree(legacy,INPUT/'henge'/job['id'])
-        if job['status']=='running':save(job,status='failed',error='Bridge restarted during execution. Inspect saved workflow/evidence and retry explicitly.')
+        if job['status']=='running':save(job,status='failed',error='The bridge restarted during this job. Use Retry to run it again.')
     thread=threading.Thread(target=worker,daemon=True);thread.start();yield;STOP.set()
 app=FastAPI(lifespan=lifespan)
 
@@ -659,6 +659,19 @@ def approve(jid:str):
         job=load(jid)
         if job['status']!='awaiting_approval':raise HTTPException(409,'This job has no plan awaiting approval')
         save(job,status='queued_render',stage='queued',message='Plan approved; queued for generation')
+    return public(job)
+
+@app.post('/jobs/{jid}/retry')
+def retry(jid:str):
+    """Queue a failed or cancelled job again: straight to rendering when it already has a plan (no new VLM pass)."""
+    with LOCK:
+        job=load(jid)
+        if job['status'] not in ('failed','cancelled'):raise HTTPException(409,'Only a failed or cancelled job can be retried')
+        stale=('error','result_url','comparison_url','sampling_preview_url','sampling_preview_updated','guide_preview_url','prompt_id','step','step_total','eta_seconds','seconds_per_step','segment','total_segments')
+        for key in stale:job.pop(key,None)
+        job.update(status='queued_render' if job.get('plan') else 'queued_plan',stage='queued',progress=0,message='Retrying',updated=time.time())
+        # save() refuses to leave 'cancelled'; a retry is the explicit way out of it.
+        p=job_path(jid)/'job.json';tmp=p.with_suffix('.tmp');tmp.write_text(json.dumps(job,ensure_ascii=False,indent=2));tmp.replace(p)
     return public(job)
 
 @app.post('/jobs/{jid}/cancel')
