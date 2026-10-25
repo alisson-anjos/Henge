@@ -166,6 +166,7 @@ HENGE_BACKEND=runpod RUNPOD_ENDPOINT_ID=local RUNPOD_API_BASE=http://127.0.0.1:8
 | `RUNPOD_ENDPOINT_ID` | UI image | endpoint id |
 | `RUNPOD_API_KEY` | UI image | RunPod API key |
 | `RUNPOD_API_BASE` | UI image | override the API URL (local testing) |
+| `HENGE_PASSWORD` | UI image | optional UI password (user `HENGE_USER`, default `henge`); unset means open |
 | `HENGE_ROLE` | image | `all` (default), `worker` or `ui` |
 | `HENGE_WORKSPACE` | worker | volume mount, default `/runpod-volume` |
 | `HENGE_COMFY_ARGS` | worker | extra ComfyUI flags; leave unset |

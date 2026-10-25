@@ -1,6 +1,8 @@
 import {runPromptPipeline} from '../../../lib/vlm-pipeline';
+import {unauthorized} from '../../../lib/access';
 export const runtime = 'nodejs';
 export async function POST(request: Request) {
+  const denied = unauthorized(request); if (denied) return denied;
   const endpoint=process.env.VLM_CHAT_URL, model=process.env.VLM_MODEL;
   if(!endpoint||!model)return Response.json({error:'Automatic prompting needs a VLM connection. Configure VLM_CHAT_URL and VLM_MODEL on the server.'},{status:503});
   try {

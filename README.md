@@ -40,6 +40,19 @@ Open http://127.0.0.1:3000. No API key is required for manual prompting, local m
 
 See [models, download links and backend setup](docs/models-and-downloads.md).
 
+## Password (optional)
+
+The UI is open by default. To share it beyond your machine (a tunnel such as
+`cloudflared tunnel --url http://localhost:8188`, or a pod's public port), set a password and
+restart the UI; the browser then asks for it:
+
+```dotenv
+HENGE_PASSWORD=choose-one
+HENGE_USER=henge   # optional, default "henge"
+```
+
+It covers every page and API route. Anyone with the password can start jobs on your GPU.
+
 ## Automatic prompts
 
 Configure these server-only variables in `.env.local` and restart the server:
