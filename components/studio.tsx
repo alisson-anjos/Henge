@@ -306,7 +306,7 @@ export default function Studio() {
     {view === 'studio' && <>
       <main className="workspace">
         <aside className="controls">
-          <div className="create-heading rise"><span className="eyebrow accent">{t.create}</span><h1>{t.h1a}<br/><span>{t.h1b}</span></h1></div>
+          <div className="create-heading rise"><span className="eyebrow accent">{t.create}</span><h1>{t[`h1a_${mode}`]}<br/><span>{t[`h1b_${mode}`]}</span></h1></div>
           <div className="mode-switch" role="group" aria-label={t.mode}>{MODES.map(m => <button key={m} disabled={!ready || busy} className={mode === m ? 'selected' : ''} onClick={() => setMode(m)} aria-pressed={mode === m}><Icon name={m} size={16}/>{modeName(m)}</button>)}</div>
           <p className="mode-description">{modeDescription}</p>
           {chosenTemplate && <div className="active-template surface"><Icon name="spark"/><div><span className="eyebrow accent">{t.tplActive}</span><strong>{chosenTemplate.title[lang]}</strong></div><button className="icon-btn" aria-label={t.exitTpl} onClick={() => setActiveTemplate(null)}><Icon name="close" size={15}/></button></div>}
