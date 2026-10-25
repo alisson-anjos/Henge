@@ -25,7 +25,7 @@ The default setup is unchanged: one pod running UI, bridge and ComfyUI together
 |---|---|---|
 | GPU billing | whole time the pod is on | only while a request runs (plus idle timeout) |
 | First result after idle | immediate | cold start, about 3 min |
-| Clip length | any | short clips for now (see [Limits](#limits)) |
+| Clip length | any | any (large media go through the volume in chunks) |
 | Live sampling preview | yes | progress only |
 | Setup | template, one click | volume + endpoint, two scripts |
 
@@ -107,9 +107,11 @@ Measured on an RTX PRO 6000 (480p, 3 s Character Swap, 8 steps):
 
 ## Limits
 
-- **Media size.** Inputs and outputs travel inside the requests, and RunPod caps a request at
-  about 10 MB. Short clips at 480p fit; long or high-resolution clips fail with a clear message.
-  Moving files through the network volume's S3 API would remove this limit (not done yet).
+- **Media size: no limit.** Small media travel inside the requests. When a request would pass
+  RunPod's ~10 MB cap, the bridge writes the media to the endpoint's network volume in 6 MB chunks
+  (small `put` requests that any worker can serve, since they all mount the volume) and reads large
+  results back the same way. Only the endpoint and its volume are used. Transfer files older than
+  two days are removed by the workers.
 - **No live preview.** The UI shows the stage and sampler steps, not the intermediate frames.
 - **Model list.** The UI learns which models the worker has from its first reply. Before that,
   every mode is shown as available.
@@ -135,7 +137,6 @@ runpodctl network-volume delete <volume id>
 | Symptom | Cause and fix |
 |---|---|
 | Job waits a long time in "Waiting for a serverless worker" | Cold start, or no GPU of that type free in the datacenter. Check `runpodctl serverless get <id>`; recreate the endpoint with another `GPU`. |
-| `Serverless request is N MB; RunPod accepts about 10 MB` | Clip too large: shorten it or lower the quality. |
 | `Serverless job failed: ... out of memory` | GPU too small, or `HENGE_COMFY_ARGS` set to `--highvram`/`--gpu-only` on the template. Leave it unset. |
 | Worker log: `no models at /runpod-volume/henge/models` | The volume is empty or not attached: run `scripts/runpod_volume.sh` and check the endpoint's network volume. |
 | A mode shows "not installed" | The worker's model list does not have it: top up the volume with `VOLUME_ID=<id> scripts/runpod_volume.sh`. |

@@ -1,15 +1,20 @@
 """RunPod Serverless worker: runs one Henge ComfyUI API graph per request.
 
-Request input:  {"graph": {...API graph...}, "files": {"henge/<job>/x.mp4": "<base64>", ...}}
-                or {"op": "inventory"} to list nodes and model choices without running anything.
+Request input:  {"graph": {...API graph...}, "files": {"henge/<job>/x.mp4": "<base64>", ...},
+                 "volume_files": ["henge/<job>/big.mp4", ...]}
+                or {"op": "inventory"} to list nodes and model choices without running anything,
+                or {"op": "put" | "get" | "stat", ...} to move media through the network volume in chunks.
 Response:       {"outputs": <ComfyUI history outputs>, "files": {"<subfolder>/<filename>": "<base64>"},
-                 "inventory": {...}}
+                 "volume_outputs": {"<subfolder>/<filename>": {"path": ..., "size": ...}}, "inventory": {...}}
+
+Media too large for one request (RunPod caps a request at about 10 MB) goes through the network volume, which
+every worker mounts: the bridge writes it in chunks with "put" requests and reads large results back with "get".
 Progress:       runpod progress_update with {"node", "class_type", "value", "max"}.
 
 ComfyUI runs next to this handler on 127.0.0.1:8189 (started by docker/entrypoint.py with HENGE_ROLE=worker);
 models come from the network volume at /runpod-volume/henge/models.
 """
-import asyncio,base64,json,os,time,uuid
+import asyncio,base64,json,os,shutil,time,uuid
 from pathlib import Path
 import aiohttp,requests,runpod
 
@@ -18,6 +23,9 @@ COMFY=Path(os.environ.get('COMFY_ROOT','/opt/ComfyUI'))
 # What the bridge's /health needs to know: which nodes exist and which model files ComfyUI lists.
 CHOICES=[('LoraLoaderModelOnly','lora_name'),('UNETLoader','unet_name'),('MinimaxH3LatentUpscaler3D','model_name')]
 INVENTORY=None
+# Transfer area on the shared network volume (same layout the bridge addresses: henge/<job>/..., out/<request>/...).
+IO=Path(os.environ.get('HENGE_WORKSPACE','/runpod-volume'))/'henge/io'
+INLINE_OUTPUT=6_000_000
 
 
 def wait_for_comfy(timeout=1800):
@@ -40,6 +48,40 @@ def inventory():
             return spec[1].get('options',[]) if len(spec)>1 and isinstance(spec[1],dict) else []
         INVENTORY={'nodes':sorted(info),'choices':{f'{node}.{name}':choices(node,name) for node,name in CHOICES}}
     return INVENTORY
+
+
+def io_path(relative):
+    p=(IO/relative).resolve()
+    if not p.is_relative_to(IO.resolve()):raise ValueError(f'Refusing path {relative}')
+    return p
+
+
+def put(request):
+    """Write one chunk of a staged file; the file appears under its name once the last chunk lands."""
+    p=io_path(request['path']);part=p.with_name(p.name+'.part');part.parent.mkdir(parents=True,exist_ok=True)
+    data=base64.b64decode(request['data']);offset=int(request['offset'])
+    with part.open('r+b' if offset and part.exists() else 'wb') as f:f.seek(offset);f.write(data)
+    if offset+len(data)>=int(request['size']):part.replace(p)
+    return {'written':offset+len(data)}
+
+
+def get(request):
+    p=io_path(request['path'])
+    with p.open('rb') as f:f.seek(int(request['offset']));data=f.read(int(request['length']))
+    return {'data':base64.b64encode(data).decode(),'size':p.stat().st_size}
+
+
+def stat(request):
+    return {'sizes':{path:(io_path(path).stat().st_size if io_path(path).is_file() else None) for path in request['paths']}}
+
+
+def prune(days=2):
+    """Transfers are only needed while a job runs; drop what is older than a couple of days."""
+    cutoff=time.time()-days*86400
+    for f in IO.rglob('*') if IO.is_dir() else []:
+        try:
+            if f.is_file() and f.stat().st_mtime<cutoff:f.unlink()
+        except OSError:pass
 
 
 def staged(root,relative):
@@ -80,21 +122,32 @@ async def run(job,graph):
 
 async def handler(job):
     request=job['input']
-    if request.get('op')=='inventory':return {'inventory':inventory()}
+    op=request.get('op')
+    if op=='inventory':return {'inventory':inventory()}
+    if op in ('put','get','stat'):return {'put':put,'get':get,'stat':stat}[op](request)
     graph=request['graph'];inputs=COMFY/'input';outputs_dir=COMFY/'output'
     for relative,data in (request.get('files') or {}).items():
         p=staged(inputs,relative);p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(base64.b64decode(data))
+    for relative in request.get('volume_files') or []:
+        p=staged(inputs,relative);p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(io_path(relative),p)
     outputs=await run(job,graph)
-    files={}
+    produced=[]
     for result in outputs.values():
         for items in result.values():
             for item in items if isinstance(items,list) else []:
                 if isinstance(item,dict) and item.get('type')=='output' and 'filename' in item:
-                    key=(item.get('subfolder','')+'/'+item['filename']).lstrip('/')
-                    files[key]=base64.b64encode((outputs_dir/key).read_bytes()).decode()
-    return {'outputs':outputs,'files':files,'inventory':inventory()}
+                    produced.append((item.get('subfolder','')+'/'+item['filename']).lstrip('/'))
+    reply={'outputs':outputs,'files':{},'volume_outputs':{},'inventory':inventory()}
+    if sum((outputs_dir/key).stat().st_size for key in produced)<=INLINE_OUTPUT:
+        reply['files']={key:base64.b64encode((outputs_dir/key).read_bytes()).decode() for key in produced}
+    else:
+        # Too large for the reply: leave the files on the volume for the bridge to read in chunks.
+        for key in produced:
+            path=f"out/{job['id']}/{key}";target=io_path(path);target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(outputs_dir/key,target);reply['volume_outputs'][key]={'path':path,'size':target.stat().st_size}
+    return reply
 
 
 if __name__=='__main__':
-    wait_for_comfy();inventory()
+    prune();wait_for_comfy();inventory()
     runpod.serverless.start({'handler':handler})

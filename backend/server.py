@@ -205,6 +205,7 @@ def execute_serverless(job,graph,stage):
     def on_status(rid,progress):
         if progress is None:save(job,prompt_id=rid,stage=stage,status='running',step=None,step_total=None,eta_seconds=None,seconds_per_step=None);return
         if progress.get('queued'):save(job,message='Waiting for a serverless worker (a cold start loads the models and can take minutes)');return
+        if progress.get('message'):save(job,message=progress['message']);return
         patch={}
         label=labels.get(progress.get('class_type'))
         if label:patch['message']=label
