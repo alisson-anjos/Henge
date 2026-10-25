@@ -2,7 +2,7 @@ import json,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from vlm_pipeline import prompt_pipeline,composition_instruction
+from vlm_pipeline import prompt_pipeline,composition_instruction,subject_only,performance_only
 from workflows import plan_graph
 
 FINAL='motion_transfer: subject_definitions: Goblin from <Picture 2>. summary: [reference generation] New scene. retention_analysis: Stable. detailed_description: [Shot 1] Transfer motion. overall_soundscape: N/A non_diegetic_music: N/A'
@@ -66,3 +66,21 @@ class PlanningIntegrationTests(unittest.TestCase):
    with Image.open(guide) as image:self.assertGreater(image.getpixel((100,100))[1],image.getpixel((100,100))[0])
    self.assertEqual(len(meta['sampled_timestamps']),12)
    self.assertEqual(meta['sampled_timestamps'][0],2.)
+
+
+class SubjectOnly(unittest.TestCase):
+ def test_person_picture_backdrop_does_not_reach_the_composer(self):
+  person='**Identity:** An old man.\n**Clothing & Accessories:**\n*   **Headwear:** A flat cap.\n**Environment:** A dry desert.\n*   **Ground:** gravel.\n**Reference Role:** identity'
+  self.assertEqual(subject_only(person),'**Identity:** An old man.\n**Clothing & Accessories:**\n*   **Headwear:** A flat cap.\n**Reference Role:** identity')
+  self.assertEqual(subject_only('**Environment:** A beach at sunset.'),'**Environment:** A beach at sunset.')
+  replies=iter([person,'guide',"motion_transfer: x"]);seen=[]
+  def ask(instruction,image,stage,tokens):seen.append(instruction);return next(replies)
+  prompt_pipeline(ask,'Swap <Picture 1>','motion',[(1,'p.jpg')],'g.jpg',{})
+  self.assertNotIn('dry desert',seen[2]);self.assertIn('flat cap',seen[2])
+ def test_guide_hair_and_wardrobe_do_not_reach_the_composer(self):
+  guide='**Subject 1: The Blonde Woman**\n*   **Appearance:** She has hair in two braids. She is wearing a blue bikini.\n*   **Action:** She raises her hand. The camera looks down.'
+  self.assertEqual(performance_only(guide),'**Subject 1: The Woman**\n*   **Action:** She raises her hand. The camera looks down.')
+  replies=iter(['**Identity:** An old man.',guide,"motion_transfer: x"]);seen=[]
+  def ask(instruction,image,stage,tokens):seen.append(instruction);return next(replies)
+  result=prompt_pipeline(ask,'Swap <Picture 1>','motion',[(1,'p.jpg')],'g.jpg',{})
+  self.assertNotIn('bikini',seen[2]);self.assertIn('raises her hand',seen[2]);self.assertIn('bikini',result['guide_analysis'])

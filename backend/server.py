@@ -416,14 +416,19 @@ def planning(job):
 def generate(job):
     r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'henge'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
     if r['mode']=='headswap':refs=[str(head_reference(INPUT/refs[0],inp/'head_reference.png').relative_to(INPUT))]
-    if r['mode']=='swap' and options.get('prepare_references',True):
-        prepared=[]
+    if r['mode'] in ('swap','motion') and options.get('prepare_references',True):
+        # A person/outfit/object picture contributes only its subject: its backdrop must not become the scene.
+        # Scene and style pictures stay whole; the scene changes only when one is attached and the prompt asks for it.
+        roles={str(x.get('slot')):x.get('role') for x in plan.get('picture_roles',[]) if isinstance(x,dict)}
+        prepared=[];urls=[]
         for i,ref in enumerate(refs,1):
+            if roles.get(str(i)) in ('environment','style'):prepared.append(ref);continue
             save(job,message=f'Removing the background of Picture {i}')
             outputs=execute_graph(job,mask_graph(ref,f'henge/{job["id"]}/mask_{i}'),f'reference_{i}')
             dest=character_reference(INPUT/ref,image_from_output(outputs,inp/f'mask_{i}.png'),inp/f'reference_{i}_prepared.png')
             shutil.copyfile(dest,work/f'reference_{i}_prepared.png');prepared.append(str(dest.relative_to(INPUT)))
-        refs=prepared;save(job,prepared_reference_urls=[f"/api/backend/jobs/{job['id']}/files/reference_{i}_prepared.png" for i in range(1,len(prepared)+1)])
+            urls.append(f"/api/backend/jobs/{job['id']}/files/reference_{i}_prepared.png")
+        refs=prepared;save(job,prepared_reference_urls=urls)
     width,height=meta['width'],meta['height']
     def size(short):scale=short/min(width,height);return max(32,round(width*scale/32)*32),max(32,round(height*scale/32)*32)
     short=QUALITY[r['quality']];W,H=size(short);upscale=None

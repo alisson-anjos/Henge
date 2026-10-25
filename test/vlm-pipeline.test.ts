@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {runPromptPipeline, type VlmStage} from '../lib/vlm-pipeline.ts';
+import {performanceOnly, runPromptPipeline, subjectOnly, type VlmStage} from '../lib/vlm-pipeline.ts';
 const final='motion_transfer: subject_definitions: <Subject 1> uses <Picture 2>. summary: [reference generation] Transfer. retention_analysis: Stable. detailed_description: [Shot 1] The subject moves. overall_soundscape: N/A non_diegetic_music: N/A';
 test('reference images are isolated, guide is separate and composition is text only',async()=>{
  const seen:VlmStage[]=[];const replies=['beach','goblin','guide performance',final];
@@ -18,4 +18,13 @@ test('missing request pictures fail before any VLM call',async()=>{
 });
 test('invalid generated prompt cannot silently enter execution',async()=>{
  await assert.rejects(()=>runPromptPipeline({mode:'motion',intent:'Use @Picture1',pictures:[{slot:1,data:'one'}],frames:[{time:0,data:'guide'}]},async stage=>stage.stage==='vlm_prompt'?'Replace someone.':'description'),/motion_transfer/);
+});
+test('a person picture loses its backdrop section; a scene picture stays whole',()=>{
+ const person='**Identity:** An old man.\n**Clothing & Accessories:**\n*   **Headwear:** A flat cap.\n**Environment:** A dry desert.\n*   **Ground:** gravel.\n**Reference Role:** identity';
+ assert.equal(subjectOnly(person),'**Identity:** An old man.\n**Clothing & Accessories:**\n*   **Headwear:** A flat cap.\n**Reference Role:** identity');
+ assert.equal(subjectOnly('**Environment:** A beach at sunset.'),'**Environment:** A beach at sunset.');
+});
+test('the guide analysis keeps the performance but not the performers\' hair and wardrobe',()=>{
+ const guide='**Subject 1: The Blonde Woman**\n*   **Appearance:** She has hair in two braids. She is wearing a blue bikini.\n*   **Action:** She raises her hand. The camera looks down.';
+ assert.equal(performanceOnly(guide),'**Subject 1: The Woman**\n*   **Action:** She raises her hand. The camera looks down.');
 });

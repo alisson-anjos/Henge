@@ -9,6 +9,36 @@ function fill(template:string, values:Record<string,string>):string {
   return template.replace(/\{(picture|request|inventory|guide_analysis|metadata)\}/g, (match,key)=>values[key]??match);
 }
 
+const HEADING=/^\s*(?:#+\s*)?\*{0,2}([A-Za-z][\w /&()-]{1,60}?)\*{0,2}\s*:/;
+const SCENE=/environment|background|backdrop|setting|location|surroundings|scene/i;
+const PERSON=/identity|face|physique|clothing|hair|outfit|body/i;
+
+/** Drop the backdrop sections of a person/character picture's description, so the composer cannot take
+ * a photo's background for the target scene. A picture without person sections (a scene) stays whole. */
+export function subjectOnly(description:string):string {
+  const lines=description.split('\n'), headings=lines.map(line=>line.match(HEADING));
+  if(!headings.some(m=>m&&PERSON.test(m[1])))return description;
+  let skipping=false;
+  const kept=lines.filter((line,i)=>{const m=headings[i]; if(m&&!/^\s*[-*\u2022]\s/.test(line))skipping=SCENE.test(m[1]); return !skipping;});
+  return kept.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+
+const WARDROBE=/\b(?:wear|wears|wearing|worn|dressed|attire|outfits?|cloth(?:es|ing)|garments?|bikini|swimsuit|dress|skirt|shirt|t-shirt|jacket|hoodie|pants|shorts|jeans|hair|haired|braids?|ponytail|hairstyle|makeup)\b/i;
+const HAIR_COLOR=/\b(?:blonde|blond|brunette|red-haired|redheaded|dark-haired|fair-haired)\s+/gi;
+
+/** Drop the sentences of the guide analysis that describe the source performers' hair or wardrobe: the
+ * references replace them, and a small VLM otherwise copies them onto the target (braids, a bikini). */
+export function performanceOnly(observation:string):string {
+  const kept:string[]=[];
+  for(const line of observation.split('\n')) {
+    const head=line.match(/^\s*(?:[-*\u2022]\s+)?(?:\*\*[^*]+\*\*:?)?\s*/)![0], body=line.slice(head.length);
+    const sentences=body.split(/(?<=[.!?])\s+/).filter(x=>!WARDROBE.test(x));
+    if(body.trim()&&!sentences.length)continue;
+    kept.push(head+sentences.join(' '));
+  }
+  return kept.join('\n').replace(HAIR_COLOR,'');
+}
+
 export async function runPromptPipeline(input:VlmInput, ask:(stage:VlmStage)=>Promise<string>) {
   const request=nativePrompt(input.intent);
   const pictures=[...input.pictures].sort((a,b)=>a.slot-b.slot), slots=pictures.map(p=>p.slot);
@@ -25,14 +55,14 @@ export async function runPromptPipeline(input:VlmInput, ask:(stage:VlmStage)=>Pr
     descriptions.push({slot:picture.slot,description});
   }
   const inventory=`Attached references: ${slots.length} (${slots.map(s=>`Picture ${s}`).join(', ')}).\n\n`+
-    descriptions.map(p=>`<Picture ${p.slot}>: ${p.description}`).join('\n\n');
+    descriptions.map(p=>`<Picture ${p.slot}>: ${subjectOnly(p.description)}`).join('\n\n');
   const frames=[...input.frames].sort((a,b)=>a.time-b.time);
   const guide=await call({instruction:fill(stages.guide_instruction,{request}),images:frames.map((f,i)=>({data:f.data,label:`Guide Video 1 sampled frame ${i} at ${f.time.toFixed(3)} seconds; not a Picture`})),maxTokens:1024,stage:'vlm_guide'});
   const trigger=input.mode==='motion'?'motion_transfer':'body_swap';
   const labels=slots.map(s=>`<Picture ${s}>`).join(', ');
   const policy=PROMPT_TEMPLATE.replaceAll('@PictureN','<Picture N>').replaceAll('@Video1','<Video 1>');
   const instruction=`Task mode: ${trigger}. Begin exactly with ${trigger}:\nEXACT ATTACHED REFERENCE SET: ${labels}. There are ${slots.length} image(s). Use only these concrete Picture labels; do not output generic Picture N or invent another image. <Video 1> is the guide, not an extra Picture.\n`+policy+'\n'+
-    fill(stages.composition_context,{request,inventory,guide_analysis:guide,metadata:JSON.stringify(input.metadata??{})})+'\n'+stages.final_audit;
+    fill(stages.composition_context,{request,inventory,guide_analysis:slots.length?performanceOnly(guide):guide,metadata:JSON.stringify(input.metadata??{})})+'\n'+stages.final_audit;
   const prompt=await call({instruction,images:[],maxTokens:3072,stage:'vlm_prompt'});
   const formatError=h3PromptError(prompt,input.mode);
   if(formatError)throw Error(formatError);
