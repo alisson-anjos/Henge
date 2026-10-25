@@ -59,8 +59,9 @@ Choose the model profiles (comma list), as on a normal pod:
 | `solar` | Motion Transfer (Solar) | ~25 GB |
 | `headswap`, `sharpness` | Head Swap, LMS Sharpness | |
 | `omniref` | OmniRef base | +22 GB |
+| `fibo` | Reference adaptation (FIBO 2 edit: animal to human-compatible pose, first-frame edits) | ~14 GB |
 
-The default, every profile above, needs roughly 110–120 GB: create the volume with 150 GB.
+The default, every profile above, needs roughly 125–135 GB: create the volume with 150 GB.
 
 ### Option A: script
 

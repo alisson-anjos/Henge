@@ -11,7 +11,7 @@ ENV_JSON=$(python3 - <<'EOF'
 import json
 print(json.dumps({
   "HF_TOKEN": "{{ RUNPOD_SECRET_hf_token }}",
-  "HENGE_MODEL_PROFILES": "character,motion10500,motion4500,solar,headswap,sharpness,omniref",
+  "HENGE_MODEL_PROFILES": "character,motion10500,motion4500,solar,headswap,sharpness,omniref,fibo",
   "HENGE_COMFY_ARGS": "--lowvram",
 }))
 EOF
