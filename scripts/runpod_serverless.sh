@@ -10,8 +10,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME=${ENDPOINT_NAME:-henge-worker}
 IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:runpod-template}
-# 80-96 GB GPUs first; RunPod falls back along the list. All need a CUDA 13 driver.
-GPUS=${GPUS:-NVIDIA A100-SXM4-80GB,NVIDIA RTX PRO 6000 Blackwell Server Edition,NVIDIA H100 80GB HBM3}
+# One GPU type per endpoint (runpodctl); it must exist in the volume's datacenter and have a CUDA 13 driver.
+GPU=${GPU:-NVIDIA RTX PRO 6000 Blackwell Server Edition}
 WORKERS_MAX=${WORKERS_MAX:-2}
 IDLE_TIMEOUT=${IDLE_TIMEOUT:-120}
 id() { python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])'; }
@@ -28,7 +28,7 @@ if [ -n "${ENDPOINT_ID:-}" ]; then
   runpodctl serverless update "$ENDPOINT_ID" --template-id "$TEMPLATE_ID" --workers-max "$WORKERS_MAX" --idle-timeout "$IDLE_TIMEOUT" >/dev/null
 else
   : "${VOLUME_ID:?set VOLUME_ID to the network volume filled by scripts/runpod_volume.sh}"
-  ENDPOINT_ID=$(runpodctl serverless create --name "$NAME" --template-id "$TEMPLATE_ID" --gpu-id "$GPUS" \
+  ENDPOINT_ID=$(runpodctl serverless create --name "$NAME" --template-id "$TEMPLATE_ID" --gpu-id "$GPU" \
     --network-volume-id "$VOLUME_ID" --workers-min 0 --workers-max "$WORKERS_MAX" --execution-timeout 3600 \
     --min-cuda-version 13.0 | id)
   runpodctl serverless update "$ENDPOINT_ID" --idle-timeout "$IDLE_TIMEOUT" >/dev/null
