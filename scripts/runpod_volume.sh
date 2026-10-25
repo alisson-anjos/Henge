@@ -42,6 +42,11 @@ rows=d["requirements"];done=sum(r["state"]=="installed" for r in rows);failed=[r
 busy=d["setup"]["downloading"]
 print("failed "+",".join(failed) if failed and not busy else "ready" if not busy and done==len(rows) else f"{done}/{len(rows)} installed")' 2>/dev/null || echo starting)
   echo "$(date +%H:%M) $state"
+  # The checklist covers the modes only; optional files (e.g. the omniref base) finish when the downloader exits.
+  if [ "$state" = ready ] && ! runpodctl pod logs "$POD" --source container --tail 5000 --max-wait 10s 2>/dev/null | grep -q 'model downloads finished'; then
+    state='checklist ready, downloader still running'
+    echo "$(date +%H:%M) $state";continue
+  fi
   case $state in ready) break ;; failed*) echo "some downloads failed (HF_TOKEN?); pod $POD kept for inspection"; exit 1 ;; esac
 done
 runpodctl pod delete "$POD" >/dev/null
