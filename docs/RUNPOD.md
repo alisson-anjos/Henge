@@ -49,7 +49,7 @@ Environment variables (all optional):
 | `HF_TOKEN` | — | **Required for the motion LoRAs** (private for now). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
-| `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. On 80 GB GPUs try `--highvram` |
+| `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. On 80 GB GPUs use `--normalvram` at most: `--highvram` keeps the 32B text encoder and the VLM on the GPU next to H3 and runs out of memory |
 | `HENGE_EXPOSE_COMFY` | — | `1` makes ComfyUI listen on `0.0.0.0:8189` for debugging |
 | `PUBLIC_KEY` | — | RunPod injects your SSH key; enables `sshd` |
 
