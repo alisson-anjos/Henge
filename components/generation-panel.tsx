@@ -187,18 +187,13 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
       setJobs(current => current.map(j => j.id === result.id ? result : j));
     } catch (e) {setError(e instanceof Error ? e.message : 'Request failed');} finally {setSubmitting(false);}
   }
-  /** What actually runs for the current mode and options, shown as "under the hood". */
+  /** The base models that run for the current mode and options (not LoRAs, turbos or guidance methods). */
   const engines: {name: string; role: string}[] = [
-    ...(mode === 'sharpness' ? [] : [{name: 'Qwen3.5 9B VLM', role: tr('reads the media, writes the plan', 'lê a mídia e escreve o plano', 'lee los medios y escribe el plan')}]),
-    ...((mode === 'swap' || mode === 'motion') && prepareReferences ? [{name: 'BiRefNet', role: tr('removes the reference background', 'remove o fundo da referência', 'quita el fondo de la referencia')}] : []),
-    ...((mode === 'swap' || mode === 'motion') && fibo === 'auto' && health?.fibo_ready ? [{name: 'FIBO 2 Edit', role: tr('adapts the reference when anatomy differs', 'adapta a referência quando a anatomia difere', 'adapta la referencia si la anatomía difiere')}] : []),
-    ...(usesMask ? [{name: 'SAM 3.1', role: tr('tracks the subject mask', 'acompanha a máscara do personagem', 'sigue la máscara del personaje')}] : []),
-    {name: base === 'omniref' ? 'MiniMax H3 · FastH3 OmniRef' : 'MiniMax H3', role: tr('generates the video', 'gera o vídeo', 'genera el vídeo')},
-    {name: mode === 'swap' ? 'Character Swap v1.1' : mode === 'headswap' ? 'Head Swap v1.0' : mode === 'sharpness' ? 'LMS Sharpness' : health?.models[motionModel]?.label || motionModel, role: 'LoRA'},
-    ...(/solar/.test(profile) ? [{name: 'SolarRenderer', role: tr('structure control LoRA', 'LoRA de controle de estrutura', 'LoRA de control de estructura')}] : []),
-    ...(activeConditioning === 'tara' ? [{name: 'TARA', role: tr('temporally aligned guide', 'guia alinhado no tempo', 'guía alineada en el tiempo')}] : []),
-    ...(turbo !== 'none' ? [{name: health?.turbos?.[turbo]?.label || turbo.toUpperCase(), role: tr('few-step turbo', 'turbo de poucos steps', 'turbo de pocos pasos')}] : []),
-    ...(mode === 'sharpness' && latentUpscale ? [{name: 'H3 Latent Upscaler', role: tr('3D latent upscale', 'upscale latente 3D', 'upscale latente 3D')}] : []),
+    ...(mode === 'sharpness' ? [] : [{name: 'Qwen3.5 9B', role: tr('plans the edit', 'planeja a edição', 'planifica la edición')}]),
+    ...((mode === 'swap' || mode === 'motion') && prepareReferences ? [{name: 'BiRefNet', role: tr('reference background', 'fundo da referência', 'fondo de la referencia')}] : []),
+    ...((mode === 'swap' || mode === 'motion') && fibo === 'auto' && health?.fibo_ready ? [{name: 'FIBO 2', role: tr('reference adaptation', 'adaptação da referência', 'adaptación de la referencia')}] : []),
+    ...(usesMask ? [{name: 'SAM 3.1', role: tr('subject mask', 'máscara do personagem', 'máscara del personaje')}] : []),
+    {name: base === 'omniref' ? 'MiniMax H3 OmniRef' : 'MiniMax H3', role: tr('video generation', 'geração do vídeo', 'generación del vídeo')},
   ];
   const settings = <div className="generation-settings-content">
     <div className="label-row"><h2>{tr('Settings', 'Configurações', 'Configuración')}</h2><span className="mono muted">{health?.online ? health.training_busy ? tr('Waiting for training', 'GPU reservada ao treino', 'GPU reservada al entrenamiento') : 'ComfyUI online' : 'Backend offline'}</span></div>
