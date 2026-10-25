@@ -24,3 +24,5 @@ export function jobStageLabel(stage: string, lang: Language) {
   if (stage.startsWith('h3_segment_')) return translate(['Generating video','Gerando vídeo','Generando vídeo'],lang);
   return translate(stages[stage] || ['Processing your request','Processando seu pedido','Procesando tu solicitud'],lang);
 }
+export const formatEta = (seconds: number) => seconds >= 90 ? `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s` : `${Math.max(1, Math.round(seconds))}s`;
+export const formatSpeed = (secondsPerStep: number) => secondsPerStep >= 1 ? `${secondsPerStep.toFixed(1)} s/it` : `${(1 / secondsPerStep).toFixed(2)} it/s`;

@@ -403,3 +403,26 @@ img{display:block;max-width:100%}
 .mask-preview video{width:100%;max-height:360px;object-fit:contain;border-radius:8px;background:#000}
 .mask-preview-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}
 .mask-preview-controls label{display:flex;flex-direction:column;gap:4px;font-size:12px}
+
+/* Top output pane: live preview with its progress underneath, result with its actions underneath. */
+.live-stage,.result-stage{width:100%;height:100%;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.live-stage img{width:100%;min-height:0;flex:1 1 auto;object-fit:contain;border-radius:10px}
+.live-caption{font-size:10px;color:var(--muted)}
+.result-stage video{flex:1 1 auto;min-height:0}
+.job-progress{width:100%;text-align:left;display:grid;gap:6px}
+.job-progress-line{display:flex;justify-content:space-between;gap:10px;font-size:12px}
+.job-progress p{margin:0;font-size:11px;color:var(--muted);line-height:1.5;max-width:none}
+.job-progress progress{width:100%;height:6px;accent-color:var(--accent)}
+.result-toolbar{width:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.result-toolbar .quiet-button{min-height:32px;display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none}
+.result-toolbar .toolbar-gap{flex:1}
+/* Server history: compact selectable rows instead of a bare select. */
+.job-history{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px;max-height:260px;overflow-y:auto}
+.job-history button{width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.job-history button:hover{background:#17191b}
+.job-history button.selected{border-color:var(--accent);background:#17191b}
+.job-history-main{display:grid;min-width:0;flex:1}
+.job-history-main strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.job-history-main small,.job-history time{font-size:10px;color:var(--muted)}
+.job-dot{width:8px;height:8px;border-radius:50%;flex:none;background:#7a7a86}
+.job-dot.completed{background:#32B45A}.job-dot.failed{background:#DC463C}.job-dot.running,.job-dot.queued_plan,.job-dot.queued_render{background:var(--accent)}.job-dot.awaiting_approval{background:#EBCD23}
