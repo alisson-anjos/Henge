@@ -16,8 +16,14 @@ MODELS={
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
  'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/head_swap_v1_0_r32.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False,'scheduler':'beta'},
- 'sharpness':{'task':'sharpness','label':'LMS Sharpness v1 · fro dyn95','lora':'henge/lms_v1_fro_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False,
-              'files':[('latent_upscaler','Latent upscaler 3D · LMS v0.1','latent_upscale_models/h3_upscaler_lms_v0.1.safetensors')]},
+ # Sharpness runs on LTX-2.5, not H3: the Little More Sharpness IC-LoRA with the source as an aligned guide.
+ 'sharpness':{'task':'sharpness','engine':'ltx','label':'Little More Sharpness · LTX-2.5','lora':'henge/ltx25_little_more_sharpness_r16_v1.safetensors','adapter':None,'clip_context':False,
+              'unet':'ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors',
+              'files':[('ltx','LTX-2.5 22B distilled','diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors'),
+                       ('ltx_text','LTX-2.5 text encoder (Gemma 4 12B)','text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors'),
+                       ('ltx_vae','LTX-2.5 video VAE','vae/ltx-2.5-video-vae-bf16.safetensors'),
+                       ('ltx_audio_vae','LTX-2.5 audio VAE','vae/ltx-2.5-audio-vae-bf16.safetensors'),
+                       ('ltx_upscaler','LTX-2.5 spatial upscaler x2','latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors')]},
 }
 # Swappable speed LoRAs. Swap modes load it in place of an adapter; Motion stacks it on training
 # adapter V2 (what the motion LoRAs were trained on).
@@ -30,8 +36,6 @@ TURBOS={
  'solar4':{'label':'SolarRenderer 4-step (ComfyUI keys)','lora':'henge/turbo_solar_4step.safetensors','steps':4},
 }
 # Base diffusion models. OmniRef (FastVideo) is already distilled to 8 steps: pair it with turbo 'none'.
-# Latent upscaler for the Sharpness two-pass recipe (MinimaxH3LatentUpscaler3D, LBH-123-AI, MIT), fine-tuned on the LMS data.
-LATENT_UPSCALER='h3_upscaler_lms_v0.1.safetensors'
 BASES={
  'h3':{'label':'MiniMax H3 ref2va','unet':'minimax_h3_ref2va_pruned_int8_convrot.safetensors'},
  'omniref':{'label':'FastH3 OmniRef 8-step (FastVideo)','unet':'fasth3_omniref_8step_pruned_int8_convrot.safetensors'},
@@ -49,7 +53,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,upscale=None,causal=None,structure_cfg=1.,structure_sigma_min=0.):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
@@ -102,28 +106,9 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         g['9']['inputs'].update(context_images=['20',0],context_count=context_count)
         if conditioning_mode=='tara' and context_prompt:
             g['9']['inputs']['prompt']+=f' <Picture {len(refs)+1}> is the preceding generated final frame, used only for scene/identity continuity. Follow the current Video 1 performance and timing; do not freeze its pose or override the assigned reference identities.'
-    if upscale:
-        # Sharpness two-pass: LMS at the low first-pass size, the 3D latent upscaler to the target size, then a
-        # partial-denoise LMS pass guided by the source at the target size. `video` holds the target-size shot.
-        W,H=upscale['width'],upscale['height']
-        g['30']=node('MinimaxH3LatentUpscaler3D',latent=['15',0],model_name=LATENT_UPSCALER,mode='target dimensions',align=32,enable_chunking=True,device='cuda',precision='fp16',**{'mode.width':W,'mode.height':H})
-        g['31']=node('HengeLoadShot',video=video,pictures=json.dumps(refs),width=W,height=H,length=length)
-        g['32']=node('HengeH3Conditioning',**{**g['9']['inputs'],'guide':['31',0],'references':['31',1],'width':W,'height':H,
-                                               'reference_scale':max(.25,min(1.,width/W))})
-        if context_video:
-            # Continuity frames come from the previous upscaled result: feed pass 2 at the target size.
-            g['40']=node('HengeLoadShot',video=context_video,pictures='[]',width=W,height=H,length=context_count);g['32']['inputs']['context_images']=['40',0]
-        g['33']=node('LTXVConcatAVLatent',video_latent=['30',0],audio_latent=['15',1])
-        g['34']=node('BasicScheduler',model=g['13']['inputs']['model'],scheduler=g['13']['inputs']['scheduler'],steps=max(2,round(steps*float(upscale['denoise']))),denoise=float(upscale['denoise']))
-        g['35']=node('RandomNoise',noise_seed=seed+1000)
-        g['36']=node('CFGGuider',**{**g['10']['inputs'],'positive':['32',0],'negative':['39',0] if cfg>1 else ['32',0]})
-        if cfg>1:g['39']=node('ConditioningZeroOut',conditioning=['32',0])
-        g['37']=node('SamplerCustomAdvanced',noise=['35',0],guider=['36',0],sampler=['12',0],sigmas=['34',0],latent_image=['33',0])
-        g['38']=node('LTXVSeparateAVLatent',av_latent=['37',0])
-        g['16']['inputs']['samples']=['38',0]
     if causal:
         # One render for the whole interval, chunk by chunk against a key/value cache (no shot seams).
-        if conditioning_mode!='guide' or representation=='mask' or upscale:raise ValueError('Causal rendering needs Guide Latents, no latent mask and no latent upscale')
+        if conditioning_mode!='guide' or representation=='mask':raise ValueError('Causal rendering needs Guide Latents and no latent mask')
         g['14']=node('HengeCausalSampler',model=g['10']['inputs']['model'],positive=['9',0],latent=['9',1],seed=seed,steps=steps,
                      chunk=int(causal.get('chunk',5)),window=int(causal.get('window',6)),sampler='euler',cache='auto')
         for k in ('10','11','12','13','24'):g.pop(k,None)
@@ -169,3 +154,73 @@ def split_on_cuts(total,per_shot,context,cuts,min_gap=24):
         for i,shot in enumerate(split_frames(end-start,per_shot,context)):
             output.append({**shot,'start':shot['start']+start,'reset_context':i==0})
     return output
+
+
+LTX={'unet':MODELS['sharpness']['unet'],'clip':'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors','vae':'ltx-2.5-video-vae-bf16.safetensors',
+     'audio_vae':'ltx-2.5-audio-vae-bf16.safetensors','upscaler':'ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors'}
+LTX_SHARPNESS_PROMPT='Enhance this video with sharp, crisp details while preserving a natural photorealistic appearance.'
+# Second pass after the x2 latent upscale: the LTX distilled refine schedule, scaled by the requested denoise.
+LTX_REFINE_SIGMAS=(0.909375,0.725,0.421875,0.)
+
+
+def ltx_frames(n):return max(9,math.ceil((n-1)/8)*8+1)
+
+
+def bong_tangent(steps,start=1.,middle=.5,end=0.,pivot_1=.6,pivot_2=.6,slope_1=.2,slope_2=.2):
+    """RES4LYF's bong_tangent scheduler (the published Little More Sharpness workflow), computed here so the
+    graph needs only ComfyUI's ManualSigmas instead of the RES4LYF custom nodes."""
+    def tangent(n,slope,pivot,a,b):
+        f=lambda x:((2/math.pi)*math.atan(-slope*(x-pivot))+1)/2
+        hi,lo=f(0),f(n-1)
+        return [(f(x)-lo)/(hi-lo)*(a-b)+b for x in range(n)]
+    steps+=2;midpoint=int((steps*pivot_1+steps*pivot_2)/2);p1,p2=int(steps*pivot_1),int(steps*pivot_2)
+    slope_1,slope_2=slope_1/(steps/40),slope_2/(steps/40);second=steps-midpoint;first=steps-second
+    return tangent(first,slope_1,p1,start,middle)[:-1]+tangent(second,slope_2,p2-first,middle,end)
+
+
+def ltx_sharpness_graph(video,width,height,length,trim_frames,seed,steps=8,lora_strength=.8,upscale=None):
+    """Little More Sharpness on LTX-2.5: the source video is both the encoded latent and an aligned IC-LoRA guide.
+    With upscale={'denoise'}, a second pass refines at twice the size after LTX's x2 spatial latent upscaler, guided
+    by the same video loaded at that size; `width`/`height` are the first-pass size."""
+    sigmas=lambda values:','.join(f'{v:.6f}' for v in values)
+    g={
+      '1':node('UNETLoader',unet_name=LTX['unet'],weight_dtype='default'),
+      '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=MODELS['sharpness']['lora'],strength_model=float(lora_strength)),
+      '3':node('CLIPLoader',clip_name=LTX['clip'],type='ltxv',device='default'),
+      '4':node('VAELoader',vae_name=LTX['vae']),
+      '5':node('VAELoader',vae_name=LTX['audio_vae']),
+      '6':node('CLIPTextEncode',clip=['3',0],text=LTX_SHARPNESS_PROMPT),
+      '7':node('LTXVConditioning',positive=['6',0],negative=['6',0],frame_rate=24.),
+      '8':node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length),
+      '9':node('LTXVPreprocess',image=['8',0],img_compression=0),
+      '10':node('VAEEncode',pixels=['9',0],vae=['4',0]),
+      '11':node('LTXVAddGuide',positive=['7',0],negative=['7',1],vae=['4',0],latent=['10',0],image=['9',0],frame_idx=0,strength=1.),
+      '12':node('LTXVEmptyLatentAudio',frames_number=length,frame_rate=24.,batch_size=1,audio_vae=['5',0]),
+      '13':node('LTXVConcatAVLatent',video_latent=['11',2],audio_latent=['12',0]),
+      '14':node('CFGGuider',model=['2',0],positive=['11',0],negative=['11',1],cfg=1.),
+      '15':node('RandomNoise',noise_seed=seed),
+      '16':node('KSamplerSelect',sampler_name='euler_ancestral_cfg_pp'),
+      '17':node('ManualSigmas',sigmas=sigmas(bong_tangent(steps))),
+      '18':node('SamplerCustomAdvanced',noise=['15',0],guider=['14',0],sampler=['16',0],sigmas=['17',0],latent_image=['13',0]),
+      '19':node('LTXVSeparateAVLatent',av_latent=['18',0]),
+      '20':node('LTXVCropGuides',positive=['11',0],negative=['11',1],latent=['19',0]),
+      '21':node('VAEDecode',samples=['20',2],vae=['4',0]),
+      '22':node('HengeSaveVideo',images=['21',0],filename=video.replace('.mp4','_result.mp4'),trim_frames=trim_frames,fps=24.),
+    }
+    if upscale:
+        scale=float(upscale['denoise'])/LTX_REFINE_SIGMAS[0]
+        g['30']=node('LatentUpscaleModelLoader',model_name=LTX['upscaler'])
+        g['31']=node('LTXVLatentUpsampler',samples=['20',2],upscale_model=['30',0],vae=['4',0])
+        g['32']=node('HengeLoadShot',video=video,pictures='[]',width=width*2,height=height*2,length=length)
+        g['33']=node('LTXVPreprocess',image=['32',0],img_compression=0)
+        g['34']=node('LTXVAddGuide',positive=['20',0],negative=['20',1],vae=['4',0],latent=['31',0],image=['33',0],frame_idx=0,strength=1.)
+        g['35']=node('LTXVConcatAVLatent',video_latent=['34',2],audio_latent=['12',0])
+        g['36']=node('CFGGuider',model=['2',0],positive=['34',0],negative=['34',1],cfg=1.)
+        g['37']=node('RandomNoise',noise_seed=seed+1000)
+        g['38']=node('ManualSigmas',sigmas=sigmas([min(1.,v*scale) for v in LTX_REFINE_SIGMAS]))
+        g['39']=node('SamplerCustomAdvanced',noise=['37',0],guider=['36',0],sampler=['16',0],sigmas=['38',0],latent_image=['35',0])
+        g['40']=node('LTXVSeparateAVLatent',av_latent=['39',0])
+        g['41']=node('LTXVCropGuides',positive=['34',0],negative=['34',1],latent=['40',0])
+        # Two-pass sizes reach 2K/4K: decode in tiles so the VAE fits beside the model.
+        g['21']=node('VAEDecodeTiled',samples=['41',2],vae=['4',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
+    return g

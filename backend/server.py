@@ -7,10 +7,10 @@ import requests
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageOps
-from workflows import MODELS,TURBOS,BASES,LATENT_UPSCALER,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import MODELS,TURBOS,BASES,LTX_SHARPNESS_PROMPT,ltx_frames,ltx_sharpness_graph,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
-from edit_modes import MODES,FIXED_RECIPE,LMS_CAPTION,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
+from edit_modes import MODES,FIXED_RECIPE,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -83,7 +83,9 @@ def clamp_float(value,lo,hi,label):
     return value
 
 # Output short side. Sharpness above 720p renders a half-size LMS pass, then latent-upscales and refines at this size.
-QUALITY={'480p':480,'720p':720,'1080p':1080,'1440p':1440}
+QUALITY={'480p':480,'720p':720,'1080p':1080,'1440p':1440,'2160p':2160}
+# LTX Sharpness shot length (8n+1 frames) by output size, so the second pass fits in memory at 2K/4K.
+LTX_SHOT_FRAMES=((1080,121),(1440,73),(2160,41))
 UPSCALE_ABOVE=720
 
 def validate_request(r,options,slots):
@@ -94,7 +96,8 @@ def validate_request(r,options,slots):
         r['prompt']=r['prompt'] or r['mode'];options['profile']=profile;options['enhance_prompt']=True
     elif not r['prompt'].strip():raise ValueError('Provide a valid direction and prompt')
     if not low<=len(slots)<=high:raise ValueError('Attach exactly one face picture' if r['mode']=='headswap' else 'Sharpness uses only the video; remove the reference pictures' if r['mode']=='sharpness' else 'Attach 1–11 reference images')
-    if r.get('quality') not in QUALITY:raise ValueError('Choose 480p, 720p, 1080p or 2K')
+    if r.get('quality') not in QUALITY:raise ValueError('Choose 480p, 720p, 1080p, 2K or 4K')
+    if r['quality']=='2160p' and r['mode']!='sharpness':raise ValueError('4K output is only for Sharpness')
     video=r.get('video',{});start=clamp_float(video.get('start_seconds'),0,86400,'start');end=clamp_float(video.get('end_seconds'),0,86400,'end')
     if end<=start:raise ValueError('End must be after start')
     if not isinstance(options.get('enhance_prompt',True),bool):raise ValueError('Enhance prompt must be a boolean')
@@ -353,8 +356,8 @@ def mask_preview(job):
 
 def planning(job):
     if job['request']['mode']=='sharpness':
-        # LMS uses one fixed caption and no references: nothing to review, render directly.
-        plan=fixed_plan('sharpness',LMS_CAPTION,'Sharpen the selected interval with the LMS LoRA; motion, framing and timing come from the source video.')
+        # LTX Little More Sharpness uses one fixed caption and no references: nothing to review, render directly.
+        plan=fixed_plan('sharpness',LTX_SHARPNESS_PROMPT,'Sharpen the selected interval with LTX-2.5 Little More Sharpness; motion, framing and timing come from the source video.')
         save(job,plan=plan,status='queued_render',stage='queued',progress=0,message='Queued for sharpening',step=None,step_total=None);return
     pictures,guide,metadata=prepare_evidence(job);r=job['request'];slots=[slot for slot,_ in pictures]
     work=job_path(job['id'])
@@ -433,10 +436,10 @@ def generate(job):
     def size(short):scale=short/min(width,height);return max(32,round(width*scale/32)*32),max(32,round(height*scale/32)*32)
     short=QUALITY[r['quality']];W,H=size(short);upscale=None
     causal=r['processing'].get('mode')=='causal'
-    if r['mode']=='sharpness' and options.get('latent_upscale',True) and short>UPSCALE_ABOVE and not causal:
-        info=comfy_info('/object_info/MinimaxH3LatentUpscaler3D')
-        if info and LATENT_UPSCALER not in comfy_choices(info,'MinimaxH3LatentUpscaler3D','model_name'):raise ValueError(f'Latent upscale needs models/latent_upscale_models/{LATENT_UPSCALER}; turn Latent upscale off in Advanced to sharpen in one pass')
-        upscale={'width':W,'height':H,'denoise':options.get('upscale_denoise',.5)};w,h=size(max(480,short//2))
+    if r['mode']=='sharpness' and options.get('latent_upscale',True) and short>UPSCALE_ABOVE:
+        # LTX two-pass: sharpen at half the output size, then the x2 spatial latent upscaler and a short refine pass
+        # guided by the source at the output size. The upscaler doubles exactly, so the output size is 2x the first.
+        w,h=size(short//2);W,H=w*2,h*2;upscale={'denoise':options.get('upscale_denoise',.9)}
     else:w,h=W,H
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
     if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
@@ -448,6 +451,10 @@ def generate(job):
         if cut_run.returncode:raise ValueError('Camera-cut analysis failed')
         cuts=[round(float(t)*24) for t in re.findall(r'pts_time:([0-9.]+)',cut_run.stderr.decode(errors='replace'))]
         shots=split_on_cuts(total,per,context,cuts)
+    if r['mode']=='sharpness':
+        # LTX shots: 8n+1 frames, no context overlap (the source guide keeps consecutive shots aligned).
+        per=next(n for limit,n in LTX_SHOT_FRAMES if short<=limit)
+        shots=[{**shot,'length':ltx_frames(shot['frames'])} for shot in split_frames(total,per,0)]
     # Sparse bindings cannot be silently attached to a different actor after a temporal cut.
     bindings=[]
     for s in r.get('subject_guidance',{}).get('bindings',[]):bindings.append({**s,'hex':COLORS[s['color']]})
@@ -475,12 +482,15 @@ def generate(job):
         name=f'shot_{i:03d}.mp4';path=inp/name;t=start+shot['start']/24;duration=shot['frames']/24
         args=['ffmpeg','-v','error','-ss',str(t),'-i',str(INPUT/assets['video']),'-t',str(duration),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-c:v','libx264','-threads','2','-crf','18','-pix_fmt','yuv420p','-c:a','aac','-y',str(path)];run(args)
         relative=str(path.relative_to(INPUT));context_rel=None
-        if previous is not None:
+        if previous is not None and r['mode']!='sharpness':
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),upscale=upscale,structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None)
+        if r['mode']=='sharpness':
+            graph=ltx_sharpness_graph(relative,w,h,shot['length'],shot['frames'],seed+i,int(options.get('steps',8)),options.get('lora_strength',.8),upscale);result_node,guide_node='22',None
+        else:
+            graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None);result_node,guide_node='17','18'
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
-        results=output_files(outputs,'17','videos');guides=output_files(outputs,'18','videos')
+        results=output_files(outputs,result_node,'videos');guides=output_files(outputs,guide_node,'videos') if guide_node else []
         if not results:raise ValueError('ComfyUI finished without the expected video')
         rendered=FILES.download(results[0],INPUT/relative.replace('.mp4','_result.mp4'))
         piece=work/f'piece_{i:03d}.mp4';run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','18','-y',str(piece)]);pieces.append(piece);previous=rendered
@@ -549,9 +559,9 @@ def health():
         requirements,mode_ready=[],{key:online for key in MODELS}
         setup={'downloading':False,'base_ready':online,'all_ready':online,'free_gb':None,'persistent_volume':None}
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
-    models={key:{**value,'available':unknown or value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed) and mode_ready[key]} for key,value in MODELS.items()}
-    turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
     unets=comfy_choices(info,'UNETLoader','unet_name')
+    models={key:{**value,'available':unknown or value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed) and (not value.get('unet') or value['unet'] in unets) and mode_ready[key]} for key,value in MODELS.items()}
+    turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     return {'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 

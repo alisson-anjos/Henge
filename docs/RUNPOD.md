@@ -104,7 +104,7 @@ Add `omniref` to `HENGE_MODEL_PROFILES` to download
 [FastVideo/FastH3-Omni-Comfy](https://huggingface.co/FastVideo/FastH3-Omni-Comfy)
 (`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; use a 150 GB volume). Pick it in
 **Advanced → Base model**; it is already distilled to 8 steps, so Turbo LoRA switches to
-**None**. The task LoRAs (Character Swap, Head Swap, LMS, Motion) still load on top.
+**None**. The task LoRAs (Character Swap, Head Swap, Motion) still load on top.
 
 ## Serverless (UI on your PC, GPU only while a job runs)
 

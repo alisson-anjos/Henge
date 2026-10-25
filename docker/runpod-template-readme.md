@@ -21,9 +21,9 @@ Follow progress in **Logs** (`Downloading: …` / `Installed: …`).
 | Motion · TARA 4500 | H3 ref2va + training adapter V2 + TARA motion 4500 |
 | Motion · Solar (`solar` profile) | Solar control alone, or merged at 0.5 with 10500 / TARA 4500; pair with TARA |
 | Head Swap v1.0 | H3 ref2va + Head Swap r32 + turbo LoRA; face picture + source video |
-| Sharpness (LMS) | H3 ref2va + LMS fro dyn95 + turbo LoRA; source video only |
+| Sharpness | LTX-2.5 + Little More Sharpness IC-LoRA (x2 latent upscale above 720p, up to 4K); source video only |
 
-Turbo LoRA (Character, Head Swap, Sharpness): DMD 8-step (default), DMAD 4-step,
+Turbo LoRA (Character, Head Swap): DMD 8-step (default), DMAD 4-step,
 lightx2v 8-step v1.1 or lightx2v 4-step v1.0, chosen in the advanced settings.
 
 The prompt planner / VLM is Qwen3.5 9B (W4A8 GPTQ), running inside ComfyUI.
@@ -63,4 +63,4 @@ Add `omniref` to `HENGE_MODEL_PROFILES` to download
 [FastVideo/FastH3-Omni-Comfy](https://huggingface.co/FastVideo/FastH3-Omni-Comfy)
 (`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; use a 150 GB volume). Pick it in
 **Advanced → Base model**; it is already distilled to 8 steps, so Turbo LoRA switches to
-**None**. The task LoRAs (Character Swap, Head Swap, LMS, Motion) still load on top.
+**None**. The task LoRAs (Character Swap, Head Swap, Motion) still load on top.

@@ -73,9 +73,8 @@ python main.py --listen 127.0.0.1 --port 8189 --lowvram --preview-method taesd
 
 The H3 sampling preview needs `models/vae_approx/taeh3.safetensors`. The UI does
 not need ComfyUI to be publicly exposed. If you use a custom-node whitelist,
-include `henge`, `bfsnodes` and, for Sharpness at 1080p/2K, the
-[MiniMax H3 latent upscaler](https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler)
-node folder, with `models/latent_upscale_models/h3_upscaler_lms_v0.1.safetensors`.
+include `henge` and `bfsnodes`. Sharpness runs on LTX-2.5 with ComfyUI's native LTX nodes (no
+custom node); its files come with the `sharpness` model profile.
 
 ## 4. Start the job bridge
 

@@ -89,15 +89,22 @@ class WorkflowContracts(unittest.TestCase):
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'sharpness'},{},[1])
   with self.assertRaises(ValueError):validate_request(self.request(),{'profile':'sharpness'},[1])
  def test_fixed_recipe_graphs(self):
-  g=h3_graph('v.mp4',[],'Enhance this video.',512,288,107,107,'sharpness',42,8,'original',[],'human',0)
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/lms_v1_fro_dyn95.safetensors');self.assertEqual(g['7']['inputs']['pictures'],'[]');self.assertEqual(g['13']['inputs']['scheduler'],'simple')
   g=h3_graph('v.mp4',['face.png'],'head_swap:',512,288,107,107,'headswap',42,8,'original',[],'human',0)
   self.assertEqual(g['3']['inputs']['lora_name'],'henge/head_swap_v1_0_r32.safetensors');self.assertEqual(g['13']['inputs']['scheduler'],'beta');self.assertFalse(g['9']['inputs']['guide_context'])
- def test_sharpness_latent_upscale_two_pass(self):
-  g=h3_graph('v.mp4',[],'Enhance.',544,1024,73,72,'sharpness',1,8,'original',[],'human',0,lora_strength=1.4,upscale={'width':1088,'height':2048,'denoise':.5})
-  self.assertEqual(g['3']['inputs']['strength_model'],1.4);self.assertEqual(g['30']['inputs']['latent'],['15',0]);self.assertEqual((g['30']['inputs']['mode.width'],g['30']['inputs']['mode.height']),(1088,2048))
-  self.assertEqual(g['32']['inputs']['guide'],['31',0]);self.assertEqual(g['37']['inputs']['latent_image'],['33',0]);self.assertEqual(g['34']['inputs']['denoise'],.5);self.assertEqual(g['16']['inputs']['samples'],['38',0])
-  self.assertNotIn('30',h3_graph('v.mp4',[],'Enhance.',544,1024,73,72,'sharpness',1,8,'original',[],'human',0))
+ def test_ltx_sharpness_graph(self):
+  from workflows import ltx_sharpness_graph,bong_tangent,ltx_frames
+  g=ltx_sharpness_graph('v.mp4',544,960,121,120,7)
+  self.assertEqual(g['2']['inputs']['lora_name'],'henge/ltx25_little_more_sharpness_r16_v1.safetensors');self.assertEqual(g['2']['inputs']['strength_model'],.8)
+  # The source is both the encoded latent and the IC-LoRA guide; the published recipe's sampler and schedule.
+  self.assertEqual(g['10']['inputs']['pixels'],['9',0]);self.assertEqual(g['11']['inputs']['image'],['9',0]);self.assertEqual(g['16']['inputs']['sampler_name'],'euler_ancestral_cfg_pp')
+  self.assertEqual(len(g['17']['inputs']['sigmas'].split(',')),9);self.assertEqual(g['21']['inputs']['samples'],['20',2]);self.assertNotIn('30',g)
+  self.assertEqual([round(x,4) for x in bong_tangent(8)],[1.,.9713,.9294,.8629,.7443,.5,.2131,.0696,0.]);self.assertEqual((ltx_frames(120),ltx_frames(121)),(121,121))
+ def test_ltx_sharpness_latent_upscale_two_pass(self):
+  from workflows import ltx_sharpness_graph
+  g=ltx_sharpness_graph('v.mp4',544,960,121,120,7,lora_strength=1.2,upscale={'denoise':.9})
+  self.assertEqual(g['31']['inputs']['samples'],['20',2]);self.assertEqual((g['32']['inputs']['width'],g['32']['inputs']['height']),(1088,1920))
+  self.assertEqual(g['34']['inputs']['latent'],['31',0]);self.assertEqual(g['34']['inputs']['image'],['33',0]);self.assertEqual(g['21']['inputs']['samples'],['41',2])
+  self.assertEqual(g['21']['class_type'],'VAEDecodeTiled');self.assertEqual(g['38']['inputs']['sigmas'].split(',')[0],'0.900000');self.assertEqual(g['2']['inputs']['strength_model'],1.2)
  def test_tara_structure_guidance(self):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion_tara4500',1,8,'original',[],'human',0,conditioning_mode='tara',structure_cfg=1.5)
   self.assertEqual((g['21']['inputs']['structure_guidance'],g['21']['inputs']['structure_sigma_min']),(1.5,0.))

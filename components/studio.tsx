@@ -124,7 +124,7 @@ export default function Studio() {
         setIntent(typeof s.intent === 'string' ? s.intent : '');
         setMode(MODES.includes(s.mode) ? s.mode : 'swap');
         setProject(typeof s.project === 'string' && s.project !== 'Untitled project' ? s.project : '');
-        setQuality(['480p', '720p', '1080p', '1440p'].includes(s.quality) ? s.quality : '480p');
+        setQuality(['480p', '720p', '1080p', '1440p', '2160p'].includes(s.quality) ? s.quality : '480p');
         setAudioConditioning(s.audioConditioning === true);
         setKeepAudio(s.keepAudio !== false);
         setShotSeconds(Math.min(15, Math.max(1, Number(s.shotSeconds) || 4.5)));
@@ -265,9 +265,10 @@ export default function Studio() {
     } catch {setNotice(tr('This file is not a valid Henge configuration.', 'Este arquivo não é uma configuração válida do Henge.', 'Este archivo no es una configuración válida de Henge.'));}
   }
   /** The direction's settings (mode, prompt, quality, shots, audio, subject guidance); media are left as they are. */
+  useEffect(() => {if (mode !== 'sharpness') setQuality(q => q === '2160p' ? '1440p' : q);}, [mode]);
   function applyDirection(r: DirectionRequest) {
     if (MODES.includes(r.mode)) setMode(r.mode);
-    if (['480p', '720p', '1080p', '1440p'].includes(r.quality)) setQuality(r.quality);
+    if (['480p', '720p', '1080p', '1440p', '2160p'].includes(r.quality)) setQuality(r.quality);
     setSubjects(readSubjectBindings(r.subject_guidance?.bindings)); setGuideRepresentation(r.subject_guidance?.representation === '2d' ? '2d' : r.subject_guidance?.representation === '3d' ? '3d' : 'original'); setGuideSignature(r.video?.source_signature || '');
     if (typeof r.project === 'string') setProject(r.project);
     setPrompt(r.editor_prompt ?? r.prompt ?? ''); setAudioConditioning(r.audio_conditioning?.enabled === true);
@@ -354,7 +355,7 @@ export default function Studio() {
             <p className="micro-copy">{draggingPictures ? tr('Drop to add references', 'Solte para adicionar referências', 'Suelta para añadir referencias') : mode === 'headswap' ? tr('One clear photo of the new face. The head is placed on the person in the video.', 'Uma foto nítida do novo rosto. A cabeça é aplicada na pessoa do vídeo.', 'Una foto nítida del nuevo rostro. La cabeza se aplica a la persona del vídeo.') : tr('JPG, PNG, WebP · 25 MB each. Slots keep their numbers.', 'JPG, PNG, WebP · 25 MB cada. Os slots mantêm seus números.', 'JPG, PNG, WebP · 25 MB cada. Los slots conservan sus números.')}</p>
           </section>}
           <section className="input-card surface generation-settings-card" id="generation-settings"/>
-          <section className="input-card surface output-settings"><div className="label-row"><h2><span className="step-number">03</span>{t.output}</h2></div><div className="setting-row"><span>{t.quality}</span><div className="quality-options">{['480p', '720p', '1080p', '1440p'].map(q => <button key={q} className={'mono nc ' + (quality === q ? 'chosen' : '')} aria-pressed={quality === q} onClick={() => setQuality(q)}>{q === '1440p' ? '2K' : q}</button>)}</div></div>{mode === 'sharpness' && ['1080p', '1440p'].includes(quality) && <small className="muted">{tr('Sharpened at half size, then latent-upscaled to this size and refined (Advanced → Sharpness).', 'Nitidez em meia resolução, depois latent upscale até este tamanho e refino (Avançado → Nitidez).', 'Nitidez a media resolución, luego latent upscale a este tamaño y refinado (Avanzado → Nitidez).')}</small>}
+          <section className="input-card surface output-settings"><div className="label-row"><h2><span className="step-number">03</span>{t.output}</h2></div><div className="setting-row"><span>{t.quality}</span><div className="quality-options">{['480p', '720p', '1080p', '1440p', ...(mode === 'sharpness' ? ['2160p'] : [])].map(q => <button key={q} className={'mono nc ' + (quality === q ? 'chosen' : '')} aria-pressed={quality === q} onClick={() => setQuality(q)}>{q === '1440p' ? '2K' : q === '2160p' ? '4K' : q}</button>)}</div></div>{mode === 'sharpness' && ['1080p', '1440p', '2160p'].includes(quality) && <small className="muted">{tr('Sharpened at half size, then latent-upscaled to this size and refined (Advanced → Sharpness).', 'Nitidez em meia resolução, depois latent upscale até este tamanho e refino (Avançado → Nitidez).', 'Nitidez a media resolución, luego latent upscale a este tamaño y refinado (Avanzado → Nitidez).')}</small>}
             <div className="setting-row"><label htmlFor="keep-audio">{t.audio}</label><button id="keep-audio" className="toggle" role="switch" aria-label={t.audio} aria-checked={keepAudio} onClick={() => setKeepAudio(v => !v)}><span/></button></div>
             <div className="setting-row"><label htmlFor="audio-conditioning">{tr('Audio conditioning', 'Condicionamento de áudio', 'Condicionamiento de audio')}</label><button id="audio-conditioning" className="toggle" role="switch" aria-label={tr('Audio conditioning', 'Condicionamento de áudio', 'Condicionamiento de audio')} aria-checked={audioConditioning} onClick={() => setAudioConditioning(v => !v)}><span/></button></div>
             <div className="model-badge"><span className="model-symbol"><Icon name="spark" size={19}/></span><div><strong>MiniMax H3</strong><small>{t.model}</small></div><span className="mono nc muted">{quality}</span></div>

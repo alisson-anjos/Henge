@@ -21,7 +21,7 @@ import aiohttp,requests,runpod
 URL=os.environ.get('COMFY_BASE_URL','http://127.0.0.1:8189').rstrip('/')
 COMFY=Path(os.environ.get('COMFY_ROOT','/opt/ComfyUI'))
 # What the bridge's /health needs to know: which nodes exist and which model files ComfyUI lists.
-CHOICES=[('LoraLoaderModelOnly','lora_name'),('UNETLoader','unet_name'),('MinimaxH3LatentUpscaler3D','model_name')]
+CHOICES=[('LoraLoaderModelOnly','lora_name'),('UNETLoader','unet_name')]
 INVENTORY=None
 # Transfer area on the shared network volume (same layout the bridge addresses: henge/<job>/..., out/<request>/...).
 IO=Path(os.environ.get('HENGE_WORKSPACE','/runpod-volume'))/'henge/io'
