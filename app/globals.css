@@ -447,3 +447,9 @@ img{display:block;max-width:100%}
 .job-history-title{display:flex;align-items:center;gap:8px;min-width:0}
 .job-mode{flex:none;font-size:9px;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:999px;border:1px solid #36383b;color:var(--muted)}
 .job-mode.swap{color:#D6FF4B;border-color:#D6FF4B55}.job-mode.motion{color:#AA8BFF;border-color:#AA8BFF55}.job-mode.headswap{color:#FF9F6B;border-color:#FF9F6B55}.job-mode.sharpness{color:#6BE4FF;border-color:#6BE4FF55}
+/* "Models used": what runs for the current mode and options. */
+.engines{display:grid;gap:8px;margin:14px 0 4px}
+.engines ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.engines li{display:grid;gap:1px;padding:6px 10px;border:1px solid var(--line,#2a2a36);border-radius:10px;background:#13131b;min-width:0}
+.engines strong{font-size:11px;font-weight:600}
+.engines small{font-size:9.5px;color:var(--muted)}
