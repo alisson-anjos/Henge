@@ -15,6 +15,7 @@ from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
 from comfy_client import ComfyFiles,output_files
+from runpod_backend import RunPodBackend
 
 ROOT=Path(os.environ.get('HENGE_DATA_DIR','/data/henge-data'));JOBS=ROOT/'jobs';JOBS.mkdir(parents=True,exist_ok=True)
 # Bridge-owned staging for uploads and intermediate files. ComfyUI receives what a graph needs through
@@ -28,7 +29,9 @@ try:stored_settings=json.loads(SETTINGS.read_text()) if SETTINGS.is_file() else 
 except (ValueError,OSError):stored_settings={}
 if not isinstance(stored_settings,dict):stored_settings={}
 URL=stored_settings.get('comfy_url',os.environ.get('COMFY_BASE_URL','http://127.0.0.1:8189')).rstrip('/');LOCK=threading.RLock();STOP=threading.Event()
-FILES=ComfyFiles(URL,INPUT)
+# HENGE_BACKEND=runpod: graphs run on a RunPod Serverless endpoint instead of a ComfyUI URL.
+RUNPOD=RunPodBackend(INPUT,ROOT) if os.environ.get('HENGE_BACKEND')=='runpod' else None
+FILES=RUNPOD or ComfyFiles(URL,INPUT)
 COLORS={'red':'#DC463C','blue':'#2D7DE1','green':'#32B45A','yellow':'#EBCD23','magenta':'#CD37B4','cyan':'#1EC8CD','orange':'#F08223','purple':'#874BD2'}
 TERMINAL={'completed','failed','cancelled'}
 COMPARISON_LOCKS={}
@@ -193,7 +196,26 @@ def comfy_choices(info,node,name):
     if spec and isinstance(spec[0],list):return spec[0]
     return spec[1].get('options',[]) if len(spec)>1 and isinstance(spec[1],dict) else []
 
+def comfy_info(path='/object_info',timeout=10):
+    return RUNPOD.object_info() if RUNPOD else api('GET',path,timeout=timeout)
+
+def execute_serverless(job,graph,stage):
+    (job_path(job['id'])/(stage+'.api.json')).write_text(json.dumps(graph,indent=2))
+    labels={'SamplerCustomAdvanced':'Sampling video','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit','RemoveBackground':'Removing the reference background'}
+    def on_status(rid,progress):
+        if progress is None:save(job,prompt_id=rid,stage=stage,status='running',step=None,step_total=None,eta_seconds=None,seconds_per_step=None);return
+        if progress.get('queued'):save(job,message='Waiting for a serverless worker (a cold start loads the models and can take minutes)');return
+        patch={}
+        label=labels.get(progress.get('class_type'))
+        if label:patch['message']=label
+        if progress.get('value') is not None and progress.get('max'):
+            patch.update(step=int(progress['value']),step_total=int(progress['max']))
+            if stage.startswith('h3_segment_'):patch['progress']=(job.get('segment',1)-1+min(1,progress['value']/progress['max']))/max(1,job.get('total_segments',1))
+        if patch:save(job,**patch)
+    return RUNPOD.run(graph,on_status,lambda:load(job['id'])['status']=='cancelled')
+
 def execute_graph(job,graph,stage):
+    if RUNPOD:return execute_serverless(job,graph,stage)
     import aiohttp
     async def execute():
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
@@ -396,7 +418,8 @@ def generate(job):
     short=QUALITY[r['quality']];W,H=size(short);upscale=None
     causal=r['processing'].get('mode')=='causal'
     if r['mode']=='sharpness' and options.get('latent_upscale',True) and short>UPSCALE_ABOVE and not causal:
-        if LATENT_UPSCALER not in comfy_choices(api('GET','/object_info/MinimaxH3LatentUpscaler3D'),'MinimaxH3LatentUpscaler3D','model_name'):raise ValueError(f'Latent upscale needs models/latent_upscale_models/{LATENT_UPSCALER}; turn Latent upscale off in Advanced to sharpen in one pass')
+        info=comfy_info('/object_info/MinimaxH3LatentUpscaler3D')
+        if info and LATENT_UPSCALER not in comfy_choices(info,'MinimaxH3LatentUpscaler3D','model_name'):raise ValueError(f'Latent upscale needs models/latent_upscale_models/{LATENT_UPSCALER}; turn Latent upscale off in Advanced to sharpen in one pass')
         upscale={'width':W,'height':H,'denoise':options.get('upscale_denoise',.5)};w,h=size(max(480,short//2))
     else:w,h=W,H
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
@@ -497,8 +520,12 @@ app=FastAPI(lifespan=lifespan)
 
 @app.get('/health')
 def health():
-    try:info=api('GET','/object_info',timeout=10);online=True
-    except Exception:info={};online=False
+    if RUNPOD:online=RUNPOD.online();info=RUNPOD.object_info()
+    else:
+        try:info=api('GET','/object_info',timeout=10);online=True
+        except Exception:info={};online=False
+    # A serverless endpoint reports its nodes and models only after its first job: until then assume the full image.
+    unknown=bool(RUNPOD) and not info
     installed=comfy_choices(info,'LoraLoaderModelOnly','lora_name')
     if LOCAL_MODELS:requirements,mode_ready,setup=check_requirements(LOCAL_MODELS,MODELS)
     else:
@@ -506,11 +533,11 @@ def health():
         requirements,mode_ready=[],{key:online for key in MODELS}
         setup={'downloading':False,'base_ready':online,'all_ready':online,'free_gb':None,'persistent_volume':None}
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
-    models={key:{**value,'available':value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed) and mode_ready[key]} for key,value in MODELS.items()}
-    turbos={key:{'label':value['label'],'steps':value['steps'],'available':value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
+    models={key:{**value,'available':unknown or value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed) and mode_ready[key]} for key,value in MODELS.items()}
+    turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
     unets=comfy_choices(info,'UNETLoader','unet_name')
-    bases={key:{'label':value['label'],'available':value['unet'] in unets} for key,value in BASES.items()}
-    return {'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':URL,'training_busy':training_busy(),'tara_ready':'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and 'fibo2_edit_turbo_int8_convrot.safetensors' in unets,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
+    bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
+    return {'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':'TextEncodeFibo2' in info and 'fibo2_edit_turbo_int8_convrot.safetensors' in unets,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -532,7 +559,8 @@ async def configure_connection(request:Request):
         if missing:raise HTTPException(400,'ComfyUI responds, but required Henge nodes are missing: '+', '.join(missing))
     except HTTPException:raise
     except (requests.RequestException,ValueError):raise HTTPException(400,'Could not connect to the ComfyUI API at this address')
-    tmp=SETTINGS.with_suffix('.tmp');tmp.write_text(json.dumps({'comfy_url':target},indent=2));tmp.replace(SETTINGS);URL=target;FILES.url=target
+    tmp=SETTINGS.with_suffix('.tmp');tmp.write_text(json.dumps({'comfy_url':target},indent=2));tmp.replace(SETTINGS);URL=target
+    if not RUNPOD:FILES.url=target
     return {'comfy_url':URL,'connected':True,'message':'Connection saved'}
 
 @app.get('/jobs')
@@ -609,7 +637,8 @@ def cancel(jid:str):
     job=load(jid)
     if job['status'] in TERMINAL:return public(job)
     pid=job.get('prompt_id');save(job,status='cancelled',stage='cancelled',message='Cancelled by user')
-    if pid:
+    if pid and RUNPOD:RUNPOD.cancel(pid)
+    elif pid:
         queue=api('GET','/queue');running=queue.get('queue_running',[])
         if any(item[1]==pid for item in running):api('POST','/interrupt',json={})
         api('POST','/queue',json={'delete':[pid]})

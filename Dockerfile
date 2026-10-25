@@ -7,6 +7,21 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+# UI-only image (ghcr.io/<owner>/henge-ui): bridge + web UI without GPU, torch or ComfyUI. The bridge drives a
+# remote ComfyUI (COMFY_BASE_URL) or a RunPod Serverless endpoint (HENGE_BACKEND=runpod).
+FROM python:3.12-slim-bookworm AS ui
+ENV PYTHONUNBUFFERED=1 NODE_ENV=production HENGE_ROLE=ui HENGE_BACKEND_URL=http://127.0.0.1:8766 HENGE_DATA_DIR=/state/jobs \
+    PIP_ROOT_USER_ACTION=ignore
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+COPY --from=web /usr/local/bin/node /usr/local/bin/node
+COPY --from=web /app /app
+RUN python -m pip install --no-cache-dir -r /app/backend/requirements.txt
+WORKDIR /app
+EXPOSE 8188
+VOLUME /state
+ENTRYPOINT ["python", "/app/docker/entrypoint.py"]
+
+# Full image (default target): one pod with ComfyUI + bridge + UI, or a serverless worker with HENGE_ROLE=worker.
 FROM ${PYTORCH_IMAGE} AS runtime
 ARG COMFY_REF=d52a7a5ef60b36062f7c3c69bd774f4c98b56eb0
 ARG BFS_REF=1360d01fbfb57fe69cd7c54bc0789c4847826b5b
@@ -28,7 +43,7 @@ COPY --from=web /usr/local/bin/node /usr/local/bin/node
 COPY --from=web /app /app
 # Pin the base image's torch stack so custom-node requirements cannot swap the CUDA build.
 RUN python -m pip freeze | grep -iE '^(torch|torchvision|torchaudio)==' > /tmp/torch-constraints.txt || true; cat /tmp/torch-constraints.txt \
- && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt \
+ && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt runpod==1.12.0 \
  && ln -s /app/backend/comfy_nodes/henge /opt/ComfyUI/custom_nodes/henge \
  && python -c "import torch;print('torch',torch.__version__,'cuda',torch.version.cuda)"
 # Optional TARA one-pass Kitchen kernel: source pinned here, the per-GPU binary is installed at boot.

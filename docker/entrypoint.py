@@ -1,5 +1,9 @@
 """Fetch configured weights, then supervise ComfyUI, bridge and web UI.
 
+HENGE_ROLE picks what runs: `all` (default: ComfyUI + bridge + UI, one pod), `worker` (ComfyUI + the RunPod
+Serverless handler; models from the network volume at /runpod-volume) or `ui` (bridge + UI only, no GPU; the
+bridge drives a remote ComfyUI or, with HENGE_BACKEND=runpod, a serverless endpoint).
+
 On RunPod (or any host that mounts a volume at /workspace), models, inputs,
 outputs and job state live on that volume so pods can be stopped, recreated or
 moved to another GPU without re-downloading ~60 GB of weights.
@@ -14,10 +18,10 @@ def shutdown(*_):
     for p in reversed(processes):
         if p.poll() is None:p.terminate()
 
-def link_to_workspace(workspace):
+def link_to_workspace(workspace,names=('models','input','output')):
     """Point ComfyUI's models/input/output and the job state at the volume."""
     root=workspace/'henge';root.mkdir(parents=True,exist_ok=True)
-    for name in ['models','input','output']:
+    for name in names:
         target=root/name;source=COMFY/name;target.mkdir(parents=True,exist_ok=True)
         if source.is_symlink():source.unlink()
         elif source.is_dir():
@@ -44,24 +48,52 @@ def start_sshd():
     subprocess.Popen(['/usr/sbin/sshd'])
     print('[henge] sshd started',flush=True)
 
+def supervise(commands):
+    for command,cwd in commands:processes.append(subprocess.Popen(command,cwd=cwd))
+    try:
+        while not stopping:
+            if any(p.poll() is not None for p in processes):raise RuntimeError('A Henge service stopped; inspect the container logs')
+            time.sleep(1)
+    finally:
+        shutdown()
+        for p in processes:
+            try:p.wait(timeout=20)
+            except subprocess.TimeoutExpired:p.kill()
+
+def comfy_command(host,args):
+    return ([sys.executable,'main.py','--listen',host,'--port','8189','--preview-method','taesd',*args,'--disable-all-custom-nodes','--whitelist-custom-nodes','henge','bfsnodes','h3_latent_upscaler'],COMFY)
+
+def install_tara_kernel():
+    # TARA's one-pass Kitchen kernel depends on the GPU (SM80...SM120), so it is installed at boot.
+    if os.environ.get('HENGE_TARA_KERNEL','1')!='0':
+        if subprocess.run([sys.executable,str(APP/'scripts/install_tara_kernel.py')],cwd='/tmp').returncode:
+            print('[henge] WARNING: TARA kernel not installed; TARA uses the frame-wise fallback',flush=True)
+
 def main():
     signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
+    role=os.environ.get('HENGE_ROLE','all')
+    web=[([sys.executable,'-m','uvicorn','server:app','--host','127.0.0.1','--port','8766'],APP/'backend'),(['node','node_modules/next/dist/bin/next','start','--hostname','0.0.0.0','--port','8188'],APP)]
+    if role=='ui':
+        print('[henge] UI only: bridge + web UI, backend',os.environ.get('HENGE_BACKEND','comfy'),flush=True)
+        return supervise(web)
+    if role=='worker':
+        # Serverless worker: models come from the network volume; inputs/outputs stay on the worker's own disk.
+        volume=Path(os.environ.get('HENGE_WORKSPACE','/runpod-volume'))
+        if not (volume/'henge/models').is_dir():print(f'[henge] WARNING: no models at {volume}/henge/models; populate the network volume first',flush=True)
+        link_to_workspace(volume,('models',));install_tara_kernel()
+        return supervise([comfy_command('127.0.0.1',shlex.split(os.environ.get('HENGE_COMFY_ARGS',''))),([sys.executable,str(APP/'docker/worker_handler.py')],APP)])
     workspace=Path(os.environ.get('HENGE_WORKSPACE','/workspace'))
     if workspace.is_dir() and os.environ.get('HENGE_WORKSPACE')!='off':link_to_workspace(workspace)
     if not (workspace.is_dir() and workspace.is_mount()):
         print(f'[henge] WARNING: {workspace} is not a mounted volume. Models (~65 GB) will go to the container disk and are lost when the pod is reset. Attach a volume or network volume at {workspace}.',flush=True)
-    start_sshd()
-    # TARA's one-pass Kitchen kernel depends on the pod's GPU (SM80...SM120), so it is installed at boot.
-    if os.environ.get('HENGE_TARA_KERNEL','1')!='0':
-        if subprocess.run([sys.executable,str(APP/'scripts/install_tara_kernel.py')],cwd='/tmp').returncode:
-            print('[henge] WARNING: TARA kernel not installed; TARA uses the frame-wise fallback',flush=True)
+    start_sshd();install_tara_kernel()
     # Services start right away; models download in the background and the UI shows
     # a setup screen with live progress until every required file is installed.
     # A failed model (e.g. a private LoRA without HF_TOKEN) never restarts the pod.
     downloader=subprocess.Popen([sys.executable,str(APP/'scripts/download_models.py')],cwd=APP)
     comfy_host='0.0.0.0' if os.environ.get('HENGE_EXPOSE_COMFY')=='1' else '127.0.0.1'
     comfy_args=shlex.split(os.environ.get('HENGE_COMFY_ARGS','--lowvram'))
-    commands=[([sys.executable,'main.py','--listen',comfy_host,'--port','8189','--preview-method','taesd',*comfy_args,'--disable-all-custom-nodes','--whitelist-custom-nodes','henge','bfsnodes','h3_latent_upscaler'],COMFY),([sys.executable,'-m','uvicorn','server:app','--host','127.0.0.1','--port','8766'],APP/'backend'),(['node','node_modules/next/dist/bin/next','start','--hostname','0.0.0.0','--port','8188'],APP)]
+    commands=[comfy_command(comfy_host,comfy_args),*web]
     for command,cwd in commands:processes.append(subprocess.Popen(command,cwd=cwd))
     try:
         reported=False

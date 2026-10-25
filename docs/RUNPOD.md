@@ -49,7 +49,7 @@ Environment variables (all optional):
 | `HF_TOKEN` | — | **Required for the motion LoRAs** (private for now). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
-| `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. On 80 GB GPUs use `--normalvram` at most: `--highvram` keeps the 32B text encoder and the VLM on the GPU next to H3 and runs out of memory |
+| `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |
 | `HENGE_EXPOSE_COMFY` | — | `1` makes ComfyUI listen on `0.0.0.0:8189` for debugging |
 | `PUBLIC_KEY` | — | RunPod injects your SSH key; enables `sshd` |
 
@@ -104,3 +104,20 @@ Add `omniref` to `HENGE_MODEL_PROFILES` to download
 (`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; use a 150 GB volume). Pick it in
 **Advanced → Base model**; it is already distilled to 8 steps, so Turbo LoRA switches to
 **None**. The task LoRAs (Character Swap, Head Swap, LMS, Motion) still load on top.
+
+## Serverless (UI on your PC, GPU only while a job runs)
+
+Instead of a pod that stays on, the UI can drive a RunPod Serverless endpoint: each job stage (plan,
+reference prep, every shot) becomes one request, a worker starts when needed and scales back to zero.
+
+1. **Models on a network volume** (once): `scripts/runpod_volume.sh` creates a volume
+   (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 150) and fills it with a temporary pod from the
+   Henge template, deleted when every model is installed. Workers read it at `/runpod-volume/henge/models`.
+2. **Endpoint**: `VOLUME_ID=<id> scripts/runpod_serverless.sh` creates the worker template (the full image
+   with `HENGE_ROLE=worker`) and the endpoint (0 to 2 workers, 80-96 GB GPUs, idle timeout 120 s).
+3. **UI**: `docker run -p 8188:8188 -v henge-state:/state -e HENGE_BACKEND=runpod -e RUNPOD_ENDPOINT_ID=<id>
+   -e RUNPOD_API_KEY=<key> ghcr.io/alisson-anjos/henge-ui:runpod-template`, then open http://localhost:8188.
+
+The first request after an idle period waits for a cold start (ComfyUI start + model load from the volume).
+Media travels inside the requests, which RunPod caps at about 10 MB: keep clips short / low resolution for
+now. Model availability is learned from the first finished request; until then every mode shows as available.
