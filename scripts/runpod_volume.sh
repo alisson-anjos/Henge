@@ -11,15 +11,24 @@ set -euo pipefail
 DATACENTER=${DATACENTER:-EU-RO-1}
 VOLUME_GB=${VOLUME_GB:-150}
 TEMPLATE_ID=${TEMPLATE_ID:-mnxax277c8}
-FILL_GPU=${FILL_GPU:-NVIDIA A100-SXM4-80GB}
+# Any GPU with a CUDA 13 driver will do (it only downloads); the first one in stock is used.
+FILL_GPUS=${FILL_GPUS:-NVIDIA RTX PRO 6000 Blackwell Server Edition,NVIDIA A100-SXM4-80GB,NVIDIA L40S,NVIDIA RTX A6000,NVIDIA GeForce RTX 5090,NVIDIA GeForce RTX 4090}
 id() { python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])'; }
 
 if [ -z "${VOLUME_ID:-}" ]; then
   VOLUME_ID=$(runpodctl network-volume create --name henge-models --data-center-id "$DATACENTER" --size "$VOLUME_GB" | id)
   echo "network volume $VOLUME_ID ($VOLUME_GB GB, $DATACENTER)"
 fi
-POD=$(runpodctl pod create --template-id "$TEMPLATE_ID" --network-volume-id "$VOLUME_ID" --data-center-ids "$DATACENTER" \
-  --gpu-id "$FILL_GPU" --name henge-fill-volume | id)
+POD=
+IFS=, read -ra gpus <<< "$FILL_GPUS"
+for gpu in "${gpus[@]}"; do
+  if out=$(runpodctl pod create --template-id "$TEMPLATE_ID" --network-volume-id "$VOLUME_ID" --data-center-ids "$DATACENTER" \
+      --gpu-id "$gpu" --min-cuda-version 13.0 --name henge-fill-volume 2>&1) && POD=$(printf '%s' "$out" | id 2>/dev/null); then
+    echo "fill pod on $gpu";break
+  fi
+  echo "no $gpu in $DATACENTER: ${out:0:160}"
+done
+[ -n "$POD" ] || { echo "no GPU available in $DATACENTER for the fill pod; retry later or set FILL_GPUS"; exit 1; }
 echo "fill pod $POD; following https://$POD-8188.proxy.runpod.net"
 trap 'echo "fill pod $POD left running; delete it with: runpodctl pod delete $POD"' ERR INT
 while :; do
