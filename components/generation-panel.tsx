@@ -19,6 +19,7 @@ const relativeTime = (created: number, lang: Language) => {
 };
 const MASK_DEFAULTS = {threshold: .5, shape: 'box', padding: .15, expand: 16, fill_holes: true, temporal_expand: 2, blockify: 0, invert: false, strength: 1};
 const SETTINGS_KEY = 'henge-generation-settings';
+const SELECTED_KEY = 'henge-selected-job';
 /** Generation options (as sent to the bridge, exported or stored with a job) -> panel control values. */
 function normalizeSettings(o: Record<string, unknown>) {
   const num = (v: unknown, lo: number, hi: number, fallback: number, round = false) => typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, round ? Math.round(v) : v)) : fallback;
@@ -45,7 +46,7 @@ function normalizeSettings(o: Record<string, unknown>) {
     attention: o.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention',
   };
 }
-export default function GenerationPanel({initialSettings = {}, onSelectJob, onShareSettings, onImportSettings, mode, request, video, pictures, canSubmit, lang, onResult, requestedJobId}: {initialSettings?: Record<string, unknown>; onSelectJob?: (request: DirectionRequest) => void; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null}) {
+export default function GenerationPanel({initialSettings = {}, onSelectJob, onShareSettings, onImportSettings, mode, request, video, pictures, canSubmit, lang, onResult, requestedJobId}: {initialSettings?: Record<string, unknown>; onSelectJob?: (request: DirectionRequest, jobId: string) => void; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null}) {
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -108,7 +109,7 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
     try {
       const detail = await readJson(await fetch(`/api/backend/jobs/${id}`));
       if (detail.options && typeof detail.options === 'object') applySettings(detail.options);
-      if (detail.request && typeof detail.request === 'object') onSelectJob?.(detail.request);
+      if (detail.request && typeof detail.request === 'object') onSelectJob?.(detail.request, id);
     } catch {/* the job stays selected; its settings just are not restored */}
   }
   // Settings survive reloads; an imported configuration (initialSettings) wins over the stored one.
@@ -120,16 +121,16 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
     setRestored(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => {setShowReferenceComparison(false);}, [selected]);
+  useEffect(() => {setShowReferenceComparison(false); if (selected) try {localStorage.setItem(SELECTED_KEY, selected);} catch {/* private mode */}}, [selected]);
   useEffect(() => {
-    let disposed = false, timer: ReturnType<typeof setTimeout>;
+    let disposed = false, first = true, timer: ReturnType<typeof setTimeout>;
     const controller = new AbortController();
     async function refresh() {
       try {
         const [h, list] = await Promise.all([fetch('/api/backend/health', {signal: controller.signal}), fetch('/api/backend/jobs', {signal: controller.signal})]);
         if (!h.ok || !list.ok) throw Error();
         const state: Health = await h.json(), rows: GenerationJob[] = await list.json();
-        if (!disposed) {setHealth(state); setComfyUrl(current => current || state.comfy_url || 'http://127.0.0.1:8189'); setJobs(rows); setSelected(current => current || rows[0]?.id || null);}
+        if (!disposed) {setHealth(state); setComfyUrl(current => current || state.comfy_url || 'http://127.0.0.1:8189'); setJobs(rows); if (first) {first = false; let stored: string | null = null; try {stored = localStorage.getItem(SELECTED_KEY);} catch {/* private mode */} const initial = rows.find(r => r.id === stored)?.id || rows[0]?.id; if (initial) selectJob(initial);}}
       } catch {if (!disposed) setHealth(null);}
       if (!disposed) timer = setTimeout(refresh, 3000);
     }

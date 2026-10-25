@@ -665,6 +665,14 @@ def file(jid:str,name:str):
     if not p.is_file():raise HTTPException(404,'Output not yet available')
     return FileResponse(p,filename=name,media_type='image/jpeg' if p.suffix=='.jpg' else 'image/png' if p.suffix=='.png' else 'video/mp4')
 
+@app.get('/jobs/{jid}/source/{name}')
+def source(jid:str,name:str):
+    """The guide video and pictures a job was submitted with, so a reloaded page can show the job again."""
+    assets=load(jid).get('assets') or {};slot=re.fullmatch(r'picture_(\d+)',name)
+    rel=assets.get('video') if name=='video' else assets.get('pictures',{}).get(slot[1]) if slot else None
+    if not rel or not (INPUT/rel).is_file():raise HTTPException(404,'Source media not available')
+    return FileResponse(INPUT/rel,media_type='video/mp4' if name=='video' else 'image/png')
+
 @app.get('/jobs/{jid}/comparison-with-refs')
 def comparison_with_refs(jid:str):
     job=load(jid);work=job_path(jid)

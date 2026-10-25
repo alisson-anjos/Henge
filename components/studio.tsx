@@ -274,6 +274,25 @@ export default function Studio() {
     setKeepAudio(r.output_audio?.keep_source !== false);
     if (r.processing) {setShotSeconds(r.processing.requested_seconds_per_shot || 4.5); setTimelineFps(r.processing.timeline_fps || 24); setContextFrames(r.processing.context_frames || 22);}
   }
+  /** A server job brings back its own guide (with the chosen interval) and pictures, e.g. after a page reload. */
+  const restoring = useRef('');
+  async function selectServerJob(r: DirectionRequest, id: string) {
+    applyDirection(r); restoring.current = id;
+    try {
+      const fetchFile = async (name: string, filename: string, type: string, lastModified = Date.now()) => {
+        const response = await fetch(`/api/backend/jobs/${id}/source/${name}`);
+        if (!response.ok) throw Error();
+        return new File([await response.blob()], filename, {type, lastModified});
+      };
+      let lastModified: number | undefined;
+      try {const signature = JSON.parse(r.video?.source_signature || 'null'); if (Array.isArray(signature) && typeof signature[2] === 'number') lastModified = signature[2];} catch {/* no signature */}
+      const [file, files] = await Promise.all([fetchFile('video', r.video?.name || 'guide.mp4', 'video/mp4', lastModified), Promise.all(r.pictures.map(p => fetchFile(`picture_${p.slot}`, p.name || `picture_${p.slot}.png`, 'image/png')))]);
+      if (restoring.current !== id) return;
+      setVideo(current => {if (current) URL.revokeObjectURL(current.url); return {file, url: URL.createObjectURL(file), range: {start: r.video.start_seconds, end: r.video.end_seconds}, duration: r.video.source_duration};});
+      setPictures(current => {current.forEach(p => URL.revokeObjectURL(p.url)); return r.pictures.map((p, i) => ({slot: p.slot, file: files[i], url: URL.createObjectURL(files[i])}));});
+      setExpectedSlots(r.pictures.map(p => p.slot)); setEditingVideo(false); setPickingId(null); setNotice('');
+    } catch {/* media no longer on the server: the settings are still restored */}
+  }
   function reuse(item: SavedDirection) {
     const r = item.request;
     removeVideo(); pictures.forEach(p => URL.revokeObjectURL(p.url)); setPictures([]);
@@ -364,7 +383,7 @@ export default function Studio() {
             <div className="prompt-footer">{!fixedRecipe && <><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></>}<div className="prompt-generation-actions" id="prompt-generation-actions"/></div>
           </section>
           <input hidden ref={importSettingsInput} type="file" accept="application/json,.json" onChange={e => {importSettings(e.target.files?.[0]); e.target.value = '';}}/>
-          <GenerationPanel key={importRevision} initialSettings={importedSettings} onSelectJob={applyDirection} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
+          <GenerationPanel key={importRevision} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
           </section>
         </section>
 
