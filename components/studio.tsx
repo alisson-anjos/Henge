@@ -264,14 +264,20 @@ export default function Studio() {
       setNotice(tr('Settings imported. Attach your video and reference pictures to generate.', 'Configuração importada. Anexe o vídeo e as imagens de referência para gerar.', 'Configuración importada. Añade el vídeo y las imágenes de referencia para generar.'));
     } catch {setNotice(tr('This file is not a valid Henge configuration.', 'Este arquivo não é uma configuração válida do Henge.', 'Este archivo no es una configuración válida de Henge.'));}
   }
+  /** The direction's settings (mode, prompt, quality, shots, audio, subject guidance); media are left as they are. */
+  function applyDirection(r: DirectionRequest) {
+    if (MODES.includes(r.mode)) setMode(r.mode);
+    if (['480p', '720p', '1080p', '1440p'].includes(r.quality)) setQuality(r.quality);
+    setSubjects(readSubjectBindings(r.subject_guidance?.bindings)); setGuideRepresentation(r.subject_guidance?.representation === '2d' ? '2d' : r.subject_guidance?.representation === '3d' ? '3d' : 'original'); setGuideSignature(r.video?.source_signature || '');
+    if (typeof r.project === 'string') setProject(r.project);
+    setPrompt(r.editor_prompt ?? r.prompt ?? ''); setAudioConditioning(r.audio_conditioning?.enabled === true);
+    setKeepAudio(r.output_audio?.keep_source !== false);
+    if (r.processing) {setShotSeconds(r.processing.requested_seconds_per_shot || 4.5); setTimelineFps(r.processing.timeline_fps || 24); setContextFrames(r.processing.context_frames || 22);}
+  }
   function reuse(item: SavedDirection) {
     const r = item.request;
     removeVideo(); pictures.forEach(p => URL.revokeObjectURL(p.url)); setPictures([]);
-    setExpectedSlots(r.pictures.map(p => p.slot)); setMode(r.mode); setQuality(r.quality);
-    setSubjects(readSubjectBindings(r.subject_guidance?.bindings)); setGuideRepresentation(r.subject_guidance?.representation === '2d' ? '2d' : r.subject_guidance?.representation === '3d' ? '3d' : 'original'); setGuideSignature(r.video.source_signature || '');
-    setProject(r.project); setPrompt(r.editor_prompt); setAudioConditioning(r.audio_conditioning.enabled);
-    setKeepAudio(r.output_audio.keep_source); setShotSeconds(r.processing.requested_seconds_per_shot);
-    setTimelineFps(r.processing.timeline_fps); setContextFrames(r.processing.context_frames || 22);
+    setExpectedSlots(r.pictures.map(p => p.slot)); applyDirection(r);
     setView('studio'); setAuto(false); setActiveTemplate(null);
     setNotice(tr('Settings restored. Reattach the guide and reference pictures to generate.', 'Ajustes restaurados. Anexe novamente o guia e as referências para gerar.', 'Ajustes restaurados. Vuelve a adjuntar la guía y las referencias para generar.'));
   }
@@ -303,7 +309,8 @@ export default function Studio() {
       <div className="topbar-end"><div className="language-switch" role="group" aria-label="Language">{(['en', 'pt', 'es'] as Language[]).map(l => <button key={l} className={'mono ' + (lang === l ? 'active' : '')} aria-pressed={lang === l} onClick={() => setLang(l)}>{l.toUpperCase()}</button>)}</div><a className="source-link ghost" href="https://github.com/alisson-anjos/Henge" target="_blank" rel="noreferrer"><Icon name="github" size={16}/>{t.openSource}</a></div>
     </header>
 
-    {view === 'studio' && <>
+    {/* Kept mounted on other tabs so the generation panel keeps its settings and selected job. */}
+    <div className="studio-view" hidden={view !== 'studio'}>
       <main className="workspace">
         <aside className="controls">
           <div className="create-heading rise"><span className="eyebrow accent">{t.create}</span><h1>{t[`h1a_${mode}`]}<br/><span>{t[`h1b_${mode}`]}</span></h1></div>
@@ -357,7 +364,7 @@ export default function Studio() {
             <div className="prompt-footer">{!fixedRecipe && <><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></>}<div className="prompt-generation-actions" id="prompt-generation-actions"/></div>
           </section>
           <input hidden ref={importSettingsInput} type="file" accept="application/json,.json" onChange={e => {importSettings(e.target.files?.[0]); e.target.value = '';}}/>
-          <GenerationPanel key={importRevision} initialSettings={importedSettings} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
+          <GenerationPanel key={importRevision} initialSettings={importedSettings} onSelectJob={applyDirection} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
           </section>
         </section>
 
@@ -368,7 +375,7 @@ export default function Studio() {
       </main>
 
 
-    </>}
+    </div>
 
     {view === 'history' && <main className="history-page"><div className="section-top"><div><span className="eyebrow accent">{t.history} · {history.length}</span><h1>{historyTitle}</h1><p>{tr('Your exported prompts and settings, saved on this device.', 'Seus prompts e ajustes exportados, salvos neste dispositivo.', 'Tus prompts y ajustes exportados, guardados en este dispositivo.')}</p></div><div className="history-tools"><div className="filter-chips">{(['all', ...MODES] as const).map(key => <button key={key} className={historyFilter === key ? 'active' : ''} aria-pressed={historyFilter === key} onClick={() => setHistoryFilter(key)}>{key === 'all' ? t.all : modeName(key)}</button>)}</div><button className="quiet-button" disabled={!history.some(h => h.rating)} onClick={exportFeedback}><Icon name="download" size={15}/>{tr('Export feedback', 'Exportar avaliações', 'Exportar valoraciones')}<span className="mono muted">{history.filter(h => h.rating).length}</span></button><button className="quiet-button" onClick={() => setView('studio')}><Icon name="plus" size={15}/>{tr('New direction', 'Nova direção', 'Nueva dirección')}</button></div></div>
       <div className="history-layout"><div className="history-grid">{filteredHistory.map(h => <button key={h.id} className={'history-card surface ' + (selected?.id === h.id ? 'selected' : '')} style={{'--item-accent': MODE_STYLE[h.request.mode].accent} as CSSProperties} onClick={() => setSelectedId(h.id)}><div className={'history-art ' + (h.request.mode === 'swap' ? 'th-b' : 'th-a')}>{h.thumbnail ? <img src={h.thumbnail} alt={h.request.video.name}/> : <Icon name="film" size={30}/>}<span className={'badge mono mode-badge ' + h.request.mode}>{modeName(h.request.mode)}</span><span className="badge duration-badge mono nc">{h.request.video.duration.toFixed(1)}s</span><span className="badge draft-badge mono">{tr('Direction', 'Direção', 'Dirección')}</span></div><div className="history-caption"><strong>{h.request.project}</strong><span className="mono nc muted">{dateLabel(h.created)} · {h.request.quality}</span><span className="stars" aria-label={`${h.rating}/5`}>{'★'.repeat(h.rating)}<span>{'☆'.repeat(5 - h.rating)}</span></span></div></button>)}{!filteredHistory.length && <div className="history-empty"><span className="empty-emblem"><Icon name="clock" size={30}/></span><h2>{history.length ? tr('No directions in this mode.', 'Nenhuma direção neste modo.', 'No hay direcciones en este modo.') : tr('Your next idea starts here.', 'Sua próxima ideia começa aqui.', 'Tu próxima idea empieza aquí.')}</h2><p>{tr('Export a direction from the Studio to save its prompt, settings and source preview.', 'Exporte uma direção no Estúdio para guardar o prompt, os ajustes e a prévia do guia.', 'Exporta una dirección del Estudio para guardar el prompt, los ajustes y la vista previa de la guía.')}</p><button className="primary" onClick={() => setView('studio')}><Icon name="plus" size={16}/>{tr('Open studio', 'Abrir estúdio', 'Abrir estudio')}</button></div>}</div>

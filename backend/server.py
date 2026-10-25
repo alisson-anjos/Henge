@@ -58,7 +58,7 @@ def save(job,**patch):
 def public(job):
     out={k:v for k,v in job.items() if k not in ['assets','request']}
     request=job.get('request') or {}
-    out.setdefault('mode',request.get('mode'));out.setdefault('project',request.get('project'))
+    out.setdefault('mode',request.get('mode'));out.setdefault('project',request.get('project'));out.setdefault('quality',request.get('quality'))
     if isinstance(request.get('video'),dict):out['duration']=request['video'].get('duration')
     return out
 
@@ -596,7 +596,9 @@ async def create_job(request:Request):
     except (ValueError,TypeError,KeyError,json.JSONDecodeError) as e:raise HTTPException(400,str(e))
 
 @app.get('/jobs/{jid}')
-def get_job(jid:str):return public(load(jid))
+def get_job(jid:str):
+    # The direction comes along so the UI can restore every setting of a selected job.
+    job=load(jid);return {**public(job),'request':job.get('request')}
 
 @app.post('/jobs/{jid}/preparation')
 async def preparation(jid:str,request:Request):

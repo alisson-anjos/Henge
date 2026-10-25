@@ -426,3 +426,7 @@ img{display:block;max-width:100%}
 .job-history-main small,.job-history time{font-size:10px;color:var(--muted)}
 .job-dot{width:8px;height:8px;border-radius:50%;flex:none;background:#7a7a86}
 .job-dot.completed{background:#32B45A}.job-dot.failed{background:#DC463C}.job-dot.running,.job-dot.queued_plan,.job-dot.queued_render{background:var(--accent)}.job-dot.awaiting_approval{background:#EBCD23}
+.studio-view{display:contents}.studio-view[hidden]{display:none}
+.job-history-title{display:flex;align-items:center;gap:8px;min-width:0}
+.job-mode{flex:none;font-size:9px;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:999px;border:1px solid #36383b;color:var(--muted)}
+.job-mode.swap{color:#D6FF4B;border-color:#D6FF4B55}.job-mode.motion{color:#AA8BFF;border-color:#AA8BFF55}.job-mode.headswap{color:#FF9F6B;border-color:#FF9F6B55}.job-mode.sharpness{color:#6BE4FF;border-color:#6BE4FF55}

@@ -9,7 +9,7 @@ import {readJson} from '../lib/http';
 import {jobStatusLabel,jobStageLabel} from '../lib/job-status';
 
 type Plan = {summary: string; prompt: string; source_kind: string; target_kind: string; use_fibo: boolean; representation: string; preparation_reason?: string; preparation_recommended?: boolean; warnings: string[]; picture_roles: {slot: number; role: string; description: string}[]};
-export type GenerationJob = {id: string; project: string; mode?: string; duration?: number; status: string; stage: string; message?: string; error?: string; progress: number; segment?: number; total_segments?: number; plan?: Plan; sampling_preview_url?: string; result_url?: string; comparison_url?: string; guide_preview_url?: string; fibo_preview_url?: string; created: number; step?: number; step_total?: number; eta_seconds?: number | null; prepared_reference_urls?: string[]; mask_preview_url?: string; seconds_per_step?: number | null};
+export type GenerationJob = {id: string; project: string; mode?: string; duration?: number; quality?: string; options?: Record<string, unknown>; status: string; stage: string; message?: string; error?: string; progress: number; segment?: number; total_segments?: number; plan?: Plan; sampling_preview_url?: string; result_url?: string; comparison_url?: string; guide_preview_url?: string; fibo_preview_url?: string; created: number; step?: number; step_total?: number; eta_seconds?: number | null; prepared_reference_urls?: string[]; mask_preview_url?: string; seconds_per_step?: number | null};
 type Health = {comfy_url?: string; online: boolean; training_busy: boolean; tara_ready?: boolean; fibo_ready: boolean; models: Record<string, {label: string; task?: string; available?: boolean}>; turbos?: Record<string, {label: string; steps: number; available: boolean}>; bases?: Record<string, {label: string; available: boolean}>};
 const relativeTime = (created: number, lang: Language) => {
   const minutes = Math.round((Date.now() / 1000 - created) / 60);
@@ -17,7 +17,35 @@ const relativeTime = (created: number, lang: Language) => {
   if (minutes < 60 * 24) return new Intl.RelativeTimeFormat(lang, {numeric: 'auto'}).format(-Math.round(minutes / 60), 'hour');
   return new Date(created * 1000).toLocaleDateString(lang);
 };
-export default function GenerationPanel({initialSettings = {}, onShareSettings, onImportSettings, mode, request, video, pictures, canSubmit, lang, onResult, requestedJobId}: {initialSettings?: Record<string, unknown>; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null}) {
+const MASK_DEFAULTS = {threshold: .5, shape: 'box', padding: .15, expand: 16, fill_holes: true, temporal_expand: 2, blockify: 0, invert: false, strength: 1};
+const SETTINGS_KEY = 'henge-generation-settings';
+/** Generation options (as sent to the bridge, exported or stored with a job) -> panel control values. */
+function normalizeSettings(o: Record<string, unknown>) {
+  const num = (v: unknown, lo: number, hi: number, fallback: number, round = false) => typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, round ? Math.round(v) : v)) : fallback;
+  return {
+    motionModel: typeof o.profile === 'string' && o.profile.startsWith('motion') ? o.profile : 'motion',
+    fibo: o.fibo === 'off' ? 'off' : 'auto',
+    conditioningMode: o.conditioning_mode === 'tara' ? 'tara' : 'guide',
+    referenceScale: num(o.reference_scale, .25, 1, 1),
+    seed: num(o.seed, 0, 4294967295, 42, true),
+    steps: num(o.steps, 1, 60, 8, true),
+    clipFps: typeof o.clip_fps === 'number' && [1, 2, 4, 8].includes(o.clip_fps) ? o.clip_fps : 2,
+    detectCuts: o.detect_cuts !== false,
+    enhancePrompt: o.enhance_prompt !== false,
+    autoApprove: o.auto_approve === true,
+    mask: {...MASK_DEFAULTS, ...(typeof o.mask === 'object' && o.mask ? o.mask as Partial<typeof MASK_DEFAULTS> : {})},
+    cfg: num(o.cfg, 1, 12, 1),
+    structureCfg: num(o.structure_cfg, 1, 3, 1),
+    base: o.base === 'omniref' ? 'omniref' : 'h3',
+    loraStrength: num(o.lora_strength, 0, 2, 1),
+    latentUpscale: typeof o.latent_upscale === 'boolean' ? o.latent_upscale : true,
+    upscaleDenoise: num(o.upscale_denoise, .1, 1, .5),
+    turbo: typeof o.turbo === 'string' ? o.turbo : 'dmd8',
+    prepareReferences: o.prepare_references !== false,
+    attention: o.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention',
+  };
+}
+export default function GenerationPanel({initialSettings = {}, onSelectJob, onShareSettings, onImportSettings, mode, request, video, pictures, canSubmit, lang, onResult, requestedJobId}: {initialSettings?: Record<string, unknown>; onSelectJob?: (request: DirectionRequest) => void; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null}) {
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -30,34 +58,68 @@ export default function GenerationPanel({initialSettings = {}, onShareSettings, 
   const [settingsTarget, setSettingsTarget] = useState<HTMLElement | null>(null);
   const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
   useEffect(() => {setSettingsTarget(document.getElementById('generation-settings')); setActionsTarget(document.getElementById('prompt-generation-actions'));}, []);
-  const [motionModel, setMotionModel] = useState(typeof initialSettings.profile === 'string' && initialSettings.profile.startsWith('motion') ? initialSettings.profile : 'motion');
+  const [initial] = useState(() => normalizeSettings(initialSettings));
+  const [motionModel, setMotionModel] = useState(initial.motionModel);
   const profile = mode === 'swap' ? 'character' : mode === 'motion' ? motionModel : mode;
-  const [fibo, setFibo] = useState(initialSettings.fibo === 'off' ? 'off' : 'auto');
-  const [conditioningMode, setConditioningMode] = useState(initialSettings.conditioning_mode === 'tara' ? 'tara' : 'guide');
+  const [fibo, setFibo] = useState(initial.fibo);
+  const [conditioningMode, setConditioningMode] = useState(initial.conditioningMode);
   const fixedRecipe = isFixedRecipe(mode);
   const activeConditioning = conditioningMode;
-  const [referenceScale, setReferenceScale] = useState(typeof initialSettings.reference_scale === 'number' ? Math.min(1,Math.max(.25,initialSettings.reference_scale)) : 1);
-  const [seed, setSeed] = useState(typeof initialSettings.seed === 'number' ? Math.min(4294967295,Math.max(0,Math.round(initialSettings.seed))) : 42);
-  const [steps, setSteps] = useState(typeof initialSettings.steps === 'number' ? Math.min(60,Math.max(1,Math.round(initialSettings.steps))) : 8);
-  const [clipFps, setClipFps] = useState(typeof initialSettings.clip_fps === 'number' && [1,2,4,8].includes(initialSettings.clip_fps) ? initialSettings.clip_fps : 2);
-  const [detectCuts, setDetectCuts] = useState(initialSettings.detect_cuts !== false);
-  const [enhancePrompt, setEnhancePrompt] = useState(initialSettings.enhance_prompt !== false);
-  const [autoApprove, setAutoApprove] = useState(initialSettings.auto_approve === true);
-  const MASK_DEFAULTS = {threshold: .5, shape: 'box', padding: .15, expand: 16, fill_holes: true, temporal_expand: 2, blockify: 0, invert: false, strength: 1};
-  const [maskSettings, setMaskSettings] = useState<typeof MASK_DEFAULTS>({...MASK_DEFAULTS, ...(typeof initialSettings.mask === 'object' && initialSettings.mask ? initialSettings.mask as Partial<typeof MASK_DEFAULTS> : {})});
+  const [referenceScale, setReferenceScale] = useState(initial.referenceScale);
+  const [seed, setSeed] = useState(initial.seed);
+  const [steps, setSteps] = useState(initial.steps);
+  const [clipFps, setClipFps] = useState(initial.clipFps);
+  const [detectCuts, setDetectCuts] = useState(initial.detectCuts);
+  const [enhancePrompt, setEnhancePrompt] = useState(initial.enhancePrompt);
+  const [autoApprove, setAutoApprove] = useState(initial.autoApprove);
+  const [maskSettings, setMaskSettings] = useState<typeof MASK_DEFAULTS>(initial.mask);
   const usesMask = request?.subject_guidance?.representation === 'mask';
   const setMask = (patch: Partial<typeof MASK_DEFAULTS>) => setMaskSettings(current => ({...current, ...patch}));
-  const [cfg, setCfg] = useState(typeof initialSettings.cfg === 'number' ? Math.min(12, Math.max(1, initialSettings.cfg)) : 1);
-  const [structureCfg, setStructureCfg] = useState(typeof initialSettings.structure_cfg === 'number' ? Math.min(3, Math.max(1, initialSettings.structure_cfg)) : 1);
-  const [base, setBase] = useState(initialSettings.base === 'omniref' ? 'omniref' : 'h3');
-  const [loraStrength, setLoraStrength] = useState(typeof initialSettings.lora_strength === 'number' ? Math.min(2, Math.max(0, initialSettings.lora_strength)) : 1);
-  const [latentUpscale, setLatentUpscale] = useState(typeof initialSettings.latent_upscale === 'boolean' ? initialSettings.latent_upscale : true);
-  const [upscaleDenoise, setUpscaleDenoise] = useState(typeof initialSettings.upscale_denoise === 'number' ? Math.min(1, Math.max(.1, initialSettings.upscale_denoise)) : .5);
-  const [turbo, setTurbo] = useState(typeof initialSettings.turbo === 'string' ? initialSettings.turbo : 'dmd8');
-  const [prepareReferences, setPrepareReferences] = useState(initialSettings.prepare_references !== false);
-  const [attention, setAttention] = useState(initialSettings.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention');
+  const [cfg, setCfg] = useState(initial.cfg);
+  const [structureCfg, setStructureCfg] = useState(initial.structureCfg);
+  const [base, setBase] = useState(initial.base);
+  const [loraStrength, setLoraStrength] = useState(initial.loraStrength);
+  const [latentUpscale, setLatentUpscale] = useState(initial.latentUpscale);
+  const [upscaleDenoise, setUpscaleDenoise] = useState(initial.upscaleDenoise);
+  const [turbo, setTurbo] = useState(initial.turbo);
+  const [prepareReferences, setPrepareReferences] = useState(initial.prepareReferences);
+  const [attention, setAttention] = useState(initial.attention);
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const job = jobs.find(j => j.id === selected) || null;
+  function applySettings(options: Record<string, unknown>) {
+    const n = normalizeSettings(options);
+    setMotionModel(n.motionModel); setFibo(n.fibo); setConditioningMode(n.conditioningMode); setReferenceScale(n.referenceScale); setSeed(n.seed); setSteps(n.steps);
+    setClipFps(n.clipFps); setDetectCuts(n.detectCuts); setEnhancePrompt(n.enhancePrompt); setAutoApprove(n.autoApprove); setMaskSettings(n.mask); setCfg(n.cfg);
+    setStructureCfg(n.structureCfg); setBase(n.base); setLoraStrength(n.loraStrength); setLatentUpscale(n.latentUpscale); setUpscaleDenoise(n.upscaleDenoise);
+    setTurbo(n.turbo); setPrepareReferences(n.prepareReferences); setAttention(n.attention);
+  }
+  const modeLabel = (m: string) => ({swap: tr('Character Swap', 'Troca de personagem', 'Cambio de personaje'), motion: tr('Motion Transfer', 'Transferência de movimento', 'Transferencia de movimiento'), headswap: 'Head Swap', sharpness: tr('Sharpness', 'Nitidez', 'Nitidez')} as Record<string, string>)[m] || m;
+  /** Model, turbo, method and sampling of a job, compactly, for the history list. */
+  function jobDetails(j: GenerationJob) {
+    const o = j.options || {};
+    const model = typeof o.profile === 'string' && j.mode === 'motion' ? health?.models[o.profile]?.label || o.profile : '';
+    const turbo = typeof o.turbo === 'string' ? (o.turbo === 'none' ? tr('no turbo', 'sem turbo', 'sin turbo') : o.turbo.toUpperCase()) : '';
+    const method = o.conditioning_mode === 'tara' ? `TARA${typeof o.structure_cfg === 'number' && o.structure_cfg > 1 ? ` ×${o.structure_cfg}` : ''}` : '';
+    return [model, turbo, method, typeof o.steps === 'number' ? `${o.steps} steps` : '', o.base === 'omniref' ? 'OmniRef' : '', j.quality || ''].filter(Boolean) as string[];
+  }
+  /** Selecting a job brings back everything it was made with: generation options here, the direction in the studio. */
+  async function selectJob(id: string) {
+    setSelected(id);
+    try {
+      const detail = await readJson(await fetch(`/api/backend/jobs/${id}`));
+      if (detail.options && typeof detail.options === 'object') applySettings(detail.options);
+      if (detail.request && typeof detail.request === 'object') onSelectJob?.(detail.request);
+    } catch {/* the job stays selected; its settings just are not restored */}
+  }
+  // Settings survive reloads; an imported configuration (initialSettings) wins over the stored one.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    if (!Object.keys(initialSettings).length) {
+      try {const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); if (stored && typeof stored === 'object') applySettings(stored);} catch {/* private mode */}
+    }
+    setRestored(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {setShowReferenceComparison(false);}, [selected]);
   useEffect(() => {
     let disposed = false, timer: ReturnType<typeof setTimeout>;
@@ -166,6 +228,8 @@ export default function GenerationPanel({initialSettings = {}, onShareSettings, 
     </div>{onImportSettings && <button className="quiet-button import-settings-button" onClick={onImportSettings}>{tr('Import settings', 'Importar configuração', 'Importar configuración')}</button>}</details>
   </div>;
   const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise};
+  const storedOptions = JSON.stringify(shareOptions);
+  useEffect(() => {if (restored) try {localStorage.setItem(SETTINGS_KEY, storedOptions);} catch {/* private mode */}}, [restored, storedOptions]);
   const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button>{job && !['completed', 'failed', 'cancelled'].includes(job.status) && <button className="quiet-button" disabled={submitting} onClick={() => action('cancel')}>{tr('Cancel job', 'Cancelar pedido', 'Cancelar pedido')}</button>}<button className="primary" disabled={!health?.online || health?.models[profile]?.available === false || !canSubmit || submitting} onClick={submit}>{submitting ? tr('Sending…', 'Enviando…', 'Enviando…') : tr('Generate', 'Gerar', 'Generar')}</button></>;
   return <section className="generation-panel" aria-label={tr('Generation backend', 'Geração no backend', 'Generación en backend')}>
     {settingsTarget ? createPortal(settings, settingsTarget) : null}
@@ -197,8 +261,8 @@ export default function GenerationPanel({initialSettings = {}, onShareSettings, 
       {job.fibo_preview_url && <img className="fibo-preview" src={job.fibo_preview_url} alt="FIBO prepared appearance and pose reference"/>}{job.guide_preview_url && <details><summary>{tr('Prepared guide', 'Guia preparado', 'Guía preparada')}</summary><video controls src={job.guide_preview_url}/></details>}
     </article>}
     {jobs.length > 0 && <div className="generation-jobs"><div className="label-row"><span className="control-label">{tr('Server history', 'Histórico do servidor', 'Historial del servidor')}</span><small className="muted mono">{jobs.length}</small></div>
-      <ul className="job-history" role="listbox" aria-label={tr('Server history', 'Histórico do servidor', 'Historial del servidor')}>{jobs.map(j => <li key={j.id}><button role="option" aria-selected={j.id === selected} className={j.id === selected ? 'selected' : ''} onClick={() => setSelected(j.id)}>
-        <span className={'job-dot ' + j.status}/><span className="job-history-main"><strong>{j.project || 'Henge'}</strong><small>{[j.mode, j.duration ? `${j.duration.toFixed(1)} s` : '', jobStatusLabel(j.status, lang)].filter(Boolean).join(' · ')}</small></span><time className="mono">{relativeTime(j.created, lang)}</time>
+      <ul className="job-history" role="listbox" aria-label={tr('Server history', 'Histórico do servidor', 'Historial del servidor')}>{jobs.map(j => <li key={j.id}><button role="option" aria-selected={j.id === selected} className={j.id === selected ? 'selected' : ''} onClick={() => selectJob(j.id)}>
+        <span className={'job-dot ' + j.status}/><span className="job-history-main"><span className="job-history-title"><strong>{j.project || 'Henge'}</strong>{j.mode && <span className={'job-mode ' + j.mode}>{modeLabel(j.mode)}</span>}</span><small>{jobDetails(j).join(' · ')}</small><small>{[j.duration ? `${j.duration.toFixed(1)} s` : '', jobStatusLabel(j.status, lang)].filter(Boolean).join(' · ')}</small></span><time className="mono">{relativeTime(j.created, lang)}</time>
       </button></li>)}</ul></div>}
   </section>;
 }
