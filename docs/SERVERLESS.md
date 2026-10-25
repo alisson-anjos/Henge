@@ -34,26 +34,69 @@ The default setup is unchanged: one pod running UI, bridge and ComfyUI together
 - A RunPod account with credit and an API key (*Settings → API Keys*).
 - [`runpodctl`](https://github.com/runpod/runpodctl) configured (`runpodctl doctor`).
 - A Hugging Face token with read access while the motion LoRAs are private, stored as the RunPod
-  secret `hf_token` (used by the Henge pod template).
+  secret `hf_token` (*Settings → Secrets*); the volume fill pod reads it.
 - Docker on your computer for the UI.
 
 ## 1. Put the models on a network volume (once)
 
+Serverless workers **never download models**: a worker that downloaded ~100 GB on its first request would
+bill GPU time for it, hit the request timeout, and race other workers writing the same files. The models
+go once onto a RunPod **network volume** (persistent storage); every worker mounts it read-only at
+`/runpod-volume` and reads `/runpod-volume/henge/models`.
+
+A temporary pod fills the volume: it runs the same Henge image with the volume at `/workspace`, its
+downloader puts everything in `/workspace/henge/models` (the same folder the workers see), and the pod is
+deleted afterwards. You pay a few minutes of that pod plus the volume's monthly storage.
+
+### What goes on it
+
+Choose the model profiles (comma list), as on a normal pod:
+
+| Profile | Mode | Notes |
+|---|---|---|
+| `character` | Character Swap | base H3, text encoder, VAE, VLM planner; always needed |
+| `motion10500`, `motion4500` | Motion Transfer | private LoRAs: need the `hf_token` secret |
+| `solar` | Motion Transfer (Solar) | ~25 GB |
+| `headswap`, `sharpness` | Head Swap, LMS Sharpness | |
+| `omniref` | OmniRef base | +22 GB |
+
+The default, every profile above, needs roughly 110–120 GB: create the volume with 150 GB.
+
+### Option A: script
+
 ```sh
-scripts/runpod_volume.sh
+scripts/runpod_volume.sh                                       # new 150 GB volume, every profile
+PROFILES=character,solar scripts/runpod_volume.sh              # only some profiles
+VOLUME_ID=<id> scripts/runpod_volume.sh                        # top up an existing volume
 ```
 
-- Creates a network volume (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 150).
-- Starts a temporary pod from the Henge pod template with the volume at `/workspace`. It downloads
-  the `HENGE_MODEL_PROFILES` models exactly like a normal pod.
-- Waits until every model is installed, then deletes the pod. The volume keeps the files.
+- Creates the network volume (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 150), unless
+  `VOLUME_ID` is given.
+- Starts the fill pod from `ghcr.io/alisson-anjos/henge:runpod-template` on the first GPU in stock
+  (`FILL_GPUS`), with `HENGE_MODEL_PROFILES=$PROFILES` and `HF_TOKEN` from your RunPod secret `hf_token`.
+- Prints the download progress every minute and deletes the pod when every model is installed.
 
-To top up an existing volume (new models, or a download that was interrupted), run it with
-`VOLUME_ID=<id>`. Files that are already there are skipped.
+A top-up skips the files that are already there: use it after an interrupted download or to add profiles.
+If a download fails (usually the private LoRAs without a valid `hf_token`), the pod is kept so you can
+open its setup screen; delete it with `runpodctl pod delete <pod id>` when done.
 
-Choose the datacenter by the GPU you want for the endpoint: the volume and the endpoint must be in
-the same datacenter. `runpodctl datacenter list` shows which GPUs each one has in stock. Henge
-needs 80 GB or more of VRAM and a CUDA 13 driver: RTX PRO 6000 (96 GB), A100 80 GB, H100.
+### Option B: RunPod console
+
+1. *Storage* → *New Network Volume*: pick the datacenter (see below) and 150 GB.
+2. *Pods* → *Deploy*, in the same datacenter, any GPU with CUDA 13 (it only downloads). Under the network
+   volume, select the new volume. Use the image `ghcr.io/alisson-anjos/henge:runpod-template`, mount path
+   `/workspace`, HTTP port `8188`, and the environment variables
+   `HENGE_MODEL_PROFILES=<profiles>` and `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}`.
+3. Open the pod's port 8188: the Henge setup screen shows each model's download progress.
+4. When every model is installed and the pod log says `model downloads finished`, **terminate the pod**.
+   The volume keeps the files.
+
+### Datacenter
+
+The volume and the endpoint must be in the same datacenter, so choose it by the GPU you want for the
+endpoint: `runpodctl datacenter list` shows which GPUs each one has in stock. Henge needs a CUDA 13
+driver. 80 GB or more of VRAM (RTX PRO 6000 96 GB, A100 80 GB, H100) runs comfortably; a 32 GB RTX 5090 is
+cheaper per second but reloads models more often.
 
 ## 2. Create the endpoint
 
