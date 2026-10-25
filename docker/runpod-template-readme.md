@@ -8,7 +8,7 @@ Character swap and motion transfer for video, built on **ComfyUI** with
 ## First boot
 
 The pod downloads the models into your volume at `/workspace/henge/models`
-(≈ 65 GB with the default profiles). This takes a while the first time only;
+(≈ 65 GB with the default profiles, plus ≈ 25 GB for the SolarRenderer `solar` profile). This takes a while the first time only;
 later boots, or a new pod on the same network volume, start straight away.
 Follow progress in **Logs** (`Downloading: …` / `Installed: …`).
 
@@ -19,6 +19,7 @@ Follow progress in **Logs** (`Downloading: …` / `Installed: …`).
 | Character Swap v1.1 | H3 ref2va + Character Swap v1.1 LoRA + DMD 8-step |
 | Motion · Original 10500 | H3 ref2va + training adapter V2 + motion 10500 |
 | Motion · TARA 4500 | H3 ref2va + training adapter V2 + TARA motion 4500 |
+| Motion · Solar (`solar` profile) | Solar control alone, or merged at 0.5 with 10500 / TARA 4500; pair with TARA |
 | Head Swap v1.0 | H3 ref2va + Head Swap r32 + turbo LoRA; face picture + source video |
 | Sharpness (LMS) | H3 ref2va + LMS fro dyn95 + turbo LoRA; source video only |
 

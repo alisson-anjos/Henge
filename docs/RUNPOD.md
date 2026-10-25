@@ -75,7 +75,7 @@ The image uses PyTorch 2.14 + CUDA 13.0, so the host driver must support CUDA 13
 
 ## 4. First boot
 
-Watch **Logs**. The first boot downloads ≈ 65 GB with the default profiles
+Watch **Logs**. The first boot downloads ≈ 65 GB with the default profiles, plus ≈ 25 GB for the SolarRenderer `solar` profile
 (H3 21 GB + H3 text encoder 27 GB + VAE 5 GB + Qwen3.5 planner 7 GB + Character
 LoRAs 2.4 GB + motion LoRAs + adapter V2 1.6 GB). When ComfyUI and the UI are up, open **Connect → HTTP 8188**
 (`https://<pod-id>-8188.proxy.runpod.net`).
