@@ -107,6 +107,8 @@ Add `omniref` to `HENGE_MODEL_PROFILES` to download
 
 ## Serverless (UI on your PC, GPU only while a job runs)
 
+Full guide: [SERVERLESS.md](SERVERLESS.md).
+
 Instead of a pod that stays on, the UI can drive a RunPod Serverless endpoint: each job stage (plan,
 reference prep, every shot) becomes one request, a worker starts when needed and scales back to zero.
 

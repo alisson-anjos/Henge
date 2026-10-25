@@ -23,6 +23,7 @@ API graph it ran.
 - [Run locally: UI, bridge, ComfyUI and connection settings](docs/RUN_LOCAL.md)
 - [Build/run with Docker and configure automatic downloads](docker/README.md)
 - [Run on RunPod: template, GPU choice and private models](docs/RUNPOD.md)
+- [Run on RunPod Serverless: UI on your PC, GPU only while a job runs](docs/SERVERLESS.md)
 - [Models and download links](docs/models-and-downloads.md)
 
 ## Run locally
