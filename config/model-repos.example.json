@@ -137,7 +137,8 @@
       "destination": "loras/henge/training_adapter_v2.safetensors",
       "profiles": [
         "motion10500",
-        "motion4500"
+        "motion4500",
+        "solar"
       ],
       "note": "Loaded separately before motion10500 and motion4500. Same sha256 as ostris/minimax_h3_training_adapter v2."
     },
@@ -156,6 +157,42 @@
       "profiles": [
         "motion4500"
       ]
+    },
+    {
+      "id": "solar_motion4500",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/motion_tara_4500_solar05.safetensors",
+      "destination": "loras/henge/motion_tara_4500_solar05.safetensors",
+      "profiles": [
+        "solar"
+      ],
+      "note": "TARA 4500 + SolarRenderer control 0.5 (rank-concat merge). Loaded after adapter V2."
+    },
+    {
+      "id": "solar_motion10500",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/motion10500_plus_adapter_v2_solar05.safetensors",
+      "destination": "loras/henge/motion10500_plus_adapter_v2_solar05.safetensors",
+      "profiles": [
+        "solar"
+      ],
+      "note": "Motion 10500 + adapter V2 + SolarRenderer control 0.5; no separate adapter."
+    },
+    {
+      "id": "solar_control",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/solar_control.safetensors",
+      "destination": "loras/henge/solar_control.safetensors",
+      "profiles": [
+        "solar"
+      ],
+      "note": "SolarRenderer control LoRA converted to ComfyUI H3 keys (Enderfga/SolarRenderer)."
+    },
+    {
+      "id": "turbo_solar4",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/turbo_solar_4step.safetensors",
+      "destination": "loras/henge/turbo_solar_4step.safetensors",
+      "profiles": [
+        "solar"
+      ],
+      "note": "Optional turbo LoRA (4 steps): SolarRenderer 4-step converted to ComfyUI H3 keys."
     },
     {
       "id": "fibo_diffusion_models",

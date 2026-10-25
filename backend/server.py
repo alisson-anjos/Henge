@@ -92,6 +92,11 @@ def validate_request(r,options,slots):
     if not isinstance(options.get('prepare_references',True),bool):raise ValueError('Reference preparation must be a boolean')
     clamp_float(options.get('cfg',1.),1,12,'CFG');clamp_float(options.get('lora_strength',1.),0,2,'LoRA strength');clamp_float(options.get('upscale_denoise',.5),.1,1,'refine denoise')
     if not isinstance(options.get('latent_upscale',True),bool):raise ValueError('Latent upscale must be a boolean')
+    if clamp_float(options.get('structure_cfg',1.),1,3,'structure guidance')>1 and options.get('conditioning_mode','guide')!='tara':raise ValueError('Structure guidance is a TARA option')
+    clamp_float(options.get('causal_chunk',5),1,32,'causal chunk');clamp_float(options.get('causal_window',6),1,16,'causal window')
+    if r.get('processing',{}).get('mode')=='causal':
+        if options.get('conditioning_mode','guide')!='guide':raise ValueError('Causal rendering uses Guide Latents; switch the method from TARA')
+        if r['mode']=='motion':raise ValueError('Causal rendering is for Character Swap, Head Swap and Sharpness')
     mask=options.get('mask') or {}
     if not isinstance(mask,dict) or set(mask)-{'threshold','shape','padding','expand','fill_holes','temporal_expand','blockify','invert','strength'}:raise ValueError('Invalid latent mask settings')
     if mask.get('shape','box') not in ['box','silhouette']:raise ValueError('Unknown mask shape')
@@ -203,7 +208,7 @@ def execute_graph(job,graph,stage):
                                         if label:save(job,message=label,step=None,step_total=None)
                                     elif event.get('type')=='progress':
                                         maximum=max(1,int(data.get('max',1)));value=int(data.get('value',0));patch={'step':value,'step_total':maximum}
-                                        if graph.get(str(data.get('node')),{}).get('class_type')=='SamplerCustomAdvanced':
+                                        if graph.get(str(data.get('node')),{}).get('class_type') in ('SamplerCustomAdvanced','HengeCausalSampler'):
                                             refine=str(data.get('node'))=='37'
                                             patch['message']='Refining the upscaled video' if refine else 'Sampling video'
                                             # Measured pace after the first step (model loading excluded) -> remaining time, per sampler.
@@ -374,7 +379,8 @@ def generate(job):
     width,height=meta['width'],meta['height']
     def size(short):scale=short/min(width,height);return max(32,round(width*scale/32)*32),max(32,round(height*scale/32)*32)
     short=QUALITY[r['quality']];W,H=size(short);upscale=None
-    if r['mode']=='sharpness' and options.get('latent_upscale',True) and short>UPSCALE_ABOVE:
+    causal=r['processing'].get('mode')=='causal'
+    if r['mode']=='sharpness' and options.get('latent_upscale',True) and short>UPSCALE_ABOVE and not causal:
         if not (COMFY/'models/latent_upscale_models'/LATENT_UPSCALER).is_file():raise ValueError(f'Latent upscale needs models/latent_upscale_models/{LATENT_UPSCALER}; turn Latent upscale off in Advanced to sharpen in one pass')
         upscale={'width':W,'height':H,'denoise':options.get('upscale_denoise',.5)};w,h=size(max(480,short//2))
     else:w,h=W,H
@@ -382,7 +388,8 @@ def generate(job):
     if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
     context=min(r['processing'].get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17));shots=split_frames(total,per,context)
     # Cut detection only shapes the shot split; a single render follows the guide straight through its cuts.
-    if options.get('detect_cuts',True) and r['processing'].get('mode')!='single':
+    if causal:shots=[{'start':0,'frames':total,'overlap':0,'length':grid_frames(total),'reset_context':True}]
+    elif options.get('detect_cuts',True) and r['processing'].get('mode')!='single':
         cut_run=subprocess.run(['ffmpeg','-v','info','-ss',str(start),'-i',str(INPUT/assets['video']),'-t',str(end-start),'-vf',"select='gt(scene,0.35)',showinfo",'-an','-f','null','-'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=300)
         if cut_run.returncode:raise ValueError('Camera-cut analysis failed')
         cuts=[round(float(t)*24) for t in re.findall(r'pts_time:([0-9.]+)',cut_run.stderr.decode(errors='replace'))]
@@ -417,7 +424,7 @@ def generate(job):
         if previous is not None:
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),upscale=upscale)
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),upscale=upscale,structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None)
         execute_graph(job,graph,f'h3_segment_{i:03d}')
         rendered=OUTPUT/relative.replace('.mp4','_result.mp4');guide=OUTPUT/relative.replace('.mp4','_guide.mp4')
         if not rendered.is_file():raise ValueError('ComfyUI finished without the expected video')
@@ -476,7 +483,7 @@ def health():
     installed=info.get('LoraLoaderModelOnly',{}).get('input',{}).get('required',{}).get('lora_name',[[]])[0]
     requirements,mode_ready,setup=check_requirements(COMFY/'models',MODELS)
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
-    models={key:{**value,'available':value['lora'] in installed and value['adapter'] in installed and mode_ready[key]} for key,value in MODELS.items()}
+    models={key:{**value,'available':value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed) and mode_ready[key]} for key,value in MODELS.items()}
     turbos={key:{'label':value['label'],'steps':value['steps'],'available':value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
     unets=info.get('UNETLoader',{}).get('input',{}).get('required',{}).get('unet_name',[[]])[0]
     bases={key:{'label':value['label'],'available':value['unet'] in unets} for key,value in BASES.items()}

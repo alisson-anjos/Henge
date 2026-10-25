@@ -9,12 +9,12 @@ RUN npm run build
 
 FROM ${PYTORCH_IMAGE} AS runtime
 ARG COMFY_REF=d52a7a5ef60b36062f7c3c69bd774f4c98b56eb0
-ARG BFS_REF=f4b6f63be1a76ccc4992112568fad38bcaa4120c
+ARG BFS_REF=1360d01fbfb57fe69cd7c54bc0789c4847826b5b
 ARG UPSCALER_REF=6a4b191e8af583b7c097f564690325f91d18c2e2
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
     COMFY_ROOT=/opt/ComfyUI COMFY_BASE_URL=http://127.0.0.1:8189 \
     HENGE_BACKEND_URL=http://127.0.0.1:8766 HENGE_DATA_DIR=/state/jobs \
-    HENGE_MODELS_DIR=/opt/ComfyUI/models HENGE_MODEL_PROFILES=character,motion10500,motion4500,headswap,sharpness,omniref \
+    HENGE_MODELS_DIR=/opt/ComfyUI/models HENGE_MODEL_PROFILES=character,motion10500,motion4500,solar,headswap,sharpness,omniref \
     HENGE_MODEL_MANIFEST=/app/config/model-repos.example.json \
     HF_HOME=/state/huggingface HF_XET_HIGH_PERFORMANCE=1 \
     PIP_BREAK_SYSTEM_PACKAGES=1 PIP_ROOT_USER_ACTION=ignore

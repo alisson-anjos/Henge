@@ -24,7 +24,7 @@ def read_frames(path,width,height,length):
 
 class HengeLoadShot:
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'video':('STRING',),'pictures':('STRING',{'default':'[]'}),'width':('INT',{'default':512,'min':32,'step':32}),'height':('INT',{'default':288,'min':32,'step':32}),'length':('INT',{'default':107,'min':5,'max':362})}}
+    def INPUT_TYPES(cls):return {'required':{'video':('STRING',),'pictures':('STRING',{'default':'[]'}),'width':('INT',{'default':512,'min':32,'step':32}),'height':('INT',{'default':288,'min':32,'step':32}),'length':('INT',{'default':107,'min':5,'max':3600})}}
     RETURN_TYPES=('IMAGE','HENGE_REFS');FUNCTION='load';CATEGORY='Henge'
     def load(self,video,pictures,width,height,length):
         refs=[]
@@ -270,6 +270,10 @@ class HengeTextResult:
     def save(self,text):return {'ui':{'text':[text]}}
 
 NODE_CLASS_MAPPINGS['HengeTextResult']=HengeTextResult
+from .causal import HengeCausalSampler
+NODE_CLASS_MAPPINGS['HengeCausalSampler']=HengeCausalSampler
+from .frame_refine import HengeFrameRefine
+NODE_CLASS_MAPPINGS['HengeFrameRefine']=HengeFrameRefine
 
 # Validate the exact API graph without adding a GPU execution to the Comfy queue.
 from server import PromptServer

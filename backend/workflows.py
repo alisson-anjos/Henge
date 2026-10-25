@@ -6,6 +6,11 @@ from pathlib import Path
 MODELS={
  'motion':{'label':'Original · 10500','task':'motion','lora':'henge/motion_10500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
  'motion_tara4500':{'label':'TARA-trained · 4500','task':'motion','lora':'henge/motion_tara_4500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
+ # SolarRenderer control LoRA (0.5) merged by rank concatenation (lossless). The 10500 merge already holds adapter V2.
+ 'motion_tara4500_solar':{'label':'TARA-trained · 4500 + Solar 0.5','task':'motion','lora':'henge/motion_tara_4500_solar05.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
+ # SolarRenderer control LoRA on its own (no motion LoRA, no adapter), for TARA comparisons.
+ 'motion_solar_control':{'label':'Solar control only (no Henge LoRA)','task':'motion','lora':'henge/solar_control.safetensors','adapter':None,'clip_context':True},
+ 'motion_solar':{'label':'Original · 10500 + Solar 0.5 (adapter merged)','task':'motion','lora':'henge/motion10500_plus_adapter_v2_solar05.safetensors','adapter':None,'clip_context':True},
  'character':{'task':'swap','label':'Character Swap v1.1 · published','lora':'henge/character_v1_1.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
  'mix50':{'label':'Character Swap v1.0 + v1.1 · 50/50 Dyn95','lora':'henge/character_mix50_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
@@ -14,14 +19,15 @@ MODELS={
  'sharpness':{'task':'sharpness','label':'LMS Sharpness v1 · fro dyn95','lora':'henge/lms_v1_fro_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False,
               'files':[('latent_upscaler','Latent upscaler 3D · LMS v0.1','latent_upscale_models/h3_upscaler_lms_v0.1.safetensors')]},
 }
-# Swappable speed LoRAs for the modes whose adapter is a turbo LoRA (not Motion: its
-# training adapter V2 is what the motion LoRAs were trained on).
+# Swappable speed LoRAs. Swap modes load it in place of an adapter; Motion stacks it on training
+# adapter V2 (what the motion LoRAs were trained on).
 TURBOS={
  'none':{'label':'None (for distilled bases such as FastH3 OmniRef)','lora':None,'steps':8},
  'dmd8':{'label':'DMD 8-step (drbaph)','lora':'henge/dmd_ref2va_8step.safetensors','steps':8},
  'dmad4':{'label':'DMAD 4-step (Kijai)','lora':'henge/turbo_dmad_4step.safetensors','steps':4},
  'lightx8':{'label':'lightx2v 8-step v1.1 (768p)','lora':'henge/turbo_lightx2v_8step_v1_1.safetensors','steps':8},
  'lightx4':{'label':'lightx2v 4-step v1.0 (768p)','lora':'henge/turbo_lightx2v_4step_v1_0.safetensors','steps':4},
+ 'solar4':{'label':'SolarRenderer 4-step (ComfyUI keys)','lora':'henge/turbo_solar_4step.safetensors','steps':4},
 }
 # Base diffusion models. OmniRef (FastVideo) is already distilled to 8 steps: pair it with turbo 'none'.
 # Latent upscaler for the Sharpness two-pass recipe (MinimaxH3LatentUpscaler3D, LBH-123-AI, MIT), fine-tuned on the LMS data.
@@ -43,7 +49,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,upscale=None):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,upscale=None,causal=None,structure_cfg=1.,structure_sigma_min=0.):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
@@ -77,8 +83,17 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
     if model.get('turbo') and not TURBOS[turbo]['lora']:
         # No speed LoRA: the task LoRA loads straight onto the base.
         del g['2'];g['3']['inputs']['model']=['1',0]
+    if not model.get('turbo') and not model['adapter']:
+        # The adapter is merged into the task LoRA: the speed LoRA (if any) loads straight onto the base.
+        if TURBOS[turbo]['lora']:g['2']['inputs']['lora_name']=TURBOS[turbo]['lora']
+        else:del g['2'];g['3']['inputs']['model']=['1',0]
+    elif not model.get('turbo') and TURBOS[turbo]['lora']:
+        # Motion keeps training adapter V2 (what its LoRAs were trained on) and stacks the speed LoRA on it.
+        g['25']=node('LoraLoaderModelOnly',model=['2',0],lora_name=TURBOS[turbo]['lora'],strength_model=1.);g['3']['inputs']['model']=['25',0]
     if conditioning_mode=='tara':
-        g['21']=node('BFSMiniMaxH3NativeTemporal',model=['4',0],motion_video_index=1,strength=2.,window_seconds=.2,falloff_seconds=.25,max_penalty=6.,attention_backend='comfy kitchen (experimental)' if attention=='comfy kitchen attention' else 'flash partitions (no compile)')
+        g['21']=node('BFSMiniMaxH3NativeTemporal',model=['4',0],motion_video_index=1,strength=2.,window_seconds=.2,falloff_seconds=.25,max_penalty=6.,attention_backend='comfy kitchen (experimental)' if attention=='comfy kitchen attention' else 'flash partitions (no compile)',
+                   # SolarRenderer-style structure CFG inside the TARA node: one extra pass without <Video 1> per step
+                   structure_guidance=float(structure_cfg),structure_sigma_min=float(structure_sigma_min))
         g['10']['inputs']['model']=['21',0];g['13']['inputs']['model']=['21',0]
     elif conditioning_mode!='guide':raise ValueError('Unknown conditioning mode')
     if audio:g['19']=node('VAELoader',vae_name='minimax_h3_audio_vae_fp32.safetensors');g['9']['inputs']['audio_vae']=['19',0]
@@ -106,6 +121,12 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         g['37']=node('SamplerCustomAdvanced',noise=['35',0],guider=['36',0],sampler=['12',0],sigmas=['34',0],latent_image=['33',0])
         g['38']=node('LTXVSeparateAVLatent',av_latent=['37',0])
         g['16']['inputs']['samples']=['38',0]
+    if causal:
+        # One render for the whole interval, chunk by chunk against a key/value cache (no shot seams).
+        if conditioning_mode!='guide' or representation=='mask' or upscale:raise ValueError('Causal rendering needs Guide Latents, no latent mask and no latent upscale')
+        g['14']=node('HengeCausalSampler',model=g['10']['inputs']['model'],positive=['9',0],latent=['9',1],seed=seed,steps=steps,
+                     chunk=int(causal.get('chunk',5)),window=int(causal.get('window',6)),sampler='euler',cache='auto')
+        for k in ('10','11','12','13','24'):g.pop(k,None)
     return g
 
 def fibo_graph(image,refs,instruction,seed):
