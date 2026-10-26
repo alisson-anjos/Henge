@@ -7,7 +7,7 @@ import requests
 import assistant
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
-from PIL import Image,ImageDraw,ImageOps
+from PIL import Image,ImageDraw,ImageFont,ImageOps
 from workflows import find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
@@ -329,13 +329,17 @@ def prepare_evidence(job):
         t=start+(last-start)*i/max(1,count-1);times.append(t)
         dest=work/f'evidence_{i}.jpg';t=grab_frame(INPUT/assets['video'],t,dest,start)
         if t is None:continue
-        cells.append((f'Video 1 frame {round((t-start)*24)} at {t:.3f}s',dest))
+        cells.append((f'#{len(cells)+1}  {t-start:.1f}s',dest))
     if not cells:raise ValueError('Could not read any frame from the selected video interval')
-    canvas=Image.new('RGB',(4*320,math.ceil(len(cells)/4)*208),'#202020');draw=ImageDraw.Draw(canvas)
+    # Big, short labels (order number and seconds from the start of the selection): with the tiny default font
+    # the planner VLM could not read them and invented timestamps.
+    canvas=Image.new('RGB',(4*320,math.ceil(len(cells)/4)*220),'#202020');draw=ImageDraw.Draw(canvas)
+    try:font=ImageFont.load_default(size=26)
+    except TypeError:font=ImageFont.load_default()
     for i,(label,path) in enumerate(cells):
         with Image.open(path) as image:
-            thumb=ImageOps.contain(image.convert('RGB'),(312,180));canvas.paste(thumb,((i%4)*320,(i//4)*208+28))
-        draw.text(((i%4)*320+4,(i//4)*208+5),label,fill='white')
+            thumb=ImageOps.contain(image.convert('RGB'),(312,180));canvas.paste(thumb,((i%4)*320,(i//4)*220+36))
+        draw.text(((i%4)*320+6,(i//4)*220+4),label,fill='#f5ff5a',font=font)
     guide=inp/'guide_evidence.jpg';canvas.save(guide,quality=90)
     metadata=dict(source_width=job['video_info']['width'],source_height=job['video_info']['height'],
                   selected_start_seconds=start,selected_end_seconds=end,duration_seconds=end-start,
