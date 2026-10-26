@@ -67,9 +67,19 @@ export default function AssistantPanel({controller, lang}: {controller: StudioCo
   }
 
   async function step(history: Message[]): Promise<{messages: Message[]; studio_calls: StudioCall[]; job_results: Result[]; done: boolean}> {
-    const r = await fetch('/api/backend/assistant/step', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({messages: history})});
-    const reply = await r.json(); if (!r.ok) throw Error(reply.detail || `HTTP ${r.status}`);
-    return reply;
+    // A restart of the UI or the bridge drops the request (503/502, or a network error): wait and send it again.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const r = await fetch('/api/backend/assistant/step', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({messages: history})});
+        if ([502, 503, 504].includes(r.status) && attempt < 3) throw Error(`HTTP ${r.status}`);
+        const reply = await r.json(); if (!r.ok) throw Object.assign(Error(reply.detail || `HTTP ${r.status}`), {final: true});
+        return reply;
+      } catch (e) {
+        if ((e as {final?: boolean}).final || attempt >= 3 || stop.current) throw e;
+        setBusy(tr('Connection dropped, trying again…', 'A conexão caiu, tentando de novo…', 'Se cortó la conexión, reintentando…'));
+        await new Promise(resolve => setTimeout(resolve, 4000 * (attempt + 1)));
+      }
+    }
   }
 
   async function send() {
