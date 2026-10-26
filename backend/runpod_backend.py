@@ -5,7 +5,7 @@ Each graph is one request. Small media travel base64 inside it and its reply. Ru
 (any worker can read the volume) and "get" requests read large results back. Nothing besides the endpoint and
 its volume is involved. The worker's node/model inventory comes back with every reply and is cached, so /health
 never wakes a worker."""
-import base64,json,os,time
+import base64,json,os,re,time
 from pathlib import Path
 import requests
 from comfy_client import referenced_files
@@ -77,11 +77,13 @@ class RunPodBackend:
             if cancelled():
                 self.cancel(rid);raise InterruptedError('Cancelled')
             try:status=self.status(rid);errors=0
-            except (requests.RequestException,RuntimeError):
-                # A dropped poll does not lose the job: retry a few times before giving up on it.
+            except (requests.RequestException,RuntimeError) as e:
+                # A dropped poll does not lose the job. RunPod's API also answers 5xx for a while now and then (seen on
+                # a completed job), so keep asking for about 3 minutes; an auth or not-found answer will not recover.
+                if re.search(r'HTTP (401|403|404)\b',str(e)):raise
                 errors+=1
-                if errors>=5:raise
-                time.sleep(5);continue
+                if errors>=12:raise
+                time.sleep(min(5*errors,20));continue
             state=status.get('status')
             if state=='COMPLETED':
                 output=status.get('output') or {}
@@ -116,5 +118,10 @@ class RunPodBackend:
         remote=self.on_volume[key];tmp=dest.with_name(dest.name+'.part')
         with tmp.open('wb') as f:
             for offset in range(0,remote['size'],CHUNK):
-                f.write(base64.b64decode(self.call({'op':'get','path':remote['path'],'offset':offset,'length':CHUNK},None,lambda:False)['data']))
+                for attempt in range(3):
+                    # A failed chunk request is simply asked again: the file stays on the volume.
+                    try:f.write(base64.b64decode(self.call({'op':'get','path':remote['path'],'offset':offset,'length':CHUNK},None,lambda:False)['data']));break
+                    except (requests.RequestException,RuntimeError):
+                        if attempt==2:raise
+                        time.sleep(10)
         tmp.replace(dest);return dest
