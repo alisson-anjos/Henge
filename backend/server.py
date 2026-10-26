@@ -1270,3 +1270,40 @@ async def translate_prompt(request:Request):
     except Exception as e:
         save(job,status='failed',error=str(e)[:800]);raise HTTPException(502,f'Translation failed: {str(e)[:300]}')
     return {'text':(outputs.get('4',{}).get('text',[''])[0] or '').strip()}
+
+
+# --- Assistant conversations: kept on the bridge so a reload or a restart never loses them; linked to the jobs they
+# started, so opening a job brings its conversation back. ---
+CHATS=ROOT/'assistant_chats'
+
+def chat_path(cid):
+    if not re.fullmatch(r'[a-f0-9]{32}',cid or ''):raise HTTPException(404,'Unknown conversation')
+    return CHATS/f'{cid}.json'
+
+@app.get('/assistant/chats')
+def list_chats(job:str=''):
+    """The latest conversations (id, title, updated, jobs), or the one that started job=<id>."""
+    rows=[]
+    for p in sorted(CHATS.glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True)[:200]:
+        try:c=json.loads(p.read_text())
+        except (OSError,json.JSONDecodeError):continue
+        row={'id':p.stem,'title':c.get('title',''),'updated':c.get('updated',0),'jobs':c.get('jobs',[])}
+        if job and job in row['jobs']:return [row]
+        if not job:rows.append(row)
+    return [] if job else rows[:30]
+
+@app.get('/assistant/chats/{cid}')
+def get_chat(cid:str):
+    p=chat_path(cid)
+    if not p.is_file():raise HTTPException(404,'Unknown conversation')
+    return json.loads(p.read_text())
+
+@app.put('/assistant/chats/{cid}')
+async def save_chat(cid:str,request:Request):
+    body=await request.json();messages=body.get('messages')
+    if not isinstance(messages,list):raise HTTPException(400,'Send the messages')
+    jobs=[j for j in body.get('jobs') or [] if isinstance(j,str) and re.fullmatch(r'[a-f0-9]{32}',j)]
+    first=next((m.get('text','') for m in messages if isinstance(m,dict) and m.get('role')=='user'),'')
+    chat={'messages':messages,'jobs':jobs,'title':first.split('\n\n[studio state]')[0][:80],'updated':time.time()}
+    CHATS.mkdir(parents=True,exist_ok=True);tmp=chat_path(cid).with_suffix('.tmp');tmp.write_text(json.dumps(chat,ensure_ascii=False));tmp.replace(chat_path(cid))
+    return {'id':cid,'title':chat['title'],'jobs':jobs}

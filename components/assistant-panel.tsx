@@ -38,7 +38,7 @@ const label = (name: string, input: Record<string, unknown>) => {
 
 /** Chat with an LLM that operates the studio. The conversation lives here; each step goes to the bridge, which calls
  * the model and runs job tools, and returns the studio actions to run on this screen. */
-export default function AssistantPanel({controller, lang}: {controller: StudioController; lang: Language}) {
+export default function AssistantPanel({controller, lang, jobId}: {controller: StudioController; lang: Language; jobId?: string | null}) {
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -52,6 +52,35 @@ export default function AssistantPanel({controller, lang}: {controller: StudioCo
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const stop = useRef(false);
+  // Conversations live on the bridge (a reload or restart keeps them) and follow the jobs they started.
+  const newId = () => crypto.randomUUID().replace(/-/g, '');
+  const [chatId, setChatId] = useState<string>('');
+  const chatJobs = useRef<string[]>([]);
+  async function loadChat(id: string) {
+    const r = await fetch(`/api/backend/assistant/chats/${id}`); if (!r.ok) return false;
+    const chat = await r.json(); setChatId(id); setMessages(chat.messages || []); chatJobs.current = chat.jobs || [];
+    try {localStorage.setItem('henge-assistant-chat', id);} catch {/* private mode */}
+    return true;
+  }
+  function persist(history: Message[]) {
+    if (!chatId || !history.length) return;
+    fetch(`/api/backend/assistant/chats/${chatId}`, {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({messages: history, jobs: chatJobs.current})}).catch(() => {});
+  }
+  function newChat() {
+    const id = newId(); setChatId(id); setMessages([]); chatJobs.current = []; setError('');
+    try {localStorage.setItem('henge-assistant-chat', id);} catch {/* private mode */}
+  }
+  useEffect(() => {
+    let stored = ''; try {stored = localStorage.getItem('henge-assistant-chat') || '';} catch {/* private mode */}
+    if (stored) loadChat(stored).then(ok => {if (!ok) newChat();}); else newChat();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Opening a job (Recent, History, panel) brings back the conversation that started it.
+  useEffect(() => {
+    if (!jobId || busy || chatJobs.current.includes(jobId)) return;
+    fetch(`/api/backend/assistant/chats?job=${jobId}`).then(r => r.ok ? r.json() : []).then((rows: {id: string}[]) => {if (rows[0] && rows[0].id !== chatId) loadChat(rows[0].id);}).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
   const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {if (open && !config) fetch('/api/backend/assistant/config').then(r => r.json()).then((c: Config) => {setConfig(c); setDraft(c); if (!c.has_key && c.provider === 'anthropic') setSettings(true);}).catch(() => setError(tr('The bridge is offline.', 'O bridge está offline.', 'El bridge está desconectado.')));}, [open]);
@@ -86,21 +115,25 @@ export default function AssistantPanel({controller, lang}: {controller: StudioCo
     const text = input.trim(); if (!text || busy) return;
     setInput(''); setError(''); stop.current = false;
     let history: Message[] = [...messages, {role: 'user', text: `${text}\n\n[studio state] ${JSON.stringify(controller.state())}`}];
-    setMessages(history);
+    setMessages(history); persist(history);
     try {
       for (let round = 0; round < 40 && !stop.current; round++) {
         setBusy(tr('Thinking…', 'Pensando…', 'Pensando…'));
         const reply = await step(history);
-        history = reply.messages; setMessages(history);
+        history = reply.messages; setMessages(history); persist(history);
         if (reply.done || !reply.studio_calls.length) break;
         const results: Result[] = [...reply.job_results];
         for (const call of reply.studio_calls) {
           if (stop.current) {results.push({id: call.id, name: call.name, text: 'Stopped by the user.', is_error: true}); continue;}
           setBusy(label(call.name, call.input));
-          try {results.push({id: call.id, name: call.name, ...(await controller.run(call))});}
+          try {
+            const result = await controller.run(call); results.push({id: call.id, name: call.name, ...result});
+            const started = call.name === 'generate' && result.text.match(/[a-f0-9]{32}/)?.[0];
+            if (started && !chatJobs.current.includes(started)) chatJobs.current = [...chatJobs.current, started];
+          }
           catch (e) {results.push({id: call.id, name: call.name, text: e instanceof Error ? e.message : String(e), is_error: true});}
         }
-        history = [...history, {role: 'tool', results}]; setMessages(history);
+        history = [...history, {role: 'tool', results}]; setMessages(history); persist(history);
       }
     } catch (e) {setError(e instanceof Error ? e.message : String(e));}
     finally {setBusy('');}
@@ -112,7 +145,7 @@ export default function AssistantPanel({controller, lang}: {controller: StudioCo
     {open && <aside className={'assistant-panel surface' + (expanded ? ' expanded' : '')} aria-label={tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')}>
       <header><strong>{tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')}</strong>
         <small className="muted mono">{config ? `${config.model}` : ''}</small>
-        <span><button type="button" className="quiet-button" onClick={() => {setMessages([]); setError('');}} disabled={!!busy}>{tr('New chat', 'Nova conversa', 'Nueva conversación')}</button>
+        <span><button type="button" className="quiet-button" onClick={newChat} disabled={!!busy}>{tr('New chat', 'Nova conversa', 'Nueva conversación')}</button>
           <button type="button" className="quiet-button" aria-pressed={expanded} title={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} aria-label={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} onClick={toggleExpanded}>{expanded ? '⤡' : '⤢'}</button>
           <button type="button" className="quiet-button" aria-pressed={settings} onClick={() => setSettings(s => !s)}>⚙</button></span></header>
       {settings && config && <div className="assistant-settings">

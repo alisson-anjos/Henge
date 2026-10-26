@@ -565,7 +565,7 @@ export default function Studio() {
 
     {/* Kept mounted on other tabs so the generation panel keeps its settings and selected job. */}
     <div className="studio-view" hidden={view !== 'studio'}>
-      {ready && <AssistantPanel controller={assistantController} lang={lang}/>}
+      {ready && <AssistantPanel controller={assistantController} lang={lang} jobId={generationJob?.id}/>}
       <main className="workspace">
         <aside className="controls">
           <div className="create-heading rise"><span className="eyebrow accent">{t.create}</span><h1>{t[`h1a_${mode}`]}<br/><span>{t[`h1b_${mode}`]}</span></h1></div>
