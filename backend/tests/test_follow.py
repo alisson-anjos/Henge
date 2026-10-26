@@ -36,7 +36,7 @@ class FollowTest(unittest.TestCase):
     def test_unknown_person_is_reported_not_fatal(self):
         images,masks=scene()
         picked,warn=follow.choose([subject('A')],masks,images,5)
-        self.assertEqual(picked,[]);self.assertIn('never seen',warn[0])
+        self.assertEqual(picked,[]);self.assertIn('left unmarked',warn[0])
     def test_points_track_the_person(self):
         images,masks=scene();pts=follow.points(masks[:,1])
         self.assertTrue(all(p and .55<p[0]<.95 for p in pts))
