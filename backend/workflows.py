@@ -45,7 +45,7 @@ UPSCALE_METHODS=('h3','nvidia','none')
 # Learned H3 latent upscalers, preferred first (LBH-123-AI 3D upscaler, MIT; ours is fine-tuned on the LMS data).
 H3_UPSCALERS=('h3_upscaler_lms_v0.1.safetensors','minimax_h3_latent_upscaler_3d_bf16.safetensors')
 
-def node(kind,**inputs):return {'class_type':kind,'inputs':inputs}
+def node(kind,/,**inputs):return {'class_type':kind,'inputs':inputs}  # positional-only: a node input may be named 'kind'
 def grid_frames(n):return max(5,math.ceil((n-5)/17)*17+5)
 def split_frames(total,per_shot,context):
     # Context overlaps source time; only newly generated frames are appended to output.

@@ -135,6 +135,10 @@ class WorkflowContracts(unittest.TestCase):
   import server
   out=server.strip_timecodes('[Shot 1] From 00:05 to 00:10, they fight. Around 2.0 seconds, the light changes. He waves at 3 people.\nsummary:\nok')
   self.assertEqual(out,'[Shot 1] They fight. The light changes. He waves at 3 people.\nsummary:\nok')
+ def test_assistant_graphs_build(self):
+  from workflows import find_people_graph,subject_looks_graph
+  g=find_people_graph('henge/x/frame.png','animal');self.assertEqual(g['2']['inputs']['kind'],'animal');self.assertEqual(g['2']['class_type'],'HengeFindPeople')
+  g=subject_looks_graph([('henge/x/a.png','id1',.3,.5)]);self.assertEqual(g['2']['class_type'],'HengeSubjectLook')
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))
