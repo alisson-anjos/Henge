@@ -126,6 +126,19 @@ export default function Studio() {
   const [loadingGenerated, setLoadingGenerated] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [historyFilter, setHistoryFilter] = useState<Mode | 'all'>('all');
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
+  const [modal, setModal] = useState<'share' | 'delete' | null>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const imageInput = useRef<HTMLInputElement>(null);
+  const videoInput = useRef<HTMLInputElement>(null);
+  const pictureDragDepth = useRef(0);
+  const live = useRef({pictures, video});
+  live.current = {pictures, video};
+  const t = DESIGN_COPY[lang];
+  const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
+  const style = {'--accent': MODE_STYLE[mode].accent, '--accent-rgb': MODE_STYLE[mode].rgb} as CSSProperties;
+  const modeName = (value: Mode) => ({swap: t.swap, motion: t.motion, headswap: tr('Head Swap', 'Troca de cabeça', 'Cambio de cabeza'), sharpness: tr('Sharpness', 'Nitidez', 'Nitidez')})[value];
   // Model names for History (from the bridge's model list), to search and filter generations by model.
   const [modelLabels, setModelLabels] = useState<Record<string, string>>({});
   const [historyModel, setHistoryModel] = useState('all');
@@ -143,19 +156,6 @@ export default function Studio() {
     const observer = new IntersectionObserver(([entry]) => {if (entry.isIntersecting) setHistoryShown(n => n + 24);}, {rootMargin: '400px'});
     observer.observe(end); return () => observer.disconnect();
   }, [view, historyJobs.length]);
-  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
-  const [modal, setModal] = useState<'share' | 'delete' | null>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const textarea = useRef<HTMLTextAreaElement>(null);
-  const imageInput = useRef<HTMLInputElement>(null);
-  const videoInput = useRef<HTMLInputElement>(null);
-  const pictureDragDepth = useRef(0);
-  const live = useRef({pictures, video});
-  live.current = {pictures, video};
-  const t = DESIGN_COPY[lang];
-  const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
-  const style = {'--accent': MODE_STYLE[mode].accent, '--accent-rgb': MODE_STYLE[mode].rgb} as CSSProperties;
-  const modeName = (value: Mode) => ({swap: t.swap, motion: t.motion, headswap: tr('Head Swap', 'Troca de cabeça', 'Cambio de cabeza'), sharpness: tr('Sharpness', 'Nitidez', 'Nitidez')})[value];
   const modeDescription = ({swap: t.swapDesc, motion: t.motionDesc,
     headswap: tr('Replace only the head with a face picture. Body, clothing, motion and scene stay untouched.', 'Troque só a cabeça por uma foto de rosto. Corpo, roupa, movimento e cena ficam intactos.', 'Cambia solo la cabeza por una foto de rostro. Cuerpo, ropa, movimiento y escena quedan intactos.'),
     sharpness: tr('Sharpen any clip — an upload or one of your generations — keeping its motion and look.', 'Deixe qualquer clipe mais nítido — um upload ou uma das suas gerações — mantendo movimento e aparência.', 'Da nitidez a cualquier clip — una subida o una de tus generaciones — conservando su movimiento y aspecto.')})[mode];
