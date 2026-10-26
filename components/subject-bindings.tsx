@@ -13,15 +13,16 @@ const copy = {
   es: {title: 'Personajes y referencias', add: 'Añadir personaje', select: 'Marcar en el vídeo', selecting: 'Haz clic en el personaje del vídeo', refs: 'Referencias de la misma identidad', remove: 'Eliminar personaje', mode: 'Representación de la guía', point: 'Punto marcado', pending: 'Sin punto', hint: 'Pausa en el fotograma deseado y marca el personaje. Añade puntos en otros momentos para la misma identidad.', empty: 'Vincula personas o animales con sus referencias por color.', draft: 'Selecciones guardadas para procesamiento futuro. El seguimiento y las mallas aún no se generan aquí.', anchors: 'punto(s)', name: 'Nombre', color: 'Color', colors: ['Rojo', 'Azul', 'Verde', 'Amarillo', 'Magenta', 'Cian', 'Naranja', 'Morado']},
 };
 
-export function SubjectVideo({url, range, subjects, pickingId, onAnchor, onDuration}: {url: string; range?: ClipRange; subjects: SubjectBinding[]; pickingId: string | null; onAnchor: (id: string, anchor: SubjectAnchor) => void; onDuration: (duration: number) => void}) {
+export function SubjectVideo({url, range, subjects, pickingId, onAnchor, onDuration}: {url: string; range?: ClipRange; subjects: SubjectBinding[]; pickingId: string | null; onAnchor: (id: string, anchor: SubjectAnchor) => void; onDuration: (duration: number, width: number, height: number) => void}) {
   const player = useRef<HTMLVideoElement>(null), container = useRef<HTMLDivElement>(null);
   const [time, setTime] = useState(0), [size, setSize] = useState({width: 0, height: 0});
   useEffect(() => { const node = container.current; if (!node) return; const observer = new ResizeObserver(([entry]) => setSize({width: entry.contentRect.width, height: entry.contentRect.height})); observer.observe(node); return () => observer.disconnect(); }, []);
-  useEffect(() => {if (pickingId) player.current?.pause();}, [pickingId]);
+  // Marking starts from the subject panel, below the player: bring the video into view to click on it.
+  useEffect(() => {if (pickingId) {player.current?.pause(); container.current?.scrollIntoView({behavior: 'smooth', block: 'center'});}}, [pickingId]);
   useEffect(() => {if (range && player.current) { player.current.pause(); player.current.currentTime = range.start; setTime(range.start); }}, [range?.start, range?.end]);
   function pick(clientX: number, clientY: number) {
     const video = player.current, node = container.current;
-    if (!video || !node || !pickingId || video.readyState < 2) return;
+    if (!video || !node || !pickingId || video.readyState < 1 || !video.videoWidth) return;
     video.pause(); const rect = node.getBoundingClientRect();
     const point = videoPoint(clientX - rect.left, clientY - rect.top, rect.width, rect.height, video.videoWidth, video.videoHeight);
     if (point) onAnchor(pickingId, {...point, time_seconds: video.currentTime, frame_width: video.videoWidth, frame_height: video.videoHeight});
@@ -29,7 +30,7 @@ export function SubjectVideo({url, range, subjects, pickingId, onAnchor, onDurat
   const video = player.current;
   const scale = video?.videoWidth ? Math.min(size.width / video.videoWidth, size.height / video.videoHeight) : 0;
   return <div className={styles.player} ref={container}>
-    <video ref={player} key={url} src={url} controls playsInline onLoadedMetadata={e => {const v = e.currentTarget; v.currentTime = range?.start || 0; onDuration(v.duration);}} onTimeUpdate={e => {const v = e.currentTarget; if (range && (v.currentTime >= range.end || v.currentTime < range.start - .05)) {v.pause(); v.currentTime = range.start;} setTime(v.currentTime);}}/>
+    <video ref={player} key={url} src={url} controls playsInline preload="auto" onLoadedMetadata={e => {const v = e.currentTarget; v.currentTime = range?.start || 0; onDuration(v.duration, v.videoWidth, v.videoHeight);}} onTimeUpdate={e => {const v = e.currentTarget; if (range && (v.currentTime >= range.end || v.currentTime < range.start - .05)) {v.pause(); v.currentTime = range.start;} setTime(v.currentTime);}}/>
     {subjects.flatMap((s, i) => s.anchors.filter(a => Math.abs(a.time_seconds - time) < .15).map((a, j) => <span key={`${s.id}-${j}`} className={styles.marker} style={{background: SUBJECT_COLORS.find(c => c.name === s.color)?.hex, left: (size.width - a.frame_width * scale) / 2 + a.x * a.frame_width * scale, top: (size.height - a.frame_height * scale) / 2 + a.y * a.frame_height * scale}}>{i + 1}</span>))}
     {pickingId && <button type="button" className={styles.pickSurface} aria-label="Select subject in video; Enter selects frame center" onClick={e => pick(e.clientX, e.clientY)} onKeyDown={e => {if (e.key === 'Enter' || e.key === ' ') {e.preventDefault(); const rect = container.current?.getBoundingClientRect(); if (rect) pick(rect.left + rect.width / 2, rect.top + rect.height / 2);}}}/>}
   </div>;
@@ -42,9 +43,9 @@ const MODES: Record<GuideRepresentation, Record<Language, string>> = {
     pt: 'Original: o vídeo guia entra como está. As marcações só ajudam o planejamento; o modelo não vê quem é quem, então com duas ou mais pessoas ele pode trocá-las.',
     es: 'Original: el vídeo guía entra tal cual. Las marcas solo ayudan a planificar; el modelo no ve quién es quién, así que con dos o más personas puede intercambiarlas.'},
   '2d': {
-    en: '2D: each marked person is tracked (SAM 3.1) and painted with a solid color in the guide; the prompt says which color becomes which reference. Best for keeping people apart; the guide face and expression are covered.',
-    pt: '2D: cada pessoa marcada é rastreada (SAM 3.1) e pintada com uma cor sólida no guia; o prompt diz qual cor vira qual referência. Melhor para não trocar as pessoas; o rosto e a expressão do guia ficam cobertos.',
-    es: '2D: cada persona marcada se sigue (SAM 3.1) y se pinta con un color sólido en la guía; el prompt dice qué color se vuelve qué referencia. Lo mejor para no confundir personas; la cara y la expresión de la guía quedan cubiertas.'},
+    en: '2D: each marked person is tracked (SAM 3.1) and tinted with its color in the guide (opacity below); the prompt says which color becomes which reference. Best for keeping people apart.',
+    pt: '2D: cada pessoa marcada é rastreada (SAM 3.1) e tingida com a sua cor no guia (opacidade abaixo); o prompt diz qual cor vira qual referência. Melhor para não trocar as pessoas.',
+    es: '2D: cada persona marcada se sigue (SAM 3.1) y se tiñe con su color en la guía (opacidad abajo); el prompt dice qué color se vuelve qué referencia. Lo mejor para no confundir personas.'},
   '3d': {
     en: '3D: each marked person becomes a colored 3D body with face (SAM 3D Body), so pose, hands and expression come through with the color. People only, not animals; slower.',
     pt: '3D: cada pessoa marcada vira um corpo 3D colorido com rosto (SAM 3D Body), então pose, mãos e expressão passam junto com a cor. Só pessoas, não animais; mais lento.',

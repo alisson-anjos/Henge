@@ -530,3 +530,7 @@ img{display:block;max-width:100%}
 .assistant-input{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
 .assistant-input textarea{flex:1;resize:none;min-height:42px}
 @media(max-width:560px){.assistant-panel{right:8px;left:8px;width:auto;bottom:68px;height:calc(100vh - 90px)}.assistant-fab{right:12px;bottom:12px}}
+
+.job-error{display:grid;gap:6px}.job-error p{margin:0}.job-error pre{max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--muted)}
+.assistant-settings input,.assistant-settings select,.assistant-input textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#0c0c11;color:inherit;font:inherit;font-size:13px}
+.assistant-settings input:focus,.assistant-settings select:focus,.assistant-input textarea:focus{outline:none;border-color:var(--accent)}
