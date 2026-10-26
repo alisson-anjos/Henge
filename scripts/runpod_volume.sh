@@ -48,7 +48,8 @@ busy=d["setup"]["downloading"]
 print("failed "+",".join(failed) if failed and not busy else "ready" if not busy and done==len(rows) else f"{done}/{len(rows)} installed")' 2>/dev/null || echo starting)
   echo "$(date +%H:%M) $state"
   # The checklist covers the modes only; optional files (e.g. the omniref base) finish when the downloader exits.
-  if [ "$state" = ready ] && ! runpodctl pod logs "$POD" --source container --tail 5000 --max-wait 10s 2>/dev/null | grep -q 'model downloads finished'; then
+  # The downloader ends with 'model downloads finished', or with a warning when a file has no link (it never retries).
+  if [ "$state" = ready ] && ! runpodctl pod logs "$POD" --source container --tail 5000 --max-wait 10s 2>/dev/null | grep -Eq 'model downloads finished|some models failed to download'; then
     state='checklist ready, downloader still running'
     echo "$(date +%H:%M) $state";continue
   fi
