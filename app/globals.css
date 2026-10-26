@@ -453,3 +453,6 @@ img{display:block;max-width:100%}
 .engines li{display:grid;gap:1px;padding:6px 10px;border:1px solid var(--line,#2a2a36);border-radius:10px;background:#13131b;min-width:0}
 .engines strong{font-size:11px;font-weight:600}
 .engines small{font-size:9.5px;color:var(--muted)}
+.community-card .template-art>img{object-fit:cover}
+.template-slots span.bring{border-style:dashed;color:var(--accent)}
+.community-card:disabled{opacity:.6;cursor:progress}

@@ -7,6 +7,7 @@ import {DESIGN_COPY, type Language} from '../lib/design-copy';
 import {TEMPLATES, type StudioTemplate} from '../lib/templates';
 import {downloadJSON, FEEDBACK, HISTORY_KEY, HISTORY_LIMIT, readHistory, type DirectionRequest, type SavedDirection} from '../lib/history';
 import VideoTrimModal, {type ClipRange} from './video-trim-modal';
+import {COMMUNITY, type CommunityPreset} from '../lib/community';
 import GenerationPanel, {type GenerationJob} from './generation-panel';
 import JobProgress from './job-progress';
 import {readJson} from '../lib/http';
@@ -301,6 +302,31 @@ export default function Studio() {
     setView('studio'); setAuto(false); setActiveTemplate(null);
     setNotice(tr('Settings restored. Reattach the guide and reference pictures to generate.', 'Ajustes restaurados. Anexe novamente o guia e as referências para gerar.', 'Ajustes restaurados. Vuelve a adjuntar la guía y las referencias para generar.'));
   }
+  /** A community example: its guide (whole clip selected), references, mode and prompt; empty slots are the user's. */
+  const [loadingCommunity, setLoadingCommunity] = useState<string | null>(null);
+  async function useCommunity(preset: CommunityPreset) {
+    setLoadingCommunity(preset.id);
+    try {
+      const fetchFile = async (url: string, name: string, type: string) => {
+        const response = await fetch(url);
+        if (!response.ok) throw Error();
+        return new File([await response.blob()], name, {type, lastModified: 0});
+      };
+      const base = `/community/${preset.id}`;
+      const [file, files] = await Promise.all([fetchFile(`${base}/guide.mp4`, `${preset.id}.mp4`, 'video/mp4'), Promise.all(preset.refs.map(r => fetchFile(`${base}/ref_${r.slot}.jpg`, `${preset.id}_${r.slot}.jpg`, 'image/jpeg')))]);
+      setMode(preset.mode);
+      setVideo(current => {if (current) URL.revokeObjectURL(current.url); return {file, url: URL.createObjectURL(file), range: {start: 0, end: preset.duration}, duration: preset.duration};});
+      setPictures(current => {current.forEach(p => URL.revokeObjectURL(p.url)); return preset.refs.map((r, i) => ({slot: r.slot, file: files[i], url: URL.createObjectURL(files[i])}));});
+      setExpectedSlots([...preset.refs, ...preset.bring].map(r => r.slot).sort((a, b) => a - b));
+      setGuideSignature(JSON.stringify([file.name, file.size, 0])); setSubjects([]); setGuideRepresentation('original');
+      setPrompt(preset.prompt[lang]); setAuto(false); setActiveTemplate(null); setEditingVideo(false); setView('studio');
+      setNotice(preset.bring.length
+        ? tr(`Example loaded. Add your picture for ${preset.bring.map(b => `Picture ${b.slot} (${b.label.en})`).join(' and ')}, then generate.`, `Exemplo carregado. Adicione sua foto em ${preset.bring.map(b => `Imagem ${b.slot} (${b.label.pt})`).join(' e ')} e gere.`, `Ejemplo cargado. Añade tu foto en ${preset.bring.map(b => `Imagen ${b.slot} (${b.label.es})`).join(' y ')} y genera.`)
+        : tr('Example loaded with its guide, references and prompt. Generate it or change anything first.', 'Exemplo carregado com guia, referências e prompt. Gere ou mude o que quiser antes.', 'Ejemplo cargado con guía, referencias y prompt. Genéralo o cambia lo que quieras antes.'));
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    } catch { setNotice(tr('Could not load this example.', 'Não foi possível carregar este exemplo.', 'No se pudo cargar este ejemplo.')); }
+    finally { setLoadingCommunity(null); }
+  }
   function useTemplate(template: StudioTemplate) {
     setActiveTemplate(template.id); setMode(template.mode); setPrompt(template.prompt[lang]); setAuto(false); setView('studio');
     setNotice(tr('Prompt preset applied. Add your own guide and reference pictures.', 'Prompt do template aplicado. Adicione seu vídeo guia e suas referências.', 'Prompt de la plantilla aplicado. Añade tu guía y tus referencias.'));
@@ -420,6 +446,9 @@ export default function Studio() {
     </main>}
 
     {view === 'community' && <main className="community-page"><span className="eyebrow accent">{t.community}</span><h1>{tr('Find your next idea.', 'Encontre sua próxima ideia.', 'Encuentra tu próxima idea.')}</h1><p className="community-intro">{tr('Choose a template, add your video and references, and make it yours.', 'Escolha um template, adicione seu vídeo e suas referências e crie sua versão.', 'Elige una plantilla, añade tu vídeo y tus referencias y crea tu versión.')}</p>
+      <section className="templates-section"><div className="section-top"><div><span className="eyebrow accent">{tr('Examples', 'Exemplos', 'Ejemplos')} · {COMMUNITY.length}</span><h2>{tr('Start from a real case.', 'Comece de um caso pronto.', 'Empieza con un caso listo.')}</h2><p>{tr('Guide video, references and prompt load together. Add your own picture where it says "You".', 'Vídeo guia, referências e prompt carregam juntos. Adicione sua foto onde aparece "Você".', 'Vídeo guía, referencias y prompt se cargan juntos. Añade tu foto donde dice "Tú".')}</p></div></div>
+        <div className="template-grid">{COMMUNITY.map(preset => <button key={preset.id} className="template-card community-card" disabled={!!loadingCommunity} onClick={() => useCommunity(preset)}><div className="template-art"><img src={`/community/${preset.id}/poster.jpg`} alt="" loading="lazy"/><span className={'badge mono mode-badge ' + preset.mode}>{modeName(preset.mode)}</span><span className="template-cta">{loadingCommunity === preset.id ? tr('Loading…', 'Carregando…', 'Cargando…') : <><Icon name="plus" size={15}/>{t.useTpl}</>}</span><div className="template-slots">{[...preset.refs, ...preset.bring].sort((a, b) => a.slot - b.slot).map(r => <span key={r.slot} className={preset.bring.includes(r) ? 'bring' : ''}><Icon name="swap" size={10}/>{r.label[lang]}</span>)}</div></div><div className="template-caption"><h3>{preset.title[lang]}</h3><p>{preset.prompt[lang]}</p></div></button>)}</div>
+      </section>
       <section className="templates-section"><div className="section-top"><div><span className="eyebrow accent">{t.tplKicker} · {TEMPLATES.length}</span><h2>{tr('Start with a direction.', 'Comece com uma direção.', 'Empieza con una dirección.')}</h2><p>{tr('Prompt presets for your own guide video and reference pictures.', 'Prompts prontos para seu vídeo guia e suas imagens de referência.', 'Prompts para tu propio vídeo guía e imágenes de referencia.')}</p></div><div className="filter-chips">{[['all', t.catAll], ['dance', t.catDance], ['action', t.catAction], ['product', t.catProduct], ['fun', t.catFun]].map(([key, label]) => <button className={templateFilter === key ? 'active' : ''} aria-pressed={templateFilter === key} onClick={() => setTemplateFilter(key)} key={key}>{label}</button>)}</div></div>
         <div className="template-grid">{filteredTemplates.map(template => <button key={template.id} className="template-card" onClick={() => useTemplate(template)}><div className={'template-art ' + template.th}>{template.img ? <img src={template.img} alt="" loading="lazy"/> : <div className="template-placeholder"><Icon name={template.mode === 'motion' ? 'motion' : 'film'} size={30}/><span className="eyebrow">{tr('Prompt preset', 'Template de prompt', 'Plantilla de prompt')}</span></div>}<span className={'badge mono mode-badge ' + template.mode}>{modeName(template.mode)}</span><span className="template-cta"><Icon name="plus" size={15}/>{t.useTpl}</span><div className="template-slots">{template.slots[lang].map(slot => <span key={slot}><Icon name="swap" size={10}/>{slot}</span>)}</div></div><div className="template-caption"><h3>{template.title[lang]}</h3><p>{template.prompt[lang]}</p></div></button>)}</div>
       </section></main>}
