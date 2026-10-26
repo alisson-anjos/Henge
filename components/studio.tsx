@@ -192,7 +192,9 @@ export default function Studio() {
         setProject(typeof s.project === 'string' && s.project !== 'Untitled project' ? s.project : '');
         setQuality(['480p', '720p', '1080p', '1440p', '2160p'].includes(s.quality) ? s.quality : '480p');
         setAudioConditioning(s.audioConditioning === true);
-        setKeepAudio(s.keepAudio !== false);
+        // Drafts saved before v2 inherited an early false default. Migrate them once to the current default (on);
+        // after v2, an explicit user choice to turn source audio off remains persistent.
+        setKeepAudio(s.schema_version >= 2 ? s.keepAudio !== false : true);
         setShotSeconds(Math.min(15, Math.max(1, Number(s.shotSeconds) || 4.5)));
         setTimelineFps(Math.min(120, Math.max(1, Number(s.timelineFps) || 24)));
         setContextFrames([5, 22, 39].includes(s.contextFrames) ? s.contextFrames : 22);
@@ -207,7 +209,7 @@ export default function Studio() {
   useEffect(() => {
     if (!ready) return;
     document.documentElement.lang = lang;
-    try { localStorage.setItem('henge-draft', JSON.stringify({prompt, intent, mode, project, quality, audioConditioning, keepAudio, shotSeconds, timelineFps, contextFrames, cutMode, lang, subjects, guideRepresentation, guideSignature})); } catch { /* Editing still works without draft persistence. */ }
+    try { localStorage.setItem('henge-draft', JSON.stringify({schema_version: 2, prompt, intent, mode, project, quality, audioConditioning, keepAudio, shotSeconds, timelineFps, contextFrames, cutMode, lang, subjects, guideRepresentation, guideSignature})); } catch { /* Editing still works without draft persistence. */ }
   }, [ready, prompt, intent, mode, project, quality, audioConditioning, keepAudio, shotSeconds, timelineFps, contextFrames, cutMode, lang, subjects, guideRepresentation, guideSignature]);
   useEffect(() => {
     if (!ready) return;
