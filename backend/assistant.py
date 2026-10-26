@@ -213,8 +213,14 @@ def _call_openai(cfg: dict, messages: list) -> dict:
     base = (cfg['base_url'] or 'https://api.openai.com/v1').rstrip('/')
     tools = [{'type': 'function', 'function': {'name': t['name'], 'description': t['description'], 'parameters': t['input_schema']}} for t in TOOLS]
     headers = {'Authorization': f"Bearer {cfg['api_key']}"} if cfg['api_key'] else {}
-    r = requests.post(base + '/chat/completions', headers=headers, timeout=300,
-                      json={'model': cfg['model'], 'messages': _to_openai(messages), 'tools': tools, 'max_tokens': 4096})
+    body = {'model': cfg['model'], 'messages': _to_openai(messages), 'tools': tools}
+    # OpenAI's current models take max_completion_tokens and reject max_tokens; local servers (LM Studio, Ollama,
+    # vLLM) still read max_tokens. Start with the one the server is likely to take, switch once if it refuses.
+    limits = ['max_completion_tokens', 'max_tokens'] if 'api.openai.com' in base else ['max_tokens', 'max_completion_tokens']
+    for i, name in enumerate(limits):
+        r = requests.post(base + '/chat/completions', headers=headers, timeout=300, json={**body, name: 8192})
+        if r.ok or i or r.status_code != 400 or name not in r.text:
+            break
     if not r.ok:
         raise RuntimeError(f'{base} HTTP {r.status_code}: {r.text[:400]}')
     msg = r.json()['choices'][0]['message']

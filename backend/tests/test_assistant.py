@@ -38,6 +38,22 @@ class AssistantTest(unittest.TestCase):
   o=assistant._to_openai(history)
   self.assertEqual(o[0]['role'],'system');self.assertEqual(o[2]['tool_calls'][0]['function']['arguments'],'{"time": 2}')
   self.assertEqual(o[3]['role'],'tool');self.assertEqual(o[4]['role'],'user');self.assertEqual(o[4]['content'][1]['type'],'image_url')
+ def test_openai_token_limit_parameter(self):
+  class R:
+   def __init__(self,ok,text,payload=None):self.ok=ok;self.status_code=200 if ok else 400;self.text=text;self._p=payload
+   def json(self):return self._p
+  sent=[]
+  def post(url,headers,timeout,json):
+   sent.append([k for k in json if 'tokens' in k][0])
+   if 'max_tokens' in json:return R(False,"Unsupported parameter: 'max_tokens' is not supported with this model.")
+   return R(True,'',{'choices':[{'message':{'content':'hi'}}]})
+  with patch.object(assistant.requests,'post',side_effect=post):
+   out=assistant._call_openai({'base_url':'','api_key':'k','model':'gpt'},[{'role':'user','text':'hi'}])
+  self.assertEqual(sent,['max_completion_tokens']);self.assertEqual(out['text'],'hi')
+  sent.clear()
+  with patch.object(assistant.requests,'post',side_effect=post):
+   assistant._call_openai({'base_url':'http://127.0.0.1:1234/v1','api_key':'','model':'local'},[{'role':'user','text':'hi'}])
+  self.assertEqual(sent,['max_tokens','max_completion_tokens'])
  def test_every_tool_is_routed(self):
   self.assertEqual(assistant.STUDIO_NAMES&assistant.JOB_NAMES,set())
   for t in assistant.TOOLS:self.assertEqual(t['input_schema']['type'],'object')
