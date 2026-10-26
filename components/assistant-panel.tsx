@@ -41,6 +41,9 @@ const label = (name: string, input: Record<string, unknown>) => {
 export default function AssistantPanel({controller, lang}: {controller: StudioController; lang: Language}) {
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {try {setExpanded(localStorage.getItem('henge-assistant-expanded') === '1');} catch {/* private mode */}}, []);
+  const toggleExpanded = () => setExpanded(v => {try {localStorage.setItem('henge-assistant-expanded', v ? '0' : '1');} catch {/* private mode */} return !v;});
   const [settings, setSettings] = useState(false);
   const [config, setConfig] = useState<Config | null>(null);
   const [draft, setDraft] = useState<Partial<Config> & {api_key?: string}>({});
@@ -96,10 +99,11 @@ export default function AssistantPanel({controller, lang}: {controller: StudioCo
   const presetOf = (c: Partial<Config>) => Object.entries(PRESETS).find(([, p]) => p.provider === c.provider && (p.provider === 'anthropic' || p.base_url === c.base_url))?.[0] || 'custom';
   return <>
     <button type="button" className="assistant-fab" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? '×' : '✦'}<span>{tr('Assistant', 'Assistente', 'Asistente')}</span></button>
-    {open && <aside className="assistant-panel surface" aria-label={tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')}>
+    {open && <aside className={'assistant-panel surface' + (expanded ? ' expanded' : '')} aria-label={tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')}>
       <header><strong>{tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')}</strong>
         <small className="muted mono">{config ? `${config.model}` : ''}</small>
         <span><button type="button" className="quiet-button" onClick={() => {setMessages([]); setError('');}} disabled={!!busy}>{tr('New chat', 'Nova conversa', 'Nueva conversación')}</button>
+          <button type="button" className="quiet-button" aria-pressed={expanded} title={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} aria-label={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} onClick={toggleExpanded}>{expanded ? '⤡' : '⤢'}</button>
           <button type="button" className="quiet-button" aria-pressed={settings} onClick={() => setSettings(s => !s)}>⚙</button></span></header>
       {settings && config && <div className="assistant-settings">
         <label>{tr('Model provider', 'Provedor do modelo', 'Proveedor del modelo')}<select value={presetOf(draft)} onChange={e => {const p = PRESETS[e.target.value]; if (p) setDraft(d => ({...d, ...p}));}}>
