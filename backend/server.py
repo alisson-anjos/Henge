@@ -4,10 +4,11 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 import requests
+import assistant
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageOps
-from workflows import split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import find_people_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
@@ -738,7 +739,7 @@ async def configure_connection(request:Request):
 @app.get('/jobs')
 def list_jobs():
     # Newest first by creation: a retried or long-running job keeps its place instead of jumping to the top.
-    jobs=[job for job in (json.loads(p.read_text()) for p in JOBS.glob('*/job.json')) if (job.get('request') or {}).get('mode') not in ('frame_edit','fibo_prepare')]
+    jobs=[job for job in (json.loads(p.read_text()) for p in JOBS.glob('*/job.json')) if (job.get('request') or {}).get('mode') not in ('frame_edit','fibo_prepare','find_people')]
     return [public(job) for job in sorted(jobs,key=lambda job:job.get('created',0),reverse=True)][:50]
 
 @app.post('/jobs')
@@ -802,11 +803,8 @@ async def update_mask_preview(jid:str,request:Request):
         save(job,options=options,status='queued_mask',stage='queued',message='Updating the latent mask preview')
     return public(job)
 
-@app.post('/jobs/{jid}/marks')
-async def update_marks(jid:str,request:Request):
-    """Opacity of the 2D color marks, chosen on the approval screen (the preview blends it live; nothing reruns)."""
-    body=await request.json()
-    try:opacity=clamp_float(body.get('mark_opacity'),.1,1,'mark opacity')
+def set_mark_opacity(jid,opacity):
+    try:opacity=clamp_float(opacity,.1,1,'mark opacity')
     except (ValueError,TypeError) as e:raise HTTPException(400,str(e))
     with LOCK:
         job=load(jid)
@@ -814,6 +812,11 @@ async def update_marks(jid:str,request:Request):
         request_=json.loads(json.dumps(job['request']));request_.setdefault('subject_guidance',{})['mark_opacity']=round(float(opacity),2)
         save(job,request=request_)
     return {**public(load(jid)),'request':load(jid)['request']}
+
+@app.post('/jobs/{jid}/marks')
+async def update_marks(jid:str,request:Request):
+    """Opacity of the 2D color marks, chosen on the approval screen (the preview blends it live; nothing reruns)."""
+    return set_mark_opacity(jid,(await request.json()).get('mark_opacity'))
 
 @app.post('/jobs/{jid}/approve')
 def approve(jid:str):
@@ -1012,3 +1015,86 @@ def workflow(jid:str,stage:str|None=None):
     name=stage+'.api.json'
     if name not in graphs:raise HTTPException(404,'Unknown workflow stage')
     return Response(json.dumps(graphs[name],indent=2),media_type='application/json',headers={'Content-Disposition':f'attachment; filename="henge-{jid[:8]}-{stage}.json"'})
+
+
+# --- Studio assistant (backend/assistant.py): an LLM that operates the studio ---
+ASSISTANT_CONFIG=ROOT/'assistant.json'
+JOB_VIDEOS={'marks':'marks_preview.mp4','mask':'mask_preview.mp4','guide':'guide_preview.mp4','result':'result.mp4','comparison':'comparison.mp4'}
+
+def job_summary(job):
+    plan=job.get('plan') or {}
+    previews=[k for k,v in JOB_VIDEOS.items() if (job_path(job['id'])/v).is_file()]
+    return json.dumps({'id':job['id'],'mode':(job.get('request') or {}).get('mode'),'status':job['status'],'stage':job.get('stage'),'message':job.get('message'),'error':job.get('error'),
+                       'shot':f"{job['segment']}/{job['total_segments']}" if job.get('segment') else None,'videos':previews,
+                       'plan':{'summary':plan.get('summary'),'representation':plan.get('representation'),'use_fibo':plan.get('use_fibo'),'warnings':plan.get('warnings'),'prompt':(plan.get('prompt') or '')[:2000]} if plan else None},ensure_ascii=False)
+
+def job_frames(job,which,count):
+    path=job_path(job['id'])/JOB_VIDEOS[which]
+    if not path.is_file():raise ValueError(f'This job has no {which} video yet')
+    duration=probe(path)['duration'];count=max(1,min(6,int(count or 3)));out=[]
+    with tempfile.TemporaryDirectory() as d:
+        for i in range(count):
+            dest=Path(d)/f'{i}.jpg';t=duration*(i+.5)/count
+            run(['ffmpeg','-v','error','-ss',f'{t:.3f}','-i',str(path),'-frames:v','1','-vf','scale=640:-2','-q:v','4','-y',str(dest)])
+            if dest.is_file():out.append(assistant.jpeg_data_url(dest))
+    return out
+
+def run_job_tool(name,args):
+    if name=='get_job':return job_summary(load(args['job_id'])),[]
+    if name=='wait_for_job':
+        deadline=time.time()+900
+        while True:
+            job=load(args['job_id'])
+            ready=job['status'] in TERMINAL or (args['until']=='plan' and job['status']=='awaiting_approval')
+            if ready or time.time()>deadline:return job_summary(job)+('' if ready else ' (still running after 15 minutes; wait again)'),[]
+            time.sleep(3)
+    if name=='view_job_video':
+        job=load(args['job_id']);images=job_frames(job,args['which'],args.get('frames'))
+        note=' (marks at full opacity; the job uses its mark_opacity)' if args['which']=='marks' else ''
+        return f"{len(images)} frames of the {args['which']} video, in order{note}.",images
+    try:
+        if name=='set_job_mark_opacity':set_mark_opacity(args['job_id'],args['opacity']);return 'Mark opacity saved.',[]
+        if name=='approve_job':approve(args['job_id']);return job_summary(load(args['job_id'])),[]
+        if name=='cancel_job':cancel(args['job_id']);return 'Cancelled.',[]
+    except HTTPException as e:raise ValueError(e.detail)
+    raise ValueError(f'Unknown job tool {name}')
+
+@app.get('/assistant/config')
+def get_assistant_config():return assistant.public_config(assistant.load_config(ASSISTANT_CONFIG))
+
+@app.post('/assistant/config')
+async def set_assistant_config(request:Request):
+    try:return assistant.public_config(assistant.save_config(ASSISTANT_CONFIG,await request.json()))
+    except ValueError as e:raise HTTPException(400,str(e))
+
+@app.post('/assistant/people')
+async def find_people(request:Request):
+    """Number the people (or animals) in one guide frame sent by the browser. Runs as a hidden job on the same
+    ComfyUI or serverless path as generation."""
+    form=await request.form(max_files=1,max_fields=2,max_part_size=16*1024*1024)
+    frame=form.get('frame');kind=str(form.get('kind') or 'person')
+    if not hasattr(frame,'read') or kind not in ('person','animal'):raise HTTPException(400,'Send a frame and a kind (person or animal)')
+    jid=uuid.uuid4().hex;inp=INPUT/'henge'/jid;inp.mkdir(parents=True);job_path(jid).mkdir(parents=True)
+    try:
+        with Image.open(io.BytesIO(await frame.read())) as im:dest=inp/'frame.png';im.convert('RGB').save(dest)
+    except OSError:raise HTTPException(400,'The frame is not an image')
+    job={'id':jid,'created':time.time(),'status':'running','stage':'find_people','progress':0,'request':{'mode':'find_people'},'options':{},'message':'Finding people'};save(job)
+    try:
+        outputs=await asyncio.to_thread(execute_graph,job,find_people_graph(str(dest.relative_to(INPUT)),kind),'find_people')
+        found=json.loads(outputs.get('4',{}).get('text',['{}'])[0])
+        overlay=await asyncio.to_thread(image_from_output,outputs,inp/'people.png')
+        with Image.open(overlay) as im:
+            im=im.convert('RGB');im.thumbnail((960,960));buf=io.BytesIO();im.save(buf,'JPEG',quality=85)
+        save(job,status='completed',stage='complete',progress=1)
+    except Exception as e:
+        save(job,status='failed',error=str(e)[:1800]);raise HTTPException(500,f'Finding people failed: {str(e)[:600]}')
+    return {**found,'overlay':'data:image/jpeg;base64,'+base64.b64encode(buf.getvalue()).decode()}
+
+@app.post('/assistant/step')
+async def assistant_step(request:Request):
+    body=await request.json();messages=body.get('messages')
+    if not isinstance(messages,list) or not messages:raise HTTPException(400,'Send the conversation')
+    cfg=assistant.load_config(ASSISTANT_CONFIG)
+    if cfg['provider']=='anthropic' and not cfg['api_key'] and not os.environ.get('ANTHROPIC_API_KEY'):raise HTTPException(409,'Set up the assistant first: add an API key in its settings')
+    try:return await asyncio.to_thread(assistant.step,cfg,messages,run_job_tool)
+    except Exception as e:raise HTTPException(502,f'Assistant error: {str(e)[:800]}')

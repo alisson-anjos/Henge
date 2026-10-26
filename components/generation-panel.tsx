@@ -12,6 +12,8 @@ import FiboPrep from './fibo-prep';
 import MarksPreview from './marks-preview';
 
 type Plan = {summary: string; prompt: string; source_kind: string; target_kind: string; use_fibo: boolean; representation: string; preparation_reason?: string; preparation_recommended?: boolean; warnings: string[]; picture_roles: {slot: number; role: string; description: string}[]};
+/** What the studio assistant can do in this panel. */
+export type PanelControls = {submit: () => Promise<string>; setAutoApprove: (value: boolean) => void; selectJob: (id: string) => void};
 export type GenerationJob = {id: string; project: string; mode?: string; duration?: number; quality?: string; options?: Record<string, unknown>; status: string; stage: string; message?: string; error?: string; progress: number; segment?: number; total_segments?: number; plan?: Plan; sampling_preview_url?: string; result_url?: string; comparison_url?: string; guide_preview_url?: string; fibo_preview_url?: string; created: number; step?: number; step_total?: number; eta_seconds?: number | null; prepared_reference_urls?: string[]; shot_urls?: string[]; mask_preview_url?: string; marks_preview_url?: string; marks_source_url?: string; seconds_per_step?: number | null};
 type Health = {comfy_url?: string; online: boolean; training_busy: boolean; tara_ready?: boolean; fibo_ready: boolean; models: Record<string, {label: string; task?: string; available?: boolean}>; turbos?: Record<string, {label: string; steps: number; available: boolean}>; upscalers?: {h3: boolean; nvidia: boolean}; bases?: Record<string, {label: string; available: boolean}>};
 const relativeTime = (created: number, lang: Language) => {
@@ -49,7 +51,7 @@ function normalizeSettings(o: Record<string, unknown>) {
     attention: o.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention',
   };
 }
-export default function GenerationPanel({freshRevision = 0, initialSettings = {}, onSelectJob, onShareSettings, onImportSettings, mode, request, video, pictures, canSubmit, lang, onResult, requestedJobId, requestedProfile}: {freshRevision?: number; initialSettings?: Record<string, unknown>; onSelectJob?: (request: DirectionRequest, jobId: string) => void; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null; requestedProfile?: string | null}) {
+export default function GenerationPanel({registerControls, freshRevision = 0, initialSettings = {}, onSelectJob, onShareSettings, onImportSettings, mode, request, video, pictures, canSubmit, lang, onResult, requestedJobId, requestedProfile}: {registerControls?: (controls: PanelControls) => void; freshRevision?: number; initialSettings?: Record<string, unknown>; onSelectJob?: (request: DirectionRequest, jobId: string) => void; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null; requestedProfile?: string | null}) {
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -145,8 +147,8 @@ export default function GenerationPanel({freshRevision = 0, initialSettings = {}
   useEffect(() => {if (!freshRevision) return; setSelected(null); try {localStorage.removeItem(SELECTED_KEY);} catch {/* private mode */}}, [freshRevision]);
   useEffect(() => {if (requestedProfile) setMotionModel(requestedProfile);}, [requestedProfile]);
   useEffect(() => {if (job) onResult(job);}, [job?.id, job?.status, job?.progress, job?.result_url, job?.message, job?.guide_preview_url, job?.fibo_preview_url, job?.sampling_preview_url]);
-  async function submit() {
-    if (!request || !video || !canSubmit || submitting) return;
+  async function submit(): Promise<string> {
+    if (!request || !video || !canSubmit || submitting) throw Error(!video ? 'Attach a guide video first' : !canSubmit ? 'The studio is not ready: check the pictures, marks and prompt' : 'A generation is being sent');
     setError(''); setSubmitting(true);
     try {
       const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, base, cfg, ...(activeConditioning === 'tara' ? {structure_cfg: structureCfg} : {}), ...(usesMask ? {mask: maskSettings} : {}), turbo,...(mode === 'sharpness' ? {lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise} : {})})); body.set('video', video);
@@ -154,8 +156,11 @@ export default function GenerationPanel({freshRevision = 0, initialSettings = {}
       const response = await fetch('/api/backend/jobs', {method: 'POST', body}); const result = await readJson(response);
       if (!response.ok) throw Error(result.detail || result.error || 'Unable to create job');
       setJobs(current => [result, ...current]); setSelected(result.id);
-    } catch (e) {setError(e instanceof Error ? e.message : 'Unable to submit');} finally {setSubmitting(false);}
+      return result.id as string;
+    } catch (e) {setError(e instanceof Error ? e.message : 'Unable to submit'); throw e;} finally {setSubmitting(false);}
   }
+  // The assistant always calls the latest closures (they read this render's request and options).
+  useEffect(() => {registerControls?.({submit, setAutoApprove, selectJob: id => void selectJob(id)});});
   async function saveConnection() {
     setConnecting(true); setConnectionMessage('');
     try {
@@ -251,7 +256,7 @@ export default function GenerationPanel({freshRevision = 0, initialSettings = {}
   const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise};
   const storedOptions = JSON.stringify(shareOptions);
   useEffect(() => {if (restored) try {localStorage.setItem(SETTINGS_KEY, storedOptions);} catch {/* private mode */}}, [restored, storedOptions]);
-  const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button>{job && !['completed', 'failed', 'cancelled'].includes(job.status) && <button className="quiet-button" disabled={submitting} onClick={() => action('cancel')}>{tr('Cancel job', 'Cancelar pedido', 'Cancelar pedido')}</button>}<button className="primary" disabled={!health?.online || health?.models[profile]?.available === false || !canSubmit || submitting} onClick={submit}>{submitting ? tr('Sending…', 'Enviando…', 'Enviando…') : tr('Generate', 'Gerar', 'Generar')}</button></>;
+  const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button>{job && !['completed', 'failed', 'cancelled'].includes(job.status) && <button className="quiet-button" disabled={submitting} onClick={() => action('cancel')}>{tr('Cancel job', 'Cancelar pedido', 'Cancelar pedido')}</button>}<button className="primary" disabled={!health?.online || health?.models[profile]?.available === false || !canSubmit || submitting} onClick={() => {submit().catch(() => {});}}>{submitting ? tr('Sending…', 'Enviando…', 'Enviando…') : tr('Generate', 'Gerar', 'Generar')}</button></>;
   return <section className="generation-panel" aria-label={tr('Generation backend', 'Geração no backend', 'Generación en backend')}>
     {settingsTarget ? createPortal(settings, settingsTarget) : null}
     <p className="micro-copy">{tr('Your video and references are analyzed before generation. Review the plan and any recommended reference preparation.', 'O vídeo e as referências são analisados antes da geração. Revise o plano e a preparação recomendada.', 'El vídeo y las referencias se analizan antes de generar. Revisa el plan y la preparación recomendada.')}</p>

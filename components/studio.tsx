@@ -10,12 +10,14 @@ import VideoTrimModal, {type ClipRange} from './video-trim-modal';
 import {COMMUNITY, type CommunityPreset} from '../lib/community';
 import FirstFrameModal, {coverFit} from './first-frame-modal';
 const FIRST_FRAME_KEY = 'henge-first-frame';
-import GenerationPanel, {type GenerationJob} from './generation-panel';
+import GenerationPanel, {type GenerationJob, type PanelControls} from './generation-panel';
+import AssistantPanel, {type StudioCall, type StudioController, type StudioResult} from './assistant-panel';
+import {captureFrame, thumbnail} from '../lib/frame-capture';
 import JobProgress from './job-progress';
 import {readJson} from '../lib/http';
 import {jobStatusLabel} from '../lib/job-status';
 import SubjectBindings, {SubjectVideo} from './subject-bindings';
-import {bindingPrompt, readSubjectBindings, type SubjectBinding, type GuideRepresentation} from '../lib/subject-bindings';
+import {SUBJECT_COLORS, bindingPrompt, readSubjectBindings, type SubjectBinding, type GuideRepresentation} from '../lib/subject-bindings';
 import SetupScreen from './setup-screen';
 import {cutModeLabel, type CutMode} from './shot-plan';
 
@@ -177,6 +179,79 @@ export default function Studio() {
 
   const invalid = invalidReferences(prompt, pictures.map(p => p.slot));
   const selectedDuration = video?.range ? video.range.end - video.range.start : 0;
+
+  // --- Studio assistant: it reads this render's state and acts through the same setters as the controls. ---
+  const panelControls = useRef<PanelControls | null>(null);
+  const studioLive = useRef({mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures});
+  studioLive.current = {mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures};
+  const found = useRef(new Map<string, {width: number; height: number; people: {number: number; x: number; y: number}[]}>());
+  const settle = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  const studioState = () => {
+    const c = studioLive.current;
+    return {mode: c.mode, guide_video: c.video ? {name: c.video.file.name, duration: c.video.duration ?? null, selected: c.video.range ?? null} : null,
+      pictures: c.pictures.map(p => ({slot: p.slot, name: p.file.name})), max_pictures: c.maxPictures,
+      subjects: c.subjects.map((s, i) => ({subject: i + 1, label: s.label, color: s.color, picture_slots: s.picture_slots, marks: s.anchors.map(a => a.time_seconds)})),
+      guide_representation: c.guideRepresentation, mark_opacity: c.markOpacity, prompt: c.prompt, quality: c.quality,
+      selected_job: c.generationJob ? {id: c.generationJob.id, status: c.generationJob.status, stage: c.generationJob.stage, message: c.generationJob.message} : null};
+  };
+  async function runStudioCall(call: StudioCall): Promise<StudioResult> {
+    const c = studioLive.current, input = call.input;
+    const num = (k: string) => Number(input[k]);
+    const inRange = (t: number) => {if (!c.video?.range) throw Error('Attach and trim the guide video first'); if (!Number.isFinite(t) || t < c.video.range.start || t > c.video.range.end) throw Error(`Use a time inside the selected interval ${c.video.range.start.toFixed(2)}–${c.video.range.end.toFixed(2)} s`); return t;};
+    switch (call.name) {
+      case 'get_studio_state': return {text: JSON.stringify(studioState())};
+      case 'view_pictures': {
+        if (!c.pictures.length) return {text: 'No pictures attached.'};
+        return {text: c.pictures.map((p, i) => `Image ${i + 1} = Picture ${p.slot} (${p.file.name})`).join('; '), images: await Promise.all(c.pictures.map(p => thumbnail(p.file, 640)))};
+      }
+      case 'view_frame': {
+        const t = inRange(num('time')); const frame = await captureFrame(c.video!.url, t);
+        return {text: `Guide frame at ${t.toFixed(2)} s (${frame.width}x${frame.height}).`, images: [await thumbnail(frame.blob, 960)]};
+      }
+      case 'find_people': {
+        const t = inRange(num('time')); const frame = await captureFrame(c.video!.url, t);
+        const body = new FormData(); body.set('frame', frame.blob, 'frame.png'); body.set('kind', input.kind === 'animal' ? 'animal' : 'person');
+        const response = await fetch('/api/backend/assistant/people', {method: 'POST', body}); const reply = await response.json();
+        if (!response.ok) throw Error(reply.detail || `HTTP ${response.status}`);
+        found.current.set(t.toFixed(2), {width: frame.width, height: frame.height, people: reply.people});
+        return {text: reply.people.length ? `${reply.people.length} found at ${t.toFixed(2)} s, numbered left to right: ${reply.people.map((p: {number: number; box: number[]}) => `#${p.number} box x=${p.box[0]} w=${p.box[2]}`).join('; ')}.` : `Nobody found at ${t.toFixed(2)} s. Try another time.`, images: [reply.overlay]};
+      }
+      case 'set_mode': {
+        const m = String(input.mode) as Mode; if (!['swap', 'motion', 'headswap', 'sharpness'].includes(m)) throw Error('Unknown mode');
+        setMode(m); await settle(); return {text: `Mode is now ${m}.`};
+      }
+      case 'set_prompt': setPrompt(String(input.text ?? '')); await settle(); return {text: 'Prompt updated.'};
+      case 'mark_subject': {
+        const t = num('time'), hit = found.current.get(t.toFixed(2));
+        if (!hit) throw Error(`Call find_people at ${t} first`);
+        const person = hit.people.find(p => p.number === num('person')); if (!person) throw Error(`No person #${input.person} at ${t}`);
+        const slots = (input.picture_slots as number[] || []).map(Number);
+        if (!slots.length || slots.some(n => !c.pictures.some(p => p.slot === n))) throw Error('Use attached picture slots');
+        const color = SUBJECT_COLORS.find(col => !c.subjects.some(s => s.color === col.name));
+        if (!color) throw Error('Every color is in use');
+        const subject: SubjectBinding = {id: crypto.randomUUID(), label: String(input.label || `Subject ${c.subjects.length + 1}`), color: color.name, picture_slots: slots,
+          anchors: [{x: person.x, y: person.y, time_seconds: t, frame_width: hit.width, frame_height: hit.height}]};
+        setSubjects(current => [...current, subject]); await settle();
+        return {text: `Subject ${c.subjects.length + 1} (${color.name}) = person #${person.number} → Picture ${slots.join(', ')}.`};
+      }
+      case 'clear_subjects': setSubjects([]); await settle(); return {text: 'All subjects removed.'};
+      case 'set_guide': {
+        const rep = String(input.representation) as GuideRepresentation;
+        if (!['original', '2d', '3d', 'mask'].includes(rep)) throw Error('Unknown representation');
+        setGuideRepresentation(rep); if (input.mark_opacity !== undefined) setMarkOpacity(Math.min(1, Math.max(.1, num('mark_opacity'))));
+        await settle(); return {text: `Guide is ${rep}${rep === '2d' ? `, mark opacity ${studioLive.current.markOpacity}` : ''}.`};
+      }
+      case 'set_quality': setQuality(String(input.quality)); await settle(); return {text: `Quality is ${studioLive.current.quality}.`};
+      case 'set_auto_approve': panelControls.current?.setAutoApprove(Boolean(input.enabled)); await settle(); return {text: `Auto-approve ${input.enabled ? 'on' : 'off'}.`};
+      case 'generate': {
+        if (!panelControls.current) throw Error('The generation panel is not ready');
+        await settle(); const id = await panelControls.current.submit();
+        return {text: `Generation started: job ${id}. Use wait_for_job.`};
+      }
+      default: throw Error(`Unknown studio tool ${call.name}`);
+    }
+  }
+  const assistantController: StudioController = {state: studioState, run: runStudioCall};
   const contextWindow = selectedDuration > 15;
   const shotFrames = Math.max(22, Math.floor((Math.round(shotSeconds * 24) - 5) / 17) * 17 + 5);
   const estimatedShots = selectedDuration ? Math.ceil(Math.round(selectedDuration * timelineFps) / shotFrames) : 0;
@@ -434,6 +509,7 @@ export default function Studio() {
 
     {/* Kept mounted on other tabs so the generation panel keeps its settings and selected job. */}
     <div className="studio-view" hidden={view !== 'studio'}>
+      {ready && <AssistantPanel controller={assistantController} lang={lang}/>}
       <main className="workspace">
         <aside className="controls">
           <div className="create-heading rise"><span className="eyebrow accent">{t.create}</span><h1>{t[`h1a_${mode}`]}<br/><span>{t[`h1b_${mode}`]}</span></h1></div>
@@ -508,7 +584,7 @@ export default function Studio() {
             <div className="prompt-footer">{!fixedRecipe && <><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></>}<div className="prompt-generation-actions" id="prompt-generation-actions"/></div>
           </section>
           <input hidden ref={importSettingsInput} type="file" accept="application/json,.json" onChange={e => {importSettings(e.target.files?.[0]); e.target.value = '';}}/>
-          <GenerationPanel key={importRevision} freshRevision={freshRevision} requestedProfile={requestedProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
+          <GenerationPanel key={importRevision} registerControls={controls => {panelControls.current = controls;}} freshRevision={freshRevision} requestedProfile={requestedProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
           </section>
         </section>
 

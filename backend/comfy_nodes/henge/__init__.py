@@ -277,6 +277,8 @@ class HengeTextResult:
     def save(self,text):return {'ui':{'text':[text]}}
 
 NODE_CLASS_MAPPINGS['HengeTextResult']=HengeTextResult
+from .find_people import HengeFindPeople
+NODE_CLASS_MAPPINGS['HengeFindPeople']=HengeFindPeople
 from .causal import HengeCausalSampler
 NODE_CLASS_MAPPINGS['HengeCausalSampler']=HengeCausalSampler
 from .frame_refine import HengeFrameRefine

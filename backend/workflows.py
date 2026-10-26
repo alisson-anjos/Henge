@@ -152,6 +152,11 @@ def fibo_graph(image,refs,instruction,seed):
     for i,p in enumerate(refs,2):g[str(20+i)]=node('LoadImage',image=p);g['5']['inputs'][f'images.image_{i}']=[str(20+i),0]
     return g
 
+def find_people_graph(image,kind='person'):
+    # One frame: SAM 3.1 finds and numbers every person (or animal) for the studio assistant.
+    return {'1':node('LoadImage',image=image),'2':node('HengeFindPeople',image=['1',0],kind=kind,threshold=.4,sam_checkpoint='sam3.1_multiplex_fp16.safetensors'),
+            '3':node('SaveImage',images=['2',0],filename_prefix=image.rsplit('.',1)[0]+'_people'),'4':node('HengeTextResult',text=['2',1])}
+
 def marks_preview_graph(video,width,height,length,trim_frames,bindings,source_kind,segment_start,preserve_objects,filename):
     # The 2D color guide at full opacity: the UI lays it over the source with the chosen opacity, which is exactly the
     # blend HengeGuide makes, so the opacity can be tried live without running SAM again.
