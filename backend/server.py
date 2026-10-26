@@ -678,6 +678,13 @@ def follow_update(follow,reports,next_offset):
         if sid not in seen:state.pop('carry',None)
     return report.get('warnings',[])
 
+def guide_available(item):
+    """The guide video is optional: a serverless reply can leave it out (ComfyUI skips a save node whose inputs did
+    not change, e.g. a Retry with another quality), and its absence must not fail the job."""
+    if not RUNPOD:return True
+    key=(item.get('subfolder','')+'/'+item['filename']).lstrip('/')
+    return key in RUNPOD.received or key in RUNPOD.on_volume
+
 def frame_count(path):
     out=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-count_packets','-show_entries','stream=nb_read_packets','-of','csv=p=0',str(path)],capture_output=True,text=True)
     try:return int(out.stdout.strip())
@@ -760,6 +767,7 @@ def generate(job):
         pieces.append(piece);previous=rendered
         # Each finished shot is viewable and downloadable while the next ones render.
         save(job,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
+        guides=[g for g in guides if guide_available(g)]
         if guides:
             # The guide H3 received (color marks, mask region or the plain source), shot by shot like the result.
             gpiece=work/f'guide_{i:03d}.mp4';FILES.download(guides[0],inp/f'guide_{i:03d}_raw.mp4')

@@ -254,6 +254,10 @@ class HengeSaveVideo:
     def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'filename':('STRING',),'trim_frames':('INT',{'default':107,'min':1}),'fps':('FLOAT',{'default':24})},
                                  'optional':{'skip_frames':('INT',{'default':0,'min':0})}}
     RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Henge'
+    @classmethod
+    def IS_CHANGED(cls,**kwargs):
+        # Always write the file: a cached save node is left out of the run's outputs, and the bridge waits for it.
+        return float('nan')
     def save(self,images,filename,trim_frames,fps,skip_frames=0):
         # skip_frames drops a shot's context overlap here, so this is the shot's only encode (CRF 17, visually lossless).
         root=Path(folder_paths.get_output_directory()).resolve();p=(root/filename).resolve()
