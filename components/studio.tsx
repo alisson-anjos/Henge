@@ -235,11 +235,12 @@ export default function Studio() {
       subjects: c.subjects.map((s, i) => ({subject: i + 1, label: s.label, color: s.color, picture_slots: s.picture_slots, marks: s.anchors.map(a => a.time_seconds)})),
       guide_representation: c.guideRepresentation, mark_opacity: c.markOpacity, prompt: c.prompt, prompt_mode: c.promptMode, quality: c.quality,
       shots: {seconds: c.shotSeconds, cut_mode: c.cutMode, context_frames: c.contextFrames}, output: {keep_audio: c.keepAudio, audio_conditioning: c.audioConditioning, timeline_fps: c.timelineFps}, project: c.project,
-      selected_job: c.generationJob ? {id: c.generationJob.id, status: c.generationJob.status, stage: c.generationJob.stage, message: c.generationJob.message} : null};
+      selected_job: c.generationJob ? {id: c.generationJob.id, reference: `#${c.generationJob.id.slice(0, 8)}`, status: c.generationJob.status, stage: c.generationJob.stage, message: c.generationJob.message} : null};
   };
   async function runStudioCall(call: StudioCall): Promise<StudioResult> {
     const c = studioLive.current, input = call.input;
     const num = (k: string) => Number(input[k]);
+    const jobId = (value: unknown) => {const ref=String(value ?? '').trim().toLowerCase().replace(/^#/, ''); return ref.length === 8 && c.generationJob?.id.startsWith(ref) ? c.generationJob.id : ref;};
     const inRange = (t: number) => {if (!c.video?.range) throw Error('Attach and trim the guide video first'); if (!Number.isFinite(t) || t < c.video.range.start || t > c.video.range.end) throw Error(`Use a time inside the selected interval ${c.video.range.start.toFixed(2)}–${c.video.range.end.toFixed(2)} s`); return t;};
     switch (call.name) {
       case 'get_studio_state': return {text: JSON.stringify(studioState())};
@@ -314,9 +315,25 @@ export default function Studio() {
         panelControls.current.applyOptions((input.options || {}) as Record<string, unknown>); await settle();
         return {text: 'Options now: ' + JSON.stringify((panelControls.current.getOptions() as {options: unknown}).options)};
       }
-      case 'select_job': panelControls.current?.selectJob(String(input.job_id)); await settle(); return {text: 'Job shown in the panel.'};
+      case 'select_job': panelControls.current?.selectJob(jobId(input.job_id)); await settle(); return {text: 'Job shown in the panel.'};
+      case 'use_generation_as_guide': {
+        const response = await fetch('/api/backend/jobs', {cache: 'no-store'}); const rows: (GeneratedVideo & {status?: string})[] = await readJson(response);
+        const ref = String(input.job_id ?? '').trim().toLowerCase().replace(/^#/, '');
+        const matches = rows.filter(j => j.id === ref || (ref.length === 8 && j.id.startsWith(ref)));
+        if (matches.length !== 1 || matches[0].status !== 'completed' || !matches[0].result_url) throw Error('Use the reference of one completed generation');
+        const nextMode = String(input.mode) as Mode;
+        if (!MODES.includes(nextMode)) throw Error('Unknown mode');
+        if (!await useGenerated(matches[0], nextMode)) throw Error('Could not load that generation result');
+        await settle(); return {text: `Generation #${matches[0].id.slice(0, 8)} is now the guide video in ${nextMode} mode. The next generation has not been started.`};
+      }
+      case 'confirm_cancel_job': {
+        const resolved = jobId(input.job_id);
+        const approved = window.confirm(String(input.question));
+        return {text: JSON.stringify({approved, job_id: resolved})};
+      }
       case 'send_marks_to_job': {
-        const r = await fetch(`/api/backend/jobs/${String(input.job_id)}/subjects`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({bindings: c.subjects, representation: c.guideRepresentation, ...(c.guideRepresentation === '2d' ? {mark_opacity: c.markOpacity} : {})})});
+        const resolved = jobId(input.job_id);
+        const r = await fetch(`/api/backend/jobs/${resolved}/subjects`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({bindings: c.subjects, representation: c.guideRepresentation, ...(c.guideRepresentation === '2d' ? {mark_opacity: c.markOpacity} : {})})});
         const reply = await r.json(); if (!r.ok) throw Error(reply.detail || `HTTP ${r.status}`);
         return {text: `Marks sent to job ${input.job_id}; ${reply.status === 'queued_mask' ? 'its preview is being rebuilt (wait_for_job plan).' : 'saved.'}`};
       }
@@ -331,7 +348,7 @@ export default function Studio() {
       case 'generate': {
         if (!panelControls.current) throw Error('The generation panel is not ready');
         await settle(); const id = await panelControls.current.submit();
-        return {text: `Generation started: job ${id}. Use wait_for_job.`};
+        return {text: `Generation started: reference #${id.slice(0, 8)} (full job id ${id}). Use wait_for_job.`};
       }
       default: throw Error(`Unknown studio tool ${call.name}`);
     }
@@ -412,7 +429,8 @@ export default function Studio() {
       addVideo([new File([await response.blob()], name, {type: 'video/mp4', lastModified: Math.round(item.created * 1000)})], true);
       if (nextMode) setMode(nextMode);
       setGeneratedOpen(false); setView('studio');
-    } catch { setNotice(tr('Could not load that video from the backend.', 'Não foi possível carregar esse vídeo do backend.', 'No se pudo cargar ese vídeo del backend.')); }
+      return true;
+    } catch { setNotice(tr('Could not load that video from the backend.', 'Não foi possível carregar esse vídeo do backend.', 'No se pudo cargar ese vídeo del backend.')); return false; }
     finally { setLoadingGenerated(null); }
   }
   function removeVideo() { if (video) URL.revokeObjectURL(video.url); setVideo(null); setPickingId(null); }
@@ -720,7 +738,7 @@ export default function Studio() {
           j.status === 'completed' && j.guide_preview_url && {href: j.guide_preview_url, file: `${name}-guide.mp4`, label: tr('Guide', 'Guia', 'Guía')},
         ].filter(Boolean) as {href: string; file: string; label: string}[];
         return <div key={j.id} className={'history-card generation-card surface' + (generationJob?.id === j.id ? ' selected' : '')} style={{'--item-accent': MODE_STYLE[(j.mode || 'swap') as Mode]?.accent} as CSSProperties}>
-          <button type="button" className="generation-open" onClick={open} aria-label={`${tr('Open', 'Abrir', 'Abrir')} ${j.project || 'Henge'}`}><div className={'history-art ' + (j.mode === 'swap' ? 'th-b' : 'th-a')}>{j.result_url ? <video muted playsInline preload="metadata" src={j.result_url + '#t=0.5'}/> : <Icon name="film" size={30}/>}<span className={'badge mono mode-badge ' + (j.mode || '')}>{modeName((j.mode || 'swap') as Mode)}</span>{typeof j.duration === 'number' && <span className="badge duration-badge mono nc">{j.duration.toFixed(1)}s</span>}</div><div className="history-caption"><strong>{j.project || 'Henge'}</strong><span className="mono nc muted">{dateLabel(new Date(j.created * 1000).toISOString())}{j.quality ? ` · ${j.quality}` : ''}</span>{(() => {const secs = j.run_seconds ?? (j.run_started ? Date.now() / 1000 - j.run_started : undefined); return secs !== undefined ? <span className="mono nc muted job-time">⏱ {secs >= 60 ? `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s` : `${Math.round(secs)}s`}{j.run_started && j.run_seconds === undefined ? '…' : ''}</span> : null;})()}{jobModel(j).label && <span className="mono nc muted job-model">{jobModel(j).label}{j.options?.conditioning_mode === 'tara' ? ' · TARA' : ''}</span>}<span className={'job-status ' + j.status}>{jobStatusLabel(j.status, lang)}</span></div></button>
+          <button type="button" className="generation-open" onClick={open} aria-label={`${tr('Open', 'Abrir', 'Abrir')} ${j.project || 'Henge'}`}><div className={'history-art ' + (j.mode === 'swap' ? 'th-b' : 'th-a')}>{j.result_url ? <video muted playsInline preload="metadata" src={j.result_url + '#t=0.5'}/> : <Icon name="film" size={30}/>}<span className={'badge mono mode-badge ' + (j.mode || '')}>{modeName((j.mode || 'swap') as Mode)}</span>{typeof j.duration === 'number' && <span className="badge duration-badge mono nc">{j.duration.toFixed(1)}s</span>}</div><div className="history-caption"><strong>{j.project || 'Henge'}</strong><span className="mono nc muted">#{j.id.slice(0, 8)} · {dateLabel(new Date(j.created * 1000).toISOString())}{j.quality ? ` · ${j.quality}` : ''}</span>{(() => {const secs = j.run_seconds ?? (j.run_started ? Date.now() / 1000 - j.run_started : undefined); return secs !== undefined ? <span className="mono nc muted job-time">⏱ {secs >= 60 ? `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s` : `${Math.round(secs)}s`}{j.run_started && j.run_seconds === undefined ? '…' : ''}</span> : null;})()}{jobModel(j).label && <span className="mono nc muted job-model">{jobModel(j).label}{j.options?.conditioning_mode === 'tara' ? ' · TARA' : ''}</span>}<span className={'job-status ' + j.status}>{jobStatusLabel(j.status, lang)}</span></div></button>
           {downloads.length > 0 && <div className="generation-downloads">{downloads.map(d => <a key={d.file} className="quiet-button" href={d.href} download={d.file}><Icon name="download" size={12}/>{d.label}</a>)}</div>}
         </div>;
       })}{!serverJobs.length && <div className="history-empty"><span className="empty-emblem"><Icon name="clock" size={30}/></span><h2>{tr('Nothing generated yet.', 'Nada gerado ainda.', 'Nada generado todavía.')}</h2><button className="primary" onClick={() => setView('studio')}><Icon name="plus" size={16}/>{tr('Open studio', 'Abrir estúdio', 'Abrir estudio')}</button></div>}{serverJobs.length > 0 && !historyJobs.length && <p className="muted history-none">{tr('No generation matches this search.', 'Nenhuma geração encontrada com essa busca.', 'Ninguna generación coincide con la búsqueda.')}</p>}</div>

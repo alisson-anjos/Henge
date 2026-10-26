@@ -1,4 +1,4 @@
-import sys,unittest,copy
+import sys,unittest,copy,tempfile
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from workflows import split_frames,h3_graph,fibo_graph,split_on_cuts
@@ -8,6 +8,14 @@ def structured_prompt(description='Transfer the guide performance.'):
  return 'motion_transfer: subject_definitions: <Subject 1> uses <Picture 1>. summary: [reference generation] '+description+' retention_analysis: <Subject 1>: fully_preserved - stable identity. detailed_description: [Shot 1] Transfer the guide timing and gestures. overall_soundscape: N/A non_diegetic_music: N/A'
 
 class WorkflowContracts(unittest.TestCase):
+ def test_visible_generation_reference_resolves_to_full_id(self):
+  import server
+  with tempfile.TemporaryDirectory() as d,patch.object(server,'JOBS',Path(d)):
+   jid='a1b2c3d4'+'0'*24;(Path(d)/jid).mkdir()
+   self.assertEqual(server.resolve_job_id('#a1b2c3d4'),jid)
+   self.assertEqual(server.resolve_job_id(jid),jid)
+   (Path(d)/('a1b2c3d4'+'1'*24)).mkdir()
+   with self.assertRaises(Exception):server.resolve_job_id('a1b2c3d4')
  def test_numeric_string_picture_slots_are_normalized(self):
   request=self.request();plan=self.plan()
   plan['picture_roles']=[{'slot':'1','role':'identity','description':'Reference identity'}]

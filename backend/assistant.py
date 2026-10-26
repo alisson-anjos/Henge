@@ -43,9 +43,12 @@ How to work:
 6. Before generate, summarize what will run (mode, who becomes whom, guide, quality) in two or three lines. If the user has not asked you to generate, ask first.
 7. Videos with camera cuts: people seen only after a cut are not recognised automatically. When marks are used, generate with auto-approve off, wait_for_job 'plan', get_job_shots, and for every shot that starts after a cut call find_people a little after its start and mark_subject each visible person with subject=<their number> (people can change places); then send_marks_to_job. Skip people who are not in that shot.
 8. You can change anything the user can: options (get_options / set_options: model, TARA, turbo, steps...), interval, shots, output, project name, pictures and subjects. Say what you changed.
-9. After generate, wait_for_job until 'plan'. If the plan has a color or mask preview, view_job_video to check that each color stays on its person; fix with set_job_mark_opacity or tell the user. Then approve_job, wait_for_job until 'done', and view_job_video 'result' to report briefly.
+9. Jobs run in the background. After generate, check the job once; if it is still running, tell the user they can keep chatting and do not repeatedly poll. When they write again, the studio state contains the current job status. Once the plan is ready, inspect its color or mask preview; once the render is done, inspect the result.
+10. Every generation has a visible 8-character reference such as #a1b2c3d4. The user may identify a generation with that reference; job tools accept it with or without # as well as the full id. When a generation starts, mention its visible reference so the user can refer to it later.
+11. If the user says an active generation looks wrong or that you made a mistake, inspect its state and call confirm_cancel_job to ask whether they want to cancel it. Criticism is not permission to cancel: only call cancel_job when that approval result is true. If they decline, leave it running and continue the conversation.
+12. A completed generation can feed another mode: call use_generation_as_guide with its reference and the requested next mode, then configure that mode and ask before generating. Do not ask the user to download and upload a Henge result again.
 
-Be brief. Speak the user's language. Never invent people, pictures or results you have not seen."""
+Be brief. Always answer in the language of the user's latest message, even when it differs from the interface or earlier messages. Write approval questions in that same language. Never invent people, pictures or results you have not seen."""
 
 STUDIO_TOOLS = [
     {'name': 'get_studio_state', 'description': 'The current studio state: mode, guide video (duration, selected interval, size), pictures, marked subjects, guide representation, prompt, quality and the selected job.',
@@ -84,6 +87,10 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
     {'name': 'select_job', 'description': 'Show a job in the generation panel (its plan, previews, result).',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
+    {'name': 'use_generation_as_guide', 'description': "Load a completed generation's result as the guide video for another mode. Use this for a second pass such as Swap -> Sharpness. This changes the studio but does not start the next generation.",
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'mode': {'type': 'string', 'enum': ['swap', 'motion', 'headswap', 'sharpness']}}, 'required': ['job_id', 'mode'], 'additionalProperties': False}},
+    {'name': 'confirm_cancel_job', 'description': "Show the user an explicit approval dialog before cancelling an active generation. question must be a complete yes/no question in the language of the user's latest message and include the reason and visible generation reference. This only asks; it never cancels. Call cancel_job only if the result says approved=true.",
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'question': {'type': 'string'}}, 'required': ['job_id', 'question'], 'additionalProperties': False}},
     {'name': 'clear_subjects', 'description': 'Remove every marked subject.',
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
     {'name': 'set_guide', 'description': 'Set the guide representation, and for 2d the mark opacity (0.1-1).',
@@ -97,9 +104,9 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
 ]
 JOB_TOOLS = [
-    {'name': 'get_job', 'description': 'Status, stage, message, plan summary, prompt and warnings of a job.',
+    {'name': 'get_job', 'description': 'Status, stage, message, plan summary, prompt and warnings of a job. job_id accepts the full id or its visible 8-character generation reference, with or without #.',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
-    {'name': 'wait_for_job', 'description': "Wait until a job reaches the plan review ('plan') or finishes ('done'), up to 15 minutes. Returns its state.",
+    {'name': 'wait_for_job', 'description': "Check whether a background job reached the plan review ('plan') or finished ('done'). Returns immediately; if it is still running, tell the user and let them keep chatting instead of polling.",
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'until': {'type': 'string', 'enum': ['plan', 'done']}}, 'required': ['job_id', 'until'], 'additionalProperties': False}},
     {'name': 'view_job_video', 'description': "See a few frames of a job video: 'marks' (2d color guide at full opacity), 'mask' (latent mask preview), 'guide' (prepared guide), 'result' or 'comparison'.",
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'which': {'type': 'string', 'enum': ['marks', 'mask', 'guide', 'result', 'comparison']}, 'frames': {'type': 'integer'}},
@@ -108,7 +115,7 @@ JOB_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'opacity': {'type': 'number'}}, 'required': ['job_id', 'opacity'], 'additionalProperties': False}},
     {'name': 'get_job_shots', 'description': 'How a job splits the video into shots: index, start and end (seconds in the source), and whether each starts after a camera cut (people may have moved or changed there).',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
-    {'name': 'redo_shot', 'description': 'Render one shot (1-based) of a finished job again with a new seed (or the given one) and join the video again; the other shots are kept. Then wait_for_job done.',
+    {'name': 'redo_shot', 'description': 'Render one shot (1-based) of a finished job again with a new seed (or the given one) and join the video again; the other shots are kept. job_id accepts the visible generation reference. Then wait_for_job done.',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'shot': {'type': 'integer'}, 'seed': {'type': 'integer'}}, 'required': ['job_id', 'shot'], 'additionalProperties': False}},
     {'name': 'retry_job', 'description': 'Run a failed or cancelled job again.',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},

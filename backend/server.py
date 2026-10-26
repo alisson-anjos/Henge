@@ -40,9 +40,18 @@ ROUTING_SYSTEM="""Plan runtime routing using the supplied independently inspecte
 Return: picture_roles (one {slot, role: identity|outfit|environment|style|object, description} per supplied slot), source_kind (human|animal|other), target_kind (human|animal|other), use_fibo (boolean), fibo_instruction (string), fibo_picture_slots (array of exact existing slots, max 3), summary (short explanation), warnings (array of strings), preserve_objects (visible interaction props from phone|microphone|guitar|ukulele|cup|bottle|bicycle|torch|piano|keyboard).
 A scene reference is not another performer. Honor explicit user/color bindings. Uncertainty belongs in warnings. No audio was supplied: do not invent audio. When a human guide drives an animal reference, recommend FIBO preparation of an anthropomorphic, upright bipedal version of that animal, with human-compatible arms/legs and performance posture while preserving its actual animal head, fur, colors and distinguishing identity. Do not merely paste a quadruped into a human pose, turn it into a human face, or transfer the reference backdrop. Write an explicit instruction grounded in the selected identity images, and limit the preparation to the requested performer. Do not change other performers or environment references. FIBO prepares an appearance/pose reference when cross-species preparation is appropriate; it does not solve temporal skeletal retargeting. SAM 3D Body is for human sources, while animals need original or 2D guidance. In a FIBO instruction <image_1> is the guide frame and chosen pictures become <image_2> onward in fibo_picture_slots order. No commands, graph nodes, paths or URLs."""
 
+def resolve_job_id(jid):
+    """Accept the full UUID or the visible 8-character generation reference."""
+    if not isinstance(jid,str):raise HTTPException(404,'Unknown job')
+    jid=jid.strip().lower().removeprefix('#')
+    if re.fullmatch(r'[a-f0-9]{32}',jid):return jid
+    if re.fullmatch(r'[a-f0-9]{8}',jid):
+        matches=[p.name for p in JOBS.glob(jid+'*') if p.is_dir() and re.fullmatch(r'[a-f0-9]{32}',p.name)]
+        if len(matches)==1:return matches[0]
+    raise HTTPException(404,'Unknown or ambiguous generation reference')
+
 def job_path(jid):
-    if not re.fullmatch(r'[a-f0-9]{32}',jid):raise HTTPException(404,'Unknown job')
-    return JOBS/jid
+    return JOBS/resolve_job_id(jid)
 
 def load(jid):
     p=job_path(jid)/'job.json'
@@ -64,6 +73,7 @@ def save(job,**patch):
 
 def public(job):
     out={k:v for k,v in job.items() if k not in ['assets','request']}
+    out['reference']=job['id'][:8]
     request=job.get('request') or {}
     out.setdefault('mode',request.get('mode'));out.setdefault('project',request.get('project'));out.setdefault('quality',request.get('quality'))
     if isinstance(request.get('video'),dict):out['duration']=request['video'].get('duration')
@@ -1184,7 +1194,7 @@ JOB_VIDEOS={'marks':'marks_preview.mp4','mask':'mask_preview.mp4','guide':'guide
 def job_summary(job):
     plan=job.get('plan') or {}
     previews=[k for k,v in JOB_VIDEOS.items() if (job_path(job['id'])/v).is_file()]
-    return json.dumps({'id':job['id'],'mode':(job.get('request') or {}).get('mode'),'status':job['status'],'stage':job.get('stage'),'message':job.get('message'),'error':job.get('error'),
+    return json.dumps({'id':job['id'],'reference':'#'+job['id'][:8],'mode':(job.get('request') or {}).get('mode'),'status':job['status'],'stage':job.get('stage'),'message':job.get('message'),'error':job.get('error'),
                        'shot':f"{job['segment']}/{job['total_segments']}" if job.get('segment') else None,'videos':previews,
                        'plan':{'summary':plan.get('summary'),'representation':plan.get('representation'),'use_fibo':plan.get('use_fibo'),'warnings':plan.get('warnings'),'prompt':(plan.get('prompt') or '')[:2000]} if plan else None},ensure_ascii=False)
 
@@ -1202,12 +1212,9 @@ def job_frames(job,which,count):
 def run_job_tool(name,args):
     if name=='get_job':return job_summary(load(args['job_id'])),[]
     if name=='wait_for_job':
-        deadline=time.time()+900
-        while True:
-            job=load(args['job_id'])
-            ready=job['status'] in TERMINAL or (args['until']=='plan' and job['status']=='awaiting_approval')
-            if ready or time.time()>deadline:return job_summary(job)+('' if ready else ' (still running after 15 minutes; wait again)'),[]
-            time.sleep(3)
+        job=load(args['job_id'])
+        ready=job['status'] in TERMINAL or (args['until']=='plan' and job['status']=='awaiting_approval')
+        return job_summary(job)+('' if ready else ' (still running in the background; do not poll—let the user keep chatting)'),[]
     if name=='get_job_shots':return json.dumps(shot_preview(load(args['job_id']))),[]
     if name=='redo_shot':
         job=load(args['job_id']);n=int(args['shot'])
