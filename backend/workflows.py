@@ -83,8 +83,10 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
     }
     g['9']['inputs'].update(conditioning_mode=conditioning_mode,reference_scale=reference_scale)
     # The worker drops the context overlap itself, so the bridge only copies the shot (no second encode).
-    if skip_frames:g['17']['inputs']['skip_frames']=skip_frames
+    if skip_frames:g['17']['inputs']['skip_frames']=g['18']['inputs']['skip_frames']=skip_frames
     if representation=='mask':
+        # The saved guide shows the regenerated region over the source, so it can be reviewed and downloaded.
+        g['26']=node('HengeMaskPreview',images=['7',0],mask=['8',1]);g['18']['inputs']['images']=['26',0]
         # Only the marked subject is regenerated; everything else starts from (and keeps) the source latent.
         g['23']=node('HengeLatentMask',latent=['9',1],vae=['6',0],images=['7',0],mask=['8',1],grow=1,strength=float((mask or {}).get('strength',1.)))
         g['14']['inputs']['latent_image']=['23',0]

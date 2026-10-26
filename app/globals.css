@@ -534,3 +534,4 @@ img{display:block;max-width:100%}
 .job-error{display:grid;gap:6px}.job-error p{margin:0}.job-error pre{max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--muted)}
 .assistant-settings input,.assistant-settings select,.assistant-input textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#0c0c11;color:inherit;font:inherit;font-size:13px}
 .assistant-settings input:focus,.assistant-settings select:focus,.assistant-input textarea:focus{outline:none;border-color:var(--accent)}
+.prepared-guide{display:grid;gap:8px}.prepared-guide video{width:100%;border-radius:8px}.prepared-guide a{justify-self:start}

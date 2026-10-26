@@ -615,7 +615,7 @@ def generate(job):
     if plan['use_fibo'] and not swap_figure:
         figure=fibo_request(job)['figure'];fibo_ref=fibo_prepare(job,job);refs.append(str(fibo_ref.relative_to(INPUT)))
         if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> shows that character in humanoid form, in the starting pose of the guide; use it for body shape, limb proportions and appearance only, it does not supply motion or a background." if figure else f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
-    pieces=[];previous=None;save(job,shot_urls=[])
+    pieces=[];guide_pieces=[];previous=None;save(job,shot_urls=[])
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         if shot.get('reset_context'):previous=None
@@ -641,7 +641,13 @@ def generate(job):
         pieces.append(piece);previous=rendered
         # Each finished shot is viewable and downloadable while the next ones render.
         save(job,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
-        if i==0 and guides:FILES.download(guides[0],work/'guide_preview.mp4');save(job,guide_preview_url=f"/api/backend/jobs/{job['id']}/files/guide_preview.mp4")
+        if guides:
+            # The guide H3 received (color marks, mask region or the plain source), shot by shot like the result.
+            gpiece=work/f'guide_{i:03d}.mp4';FILES.download(guides[0],inp/f'guide_{i:03d}_raw.mp4')
+            if skip and frame_count(inp/f'guide_{i:03d}_raw.mp4')==shot['frames']-skip:shutil.copyfile(inp/f'guide_{i:03d}_raw.mp4',gpiece)
+            else:run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(inp/f'guide_{i:03d}_raw.mp4'),'-an','-c:v','libx264','-threads','2','-crf','20','-y',str(gpiece)])
+            guide_pieces.append(gpiece)
+            if i==0:shutil.copyfile(gpiece,work/'guide_preview.mp4');save(job,guide_preview_url=f"/api/backend/jobs/{job['id']}/files/guide_preview.mp4")
     concat=work/'concat.txt';concat.write_text(''.join(f"file '{p.name}'\n" for p in pieces));joined=work/'joined.mp4';run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(concat),'-c','copy','-y',str(joined)])
     output=work/'result.mp4';args=['ffmpeg','-v','error','-i',str(joined)]
     if r.get('output_audio',{}).get('keep_source') and meta['audio']:args+=['-ss',str(start),'-i',str(INPUT/assets['video']),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac']
@@ -652,7 +658,18 @@ def generate(job):
         i=args.index('-c:v');args[i+1]='libx264';args+=['-vf',f'fps={output_fps}','-threads','2','-crf','18']
     args+=['-t',str(end-start),'-movflags','+faststart','-y',str(output)];run(args)
     # Comparison uses the exact selected source interval and result duration.
-    compare=work/'comparison.mp4';run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(output),'-filter_complex',f'[0:v]fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2[a];[a][1:v]hstack=shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
+    guide_full=None
+    if len(guide_pieces)==len(pieces) and guide_pieces:
+        # The whole guide, joined like the result: downloadable, and the middle column of the comparison when it
+        # carries marks (2D/3D colors or the mask region).
+        gl=work/'guide_concat.txt';gl.write_text(''.join(f"file '{p.name}'\n" for p in guide_pieces));guide_full=work/'guide_preview.mp4'
+        run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(gl),'-c','copy','-movflags','+faststart','-y',str(guide_full)])
+        save(job,guide_preview_url=f"/api/backend/jobs/{job['id']}/files/guide_preview.mp4?v={int(time.time())}")
+    compare=work/'comparison.mp4';fit=f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2'
+    if guide_full and plan['representation']!='original':
+        run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(guide_full),'-i',str(output),'-filter_complex',f'[0:v]{fit}[a];[1:v]{fit}[g];[a][g][2:v]hstack=inputs=3:shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
+    else:
+        run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(output),'-filter_complex',f'[0:v]{fit}[a];[a][1:v]hstack=shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
     save(job,status='completed',stage='complete',progress=1,eta_seconds=None,seconds_per_step=None,result_url=f"/api/backend/jobs/{job['id']}/files/result.mp4",comparison_url=f"/api/backend/jobs/{job['id']}/files/comparison.mp4",message='Generation complete',prompt_id=None)
 
 def worker():

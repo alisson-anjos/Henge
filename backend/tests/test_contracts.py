@@ -83,7 +83,7 @@ class WorkflowContracts(unittest.TestCase):
   req=server.fibo_request(server.load(jid));self.assertTrue(req['figure']);self.assertIn('Exactly one figure',req['instruction'])
  def test_worker_drops_shot_overlap(self):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0,skip_frames=22)
-  self.assertEqual(g['17']['inputs']['skip_frames'],22);self.assertNotIn('skip_frames',g['18']['inputs'])
+  self.assertEqual(g['17']['inputs']['skip_frames'],22);self.assertEqual(g['18']['inputs']['skip_frames'],22)
   self.assertNotIn('skip_frames',h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0)['17']['inputs'])
  def test_color_marks_reach_the_prompt(self):
   import server
@@ -100,6 +100,10 @@ class WorkflowContracts(unittest.TestCase):
    r={**self.request(),'mode':mode,'subject_guidance':{'representation':'mask','bindings':[{'color':'green','picture_slots':[1],'anchors':[anchor]}]}}
    if mode=='headswap':r['prompt']=''
    validate_request(r,{},[1])
+ def test_mask_guide_shows_the_region(self):
+  g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'mask',[],'human',0,skip_frames=22)
+  self.assertEqual(g['18']['inputs']['images'],['26',0]);self.assertEqual(g['26']['class_type'],'HengeMaskPreview');self.assertEqual(g['18']['inputs']['skip_frames'],22)
+  self.assertEqual(h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'2d',[],'human',0)['18']['inputs']['images'],['8',0])
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))
