@@ -147,6 +147,19 @@ def plan_graph(image,instructions,max_tokens=2500,clip_name='qwen3.5_9b_w4a8_gpt
     return g
 
 
+def split_at_every_cut(total,per_shot,context,cuts,min_gap=24):
+    # A new shot at every camera cut (cuts closer than min_gap frames are skipped), long scenes split by per_shot.
+    boundaries=[0]
+    for c in sorted({int(c) for c in cuts}):
+        if c-boundaries[-1]>=min_gap and total-c>=min_gap:boundaries.append(c)
+    boundaries.append(total)
+    output=[]
+    for start,end in zip(boundaries,boundaries[1:]):
+        for i,shot in enumerate(split_frames(end-start,per_shot,context)):
+            output.append({**shot,'start':shot['start']+start,'reset_context':i==0})
+    return output
+
+
 def split_on_cuts(total,per_shot,context,cuts,min_gap=24):
     # Shots stay as long as the requested length allows; a camera cut only chooses where one ends: the last cut
     # within reach, so the next shot starts clean at the cut (no context). Cuts inside a shot are rendered straight

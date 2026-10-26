@@ -40,6 +40,15 @@ class WorkflowContracts(unittest.TestCase):
  def test_cuts_do_not_shorten_the_requested_shot_length(self):
   shots=split_on_cuts(1190,345,22,list(range(72,1190,72)));self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),1190)
   self.assertEqual(len(shots),4);self.assertTrue(all(s['frames']<=345 and s['reset_context'] and s['overlap']==0 for s in shots))
+ def test_cut_modes(self):
+  import server
+  job={'request':{'mode':'motion','video':{'start_seconds':2,'end_seconds':51.6},'processing':{'mode':'context_window','requested_seconds_per_shot':15,'context_frames':22}},'options':{}}
+  cuts=list(range(72,1190,72))
+  with patch.object(server,'camera_cuts',return_value=cuts):
+   fit=server.plan_shots(job)[0];every=server.plan_shots({**job,'options':{'cut_mode':'every'}})[0];off=server.plan_shots({**job,'options':{'detect_cuts':False}})[0]
+   preview=server.shot_preview(job)
+  self.assertEqual((len(fit),len(every)),(4,len(cuts)+1));self.assertTrue(all(s['frames']<=345 for s in off+fit))
+  self.assertEqual(preview['cut_mode'],'fit');self.assertEqual(preview['shots'][0]['start'],2);self.assertTrue(preview['shots'][1]['after_cut'])
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))

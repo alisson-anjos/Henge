@@ -7,7 +7,7 @@ import requests
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageOps
-from workflows import MODELS,TURBOS,BASES,LTX_SHARPNESS_PROMPT,LTX_REFINE_SIGMAS,ltx_frames,ltx_sharpness_graph,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import split_at_every_cut,MODELS,TURBOS,BASES,LTX_SHARPNESS_PROMPT,LTX_REFINE_SIGMAS,ltx_frames,ltx_sharpness_graph,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_sheet_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
@@ -435,6 +435,44 @@ def planning(job):
     if plan['representation']=='mask' and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
     save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.',step=None,step_total=None)
 
+CUT_MODES=('fit','every','off')
+
+def cut_mode(options):
+    """fit: shots keep the requested length and end at the last camera cut within reach; every: a new shot at each
+    camera cut; off: fixed-length shots. Older jobs only carry detect_cuts."""
+    mode=options.get('cut_mode')
+    return mode if mode in CUT_MODES else 'fit' if options.get('detect_cuts',True) else 'off'
+
+def camera_cuts(job):
+    """Scene-change frames (24 fps, from the selected start), detected once per interval and kept on the job."""
+    r=job['request'];start,end=r['video']['start_seconds'],r['video']['end_seconds'];key=f'{start}:{end}'
+    if (job.get('camera_cuts') or {}).get('interval')==key:return job['camera_cuts']['frames']
+    run_=subprocess.run(['ffmpeg','-v','info','-ss',str(start),'-i',str(INPUT/job['assets']['video']),'-t',str(end-start),'-vf',"select='gt(scene,0.35)',showinfo",'-an','-f','null','-'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=300)
+    if run_.returncode:raise ValueError('Camera-cut analysis failed')
+    frames=[round(float(t)*24) for t in re.findall(r'pts_time:([0-9.]+)',run_.stderr.decode(errors='replace'))]
+    save(job,camera_cuts={'interval':key,'frames':frames});return frames
+
+def plan_shots(job):
+    """The shot split a render uses (and the approval screen previews): [{start, frames, overlap, length, reset_context}]
+    in 24 fps frames from the selected start, plus the context length carried between continuing shots."""
+    r=job['request'];options=job['options'];processing=r['processing']
+    start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24))
+    if r['mode']=='sharpness':
+        # LTX shots: 8n+1 frames, no context overlap (the source guide keeps consecutive shots aligned).
+        return [{**shot,'length':ltx_frames(shot['frames'])} for shot in split_frames(total,LTX_SHOT_FRAMES,0)],0
+    per=max(22,min(362,5+17*math.floor((round(processing['requested_seconds_per_shot']*24)-5)/17)))
+    if processing.get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
+    context=min(processing.get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17))
+    # A single or causal render follows the guide straight through its cuts.
+    if processing.get('mode')=='causal':return [{'start':0,'frames':total,'overlap':0,'length':grid_frames(total),'reset_context':True}],context
+    mode=cut_mode(options)
+    if mode=='off' or processing.get('mode')=='single' or (mode=='fit' and total<=per):return split_frames(total,per,context),context
+    return (split_on_cuts if mode=='fit' else split_at_every_cut)(total,per,context,camera_cuts(job)),context
+
+def shot_preview(job):
+    start=job['request']['video']['start_seconds'];shots,_=plan_shots(job)
+    return {'cut_mode':cut_mode(job['options']),'shots':[{'index':i+1,'start':round(start+s['start']/24,3),'end':round(start+(s['start']+s['frames'])/24,3),'context_seconds':round(s['overlap']/24,3),'after_cut':bool(s.get('reset_context')) and i>0} for i,s in enumerate(shots)]}
+
 def generate(job):
     r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'henge'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
     if r['mode']=='headswap':refs=[str(head_reference(INPUT/refs[0],inp/'head_reference.png').relative_to(INPUT))]
@@ -460,19 +498,7 @@ def generate(job):
         # guided by the source at the output size. The upscaler doubles exactly, so the output size is 2x the first.
         w,h=size(short//2);W,H=w*2,h*2;upscale={'denoise':options.get('upscale_denoise',.9),'sharpen_first':options.get('sharpen_first',False)}
     else:w,h=W,H
-    start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
-    if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
-    context=min(r['processing'].get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17));shots=split_frames(total,per,context)
-    # Cut detection only shapes the shot split; a single render follows the guide straight through its cuts.
-    if causal:shots=[{'start':0,'frames':total,'overlap':0,'length':grid_frames(total),'reset_context':True}]
-    elif options.get('detect_cuts',True) and r['processing'].get('mode')!='single':
-        cut_run=subprocess.run(['ffmpeg','-v','info','-ss',str(start),'-i',str(INPUT/assets['video']),'-t',str(end-start),'-vf',"select='gt(scene,0.35)',showinfo",'-an','-f','null','-'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=300)
-        if cut_run.returncode:raise ValueError('Camera-cut analysis failed')
-        cuts=[round(float(t)*24) for t in re.findall(r'pts_time:([0-9.]+)',cut_run.stderr.decode(errors='replace'))]
-        shots=split_on_cuts(total,per,context,cuts)
-    if r['mode']=='sharpness':
-        # LTX shots: 8n+1 frames, no context overlap (the source guide keeps consecutive shots aligned).
-        shots=[{**shot,'length':ltx_frames(shot['frames'])} for shot in split_frames(total,LTX_SHOT_FRAMES,0)]
+    start,end=r['video']['start_seconds'],r['video']['end_seconds'];shots,context=plan_shots(job)
     # Sparse bindings cannot be silently attached to a different actor after a temporal cut.
     bindings=[]
     for s in r.get('subject_guidance',{}).get('bindings',[]):bindings.append({**s,'hex':COLORS[s['color']]})
@@ -766,6 +792,24 @@ def file(jid:str,name:str):
     load(jid);p=job_path(jid)/name
     if not p.is_file():raise HTTPException(404,'Output not yet available')
     return FileResponse(p,filename=f'henge-{jid[:8]}-shot_{int(shot[1])+1:02d}.mp4' if shot else name,media_type='image/jpeg' if p.suffix=='.jpg' else 'image/png' if p.suffix=='.png' else 'video/mp4')
+
+@app.get('/jobs/{jid}/shots')
+def get_shots(jid:str):
+    job=load(jid)
+    try:return shot_preview(job)
+    except (KeyError,ValueError) as e:raise HTTPException(409,f'Shots are not available yet: {e}')
+
+@app.post('/jobs/{jid}/shots')
+async def set_shots(jid:str,request:Request):
+    """Change how the guide is split before rendering starts (approval screen)."""
+    body=await request.json()
+    with LOCK:
+        job=load(jid)
+        if job['status'] not in ('awaiting_approval','queued_plan'):raise HTTPException(409,'The split can only change before rendering starts')
+        mode=body.get('cut_mode')
+        if mode not in CUT_MODES:raise HTTPException(400,'cut_mode must be fit, every or off')
+        save(job,options={**job['options'],'cut_mode':mode,'detect_cuts':mode!='off'})
+    return await asyncio.to_thread(shot_preview,load(jid))
 
 @app.get('/jobs/{jid}/shots.zip')
 def shots_zip(jid:str):
