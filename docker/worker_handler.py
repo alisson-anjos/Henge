@@ -22,7 +22,7 @@ URL=os.environ.get('COMFY_BASE_URL','http://127.0.0.1:8189').rstrip('/')
 COMFY=Path(os.environ.get('COMFY_ROOT','/opt/ComfyUI'))
 # What the bridge's /health needs to know: which nodes exist and which model files ComfyUI lists.
 CHOICES=[('LoraLoaderModelOnly','lora_name'),('UNETLoader','unet_name')]
-INVENTORY=None
+INVENTORY=None;INVENTORY_AT=0.
 # Transfer area on the shared network volume (same layout the bridge addresses: henge/<job>/..., out/<request>/...).
 IO=Path(os.environ.get('HENGE_WORKSPACE','/runpod-volume'))/'henge/io'
 INLINE_OUTPUT=6_000_000
@@ -39,8 +39,10 @@ def wait_for_comfy(timeout=1800):
 
 
 def inventory():
-    global INVENTORY
-    if INVENTORY is None:
+    # Re-read every minute: models added to the volume (a top-up) show up without restarting warm workers.
+    global INVENTORY,INVENTORY_AT
+    if INVENTORY is None or time.monotonic()-INVENTORY_AT>60:
+        INVENTORY_AT=time.monotonic()
         info=requests.get(URL+'/object_info',timeout=60).json()
         def choices(node,name):
             spec=info.get(node,{}).get('input',{}).get('required',{}).get(name,[[]])

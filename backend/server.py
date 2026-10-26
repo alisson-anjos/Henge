@@ -590,7 +590,10 @@ async def configure_connection(request:Request):
     return {'comfy_url':URL,'connected':True,'message':'Connection saved'}
 
 @app.get('/jobs')
-def list_jobs():return [public(json.loads(p.read_text())) for p in sorted(JOBS.glob('*/job.json'),key=lambda p:p.stat().st_mtime,reverse=True)][:50]
+def list_jobs():
+    # Newest first by creation: a retried or long-running job keeps its place instead of jumping to the top.
+    jobs=[json.loads(p.read_text()) for p in JOBS.glob('*/job.json')]
+    return [public(job) for job in sorted(jobs,key=lambda job:job.get('created',0),reverse=True)][:50]
 
 @app.post('/jobs')
 async def create_job(request:Request):

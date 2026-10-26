@@ -131,7 +131,7 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
         const [h, list] = await Promise.all([fetch('/api/backend/health', {signal: controller.signal}), fetch('/api/backend/jobs', {signal: controller.signal})]);
         if (!h.ok || !list.ok) throw Error();
         const state: Health = await h.json(), rows: GenerationJob[] = await list.json();
-        if (!disposed) {setHealth(state); setComfyUrl(current => current || state.comfy_url || 'http://127.0.0.1:8189'); setJobs(rows); if (first) {first = false; let stored: string | null = null; try {stored = localStorage.getItem(SELECTED_KEY);} catch {/* private mode */} const initial = rows.find(r => r.id === stored)?.id || rows[0]?.id; if (initial) selectJob(initial);}}
+        if (!disposed) {setHealth(state); setComfyUrl(current => current || state.comfy_url || 'http://127.0.0.1:8189'); rows.sort((a, b) => b.created - a.created); setJobs(rows); if (first) {first = false; let stored: string | null = null; try {stored = localStorage.getItem(SELECTED_KEY);} catch {/* private mode */} const initial = rows.find(r => r.id === stored)?.id || rows[0]?.id; if (initial) selectJob(initial);}}
       } catch {if (!disposed) setHealth(null);}
       if (!disposed) timer = setTimeout(refresh, 3000);
     }
