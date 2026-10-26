@@ -375,20 +375,22 @@ def mask_preview(job):
     save(job,mask_preview_url=f"/api/backend/jobs/{job['id']}/files/mask_preview.mp4?v={time.time_ns()}")
 
 TIMECODES=[
-    re.compile(r'\b(?:from|between)\s+(?:about\s+)?\d{1,2}:\d{2}(?:[.:]\d+)?\s*(?:to|and|-|–)\s*\d{1,2}:\d{2}(?:[.:]\d+)?\s*,?\s*',re.I),
-    re.compile(r'\b(?:from|between)\s+(?:about\s+)?\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds)?\s*(?:to|and|-|–)\s*\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds)\b\s*,?\s*',re.I),
-    re.compile(r'\b(?:at|around|by|after|until|before|near)\s+(?:about\s+|roughly\s+|approximately\s+)?(?:\d{1,2}:\d{2}(?:[.:]\d+)?|\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds))\b\s*,?\s*',re.I),
-    re.compile(r'\(?\s*\d{1,2}:\d{2}(?:[.:]\d+)?\s*(?:-|–|to)\s*\d{1,2}:\d{2}(?:[.:]\d+)?\s*\)?\s*:?\s*'),
-    re.compile(r'\(\s*\d+(?:\.\d+)?\s*(?:s|sec|seconds)?\s*(?:-|–|to)\s*\d+(?:\.\d+)?\s*(?:s|sec|seconds)\s*\)\s*'),
+    re.compile(r'\b(?:from|between)\s+(?:about\s+)?\d{1,2}:\d{2}(?:[.:]\d+)?\s*(?:to|and|-|–)\s*\d{1,2}:\d{2}(?:[.:]\d+)?,?[ \t]*',re.I),
+    re.compile(r'\b(?:from|between)\s+(?:about\s+)?\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds)?\s*(?:to|and|-|–)\s*\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds)\b,?[ \t]*',re.I),
+    re.compile(r'\b(?:at|around|by|after|until|before|near)\s+(?:about\s+|roughly\s+|approximately\s+)?(?:\d{1,2}:\d{2}(?:[.:]\d+)?|\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds))\b,?[ \t]*',re.I),
+    re.compile(r'\(?\d{1,2}:\d{2}(?:[.:]\d+)?\s*(?:-|–|to)\s*\d{1,2}:\d{2}(?:[.:]\d+)?\)?:?[ \t]*'),
+    re.compile(r'\(\s*\d+(?:\.\d+)?\s*(?:s|sec|seconds)?\s*(?:-|–|to)\s*\d+(?:\.\d+)?\s*(?:s|sec|seconds)\s*\)[ \t]*'),
 ]
 
 def strip_timecodes(prompt):
     """Times in the prompt ('From 00:05 to 00:10', 'around 3.4s') name the whole video's timeline, but every shot is
     rendered alone with its own clock starting at zero. Removed, and the sentence start is capitalised again."""
-    for pattern in TIMECODES:prompt=pattern.sub(' ',prompt)
-    prompt=re.sub(r'[ \t]{2,}',' ',prompt);prompt=re.sub(r' +([,.:;])',r'\1',prompt);prompt=re.sub(r'[ \t]+\n','\n',prompt)
+    # Each pattern takes the time and the spaces after it, never the space before, so words and the double-space
+    # section separators stay as they were.
+    for pattern in TIMECODES:prompt=pattern.sub('',prompt)
+    prompt=re.sub(r'(\w) ([,.;])',r'\1\2',prompt)
     # Capitalise sentences that now start with a lowercase word (not section names such as 'summary:').
-    return re.sub(r'([.!?][ \t]+|\][ \t]+)([a-z])',lambda m:m[1]+m[2].upper(),prompt)
+    return re.sub(r'([.!?][ \t]+|\][ \t]+)([a-z])(?![a-z_]*:)',lambda m:m[1]+m[2].upper(),prompt)
 
 def add_marks(prompt,r,representation):
     """The color binding goes at the end of subject_definitions, where the subjects are defined, when the prompt has
