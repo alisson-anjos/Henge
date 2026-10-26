@@ -11,7 +11,7 @@ MODELS={
  'motion_mix_dyn99':{'label':'10500 + TARA 0.3 · fro dyn99 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn99.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
  # First-frame propagate: Alissonerdx VFX Edit FFP (r128) merged with SolarRenderer control at 0.5, Frobenius dyn99.
  # The whole source is the guide; an optional edited first frame enters as a native image reference (prompt: vfx_edit:).
- 'motion_ffp':{'label':'First-frame propagate · VFX FFP + Solar (dyn99)','task':'motion','lora':'henge/vfx_ffp_solar05_fro_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
+ 'motion_ffp':{'label':'Motion Transfer FFP','task':'motion','lora':'henge/vfx_ffp_solar05_fro_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
  'character':{'task':'swap','label':'Character Swap v1.1 · published','lora':'henge/character_v1_1.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.

@@ -57,7 +57,7 @@ Choose the model profiles (comma list), as on a normal pod:
 | `character` | Character Swap | base H3, text encoder, VAE, VLM planner; always needed |
 | `motion10500`, `motion4500` | Motion Transfer | private LoRAs: need the `hf_token` secret |
 | `solar` | Motion Transfer (Solar) | ~25 GB |
-| `ffp` | Motion Transfer · first-frame propagate (VFX Edit FFP + Solar, dyn99) | 220 MB, private: needs the `hf_token` secret |
+| `ffp` | Motion Transfer FFP: propagate an edited first frame (VFX Edit FFP + SolarRenderer 0.5, fro dyn99) | 220 MB, private: needs the `hf_token` secret |
 | `headswap` | Head Swap | |
 | `sharpness` | Sharpness (H3 + Little More Sharpness LoRA; 2K/4K with the H3 or NVIDIA RTX upscaler) | ~1 GB (LoRA + H3 latent upscaler), private LoRA: needs the `hf_token` secret |
 | `omniref` | OmniRef base | +22 GB |
