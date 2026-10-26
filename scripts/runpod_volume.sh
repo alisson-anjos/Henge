@@ -14,7 +14,8 @@ VOLUME_GB=${VOLUME_GB:-180}
 IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:runpod-template}
 PROFILES=${PROFILES:-character,motion10500,motion4500,solar,ffp,headswap,sharpness,omniref,fibo,sam2d,sam3d}
 # REMOVE: optional comma-separated model paths (relative to models/) to delete from the volume, e.g. retired files.
-ENV_JSON=$(PROFILES=$PROFILES REMOVE=${REMOVE:-} python3 -c 'import json,os;e={"HENGE_MODEL_PROFILES":os.environ["PROFILES"],"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"};e.update({"HENGE_REMOVE_MODELS":os.environ["REMOVE"]} if os.environ["REMOVE"] else {});print(json.dumps(e))')
+# OVERRIDES: JSON for HENGE_MODEL_OVERRIDES (e.g. a link newer than the image's manifest).
+ENV_JSON=$(PROFILES=$PROFILES REMOVE=${REMOVE:-} OVERRIDES=${OVERRIDES:-} python3 -c 'import json,os;e={"HENGE_MODEL_PROFILES":os.environ["PROFILES"],"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"};e.update({"HENGE_REMOVE_MODELS":os.environ["REMOVE"]} if os.environ["REMOVE"] else {});e.update({"HENGE_MODEL_OVERRIDES":os.environ["OVERRIDES"]} if os.environ["OVERRIDES"] else {});print(json.dumps(e))')
 # Any GPU with a CUDA 13 driver will do (it only downloads); the first one in stock is used.
 FILL_GPUS=${FILL_GPUS:-NVIDIA RTX PRO 6000 Blackwell Server Edition,NVIDIA A100-SXM4-80GB,NVIDIA L40S,NVIDIA RTX A6000,NVIDIA GeForce RTX 5090,NVIDIA GeForce RTX 4090}
 id() { python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])'; }
