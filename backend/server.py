@@ -213,6 +213,11 @@ def fibo_available(info=None):
     except Exception:return False
     return 'TextEncodeFibo2' in info and FIBO_UNET in comfy_choices(info,'UNETLoader','unet_name')
 
+def sampler_label(graph,node):
+    """Name the pass a sampler runs: LTX Sharpness above 720p samples twice (node '39' refines the upscaled latent)."""
+    if '39' not in graph or graph['39']['class_type']!='SamplerCustomAdvanced':return 'Sampling video'
+    return 'Pass 2/2 · refining the upscaled video' if str(node)=='39' else 'Pass 1/2 · sharpening at half size'
+
 def execute_serverless(job,graph,stage):
     (job_path(job['id'])/(stage+'.api.json')).write_text(json.dumps(graph,indent=2))
     labels={'SamplerCustomAdvanced':'Sampling video','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit','RemoveBackground':'Removing the reference background'}
@@ -221,7 +226,7 @@ def execute_serverless(job,graph,stage):
         if progress.get('queued'):save(job,message='Waiting for a serverless worker (a cold start loads the models and can take minutes)');return
         if progress.get('message'):save(job,message=progress['message']);return
         patch={}
-        label=labels.get(progress.get('class_type'))
+        label=sampler_label(graph,progress.get('node')) if progress.get('class_type')=='SamplerCustomAdvanced' else labels.get(progress.get('class_type'))
         if label:patch['message']=label
         if progress.get('value') is not None and progress.get('max'):
             patch.update(step=int(progress['value']),step_total=int(progress['max']))
@@ -256,13 +261,13 @@ def execute_graph(job,graph,stage):
                                 event=json.loads(message.data);data=event.get('data',{})
                                 if data.get('prompt_id',pid)==pid:
                                     if event.get('type')=='executing' and str(data.get('node')) in graph:
-                                        label=labels.get(graph[str(data['node'])]['class_type'])
+                                        kind=graph[str(data['node'])]['class_type']
+                                        label=sampler_label(graph,data['node']) if kind=='SamplerCustomAdvanced' else labels.get(kind)
                                         if label:save(job,message=label,step=None,step_total=None)
                                     elif event.get('type')=='progress':
                                         maximum=max(1,int(data.get('max',1)));value=int(data.get('value',0));patch={'step':value,'step_total':maximum}
                                         if graph.get(str(data.get('node')),{}).get('class_type') in ('SamplerCustomAdvanced','HengeCausalSampler'):
-                                            refine=str(data.get('node'))=='37'
-                                            patch['message']='Refining the upscaled video' if refine else 'Sampling video'
+                                            patch['message']=sampler_label(graph,data.get('node'))
                                             # Measured pace after the first step (model loading excluded) -> remaining time, per sampler.
                                             now=time.monotonic();pace.setdefault(str(data.get('node')),(value,now))
                                             first_value,first_time=pace[str(data.get('node'))]
