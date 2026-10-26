@@ -15,7 +15,9 @@ GPU=${GPU:-NVIDIA RTX PRO 6000 Blackwell Server Edition}
 WORKERS_MAX=${WORKERS_MAX:-2}
 IDLE_TIMEOUT=${IDLE_TIMEOUT:-120}
 id() { python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])'; }
-ENV_JSON='{"HENGE_ROLE":"worker"}'
+# --fast-disk: weights stay disk-backed (page cache) instead of pinned RAM. Workers can have ~56 GB RAM (RTX 5090), and
+# the H3 text encoder + model + VAE alone are ~51 GB: without it a second conditioning (Sharpness H3 upscale) is OOM-killed.
+ENV_JSON='{"HENGE_ROLE":"worker","HENGE_COMFY_ARGS":"--fast-disk"}'
 
 if [ -n "${TEMPLATE_ID:-}" ]; then
   runpodctl template update "$TEMPLATE_ID" --image "$IMAGE" --env "$ENV_JSON" >/dev/null
