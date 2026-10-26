@@ -462,7 +462,8 @@ export default function Studio() {
       processing: {mode: contextWindow ? 'context_window' : 'single', max_shots: 0, requested_seconds_per_shot: shotSeconds, frames_per_shot: shotFrames, timeline_fps: timelineFps, frame_grid: '17n+5', trim_to_source_length: true, join: 'ordered', execution_status: 'comfy_backend', context_frames: contextFrames, cut_mode: cutMode},
       audio_conditioning: {enabled: audioConditioning, source: audioConditioning ? 'guide_video' : null},
       output_audio: {keep_source: keepAudio}, prompt: fixedRecipe ? '' : nativePrompt(executionPrompt), editor_prompt: fixedRecipe ? '' : prompt,
-      subject_guidance: {representation: guideRepresentation, bindings: subjects, status: 'selection_only', marker_colors_are_output_appearance: false, ...(guideRepresentation === '2d' ? {mark_opacity: markOpacity} : {})},
+      // Sharpness uses only the video: subjects marked in another mode are not sent.
+      subject_guidance: mode === 'sharpness' ? {representation: 'original', bindings: [], status: 'selection_only', marker_colors_are_output_appearance: false} : {representation: guideRepresentation, bindings: subjects, status: 'selection_only', marker_colors_are_output_appearance: false, ...(guideRepresentation === '2d' ? {mark_opacity: markOpacity} : {})},
       video: {name: video.file.name, source_signature: guideSignature, conditioning: 'guide_latents', source_duration: video.duration, start_seconds: video.range.start, end_seconds: video.range.end, duration: selectedDuration},
       pictures: activePictures.map(p => ({slot: p.slot, token: `<Picture ${p.slot}>`, name: p.file.name})),
       ...(mode === 'motion' && firstFrameSlot && activePictures.some(p => p.slot === firstFrameSlot) ? {first_frame_slot: firstFrameSlot} : {}), generation_status: 'not_submitted',

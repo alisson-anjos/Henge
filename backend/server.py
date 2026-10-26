@@ -151,7 +151,8 @@ def validate_request(r,options,slots):
     if representation=='mask' and not guidance.get('bindings'):raise ValueError('Latent mask needs the subject to replace marked in the video')
     clamp_float(guidance.get('mark_opacity',1.),.1,1,'mark opacity')
     colors=set()
-    for s in guidance.get('bindings',[]):
+    # Sharpness takes only the video: marks left over from another mode are ignored, not validated.
+    for s in guidance.get('bindings',[]) if r['mode']!='sharpness' else []:
         if s.get('color') not in COLORS or s['color'] in colors:raise ValueError('Each subject needs a distinct color')
         colors.add(s['color'])
         if not s.get('picture_slots') or not set(s['picture_slots']).issubset(slots):raise ValueError('Assign existing pictures to each subject')

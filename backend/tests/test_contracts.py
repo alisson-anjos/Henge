@@ -162,6 +162,9 @@ class WorkflowContracts(unittest.TestCase):
    server.save(job);t[0]=110;server.save(job,status='running');t[0]=130;server.save(job,status='awaiting_approval')
    t[0]=500;server.save(job,status='running');t[0]=560;server.save(job,status='completed')
   self.assertEqual(server.load(jid)['run_seconds'],80.0);self.assertNotIn('run_started',server.load(jid))
+ def test_sharpness_ignores_leftover_marks(self):
+  a={'x':.5,'y':.5,'time_seconds':0,'frame_width':64,'frame_height':64}
+  validate_request({**self.request(),'mode':'sharpness','prompt':'','subject_guidance':{'representation':'2d','bindings':[{'color':'green','picture_slots':[1],'anchors':[a]}]}},{},[])
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))
