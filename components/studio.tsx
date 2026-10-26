@@ -80,6 +80,10 @@ export default function Studio() {
   // 2D color marks: 1 = solid; lower keeps the guide person visible under a translucent tint (BFS Colored Mark used 0.35).
   const [markOpacity, setMarkOpacity] = useState(0.35);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
+  // A new guide starts a new generation: the panel drops the selected job (its plan, shots and result) until one is
+  // picked again from the history.
+  const [freshRevision, setFreshRevision] = useState(0);
+  const startFresh = () => {setGenerationJob(null); setFreshRevision(n => n + 1);};
   const [pendingAutoPromptJob, setPendingAutoPromptJob] = useState<string | null>(null);
   const [pickingId, setPickingId] = useState<string | null>(null);
   const [guideSignature, setGuideSignature] = useState('');
@@ -215,7 +219,7 @@ export default function Studio() {
     const signature = JSON.stringify([file.name, file.size, file.lastModified]);
     if (signature !== guideSignature) setSubjects(current => current.map(s => ({...s, anchors: []})));
     setGuideSignature(signature); setPickingId(null);
-    setVideo({file, url: URL.createObjectURL(file)}); setEditingVideo(true); setNotice('');
+    setVideo({file, url: URL.createObjectURL(file)}); setEditingVideo(true); setNotice(''); startFresh();
   }
   /** A GIF guide is converted to MP4 by the backend (browsers cannot play GIF in <video>), then added as a video. */
   async function addGif(gif: File) {
@@ -379,7 +383,7 @@ export default function Studio() {
       const base = `/community/${preset.id}`;
       const [file, files] = await Promise.all([fetchFile(`${base}/guide.mp4`, `${preset.id}.mp4`, 'video/mp4'), Promise.all(preset.refs.map(r => fetchFile(`${base}/ref_${r.slot}.jpg`, `${preset.id}_${r.slot}.jpg`, 'image/jpeg')))]);
       setMode(mode);
-      setVideo(current => {if (current) URL.revokeObjectURL(current.url); return {file, url: URL.createObjectURL(file), range: {start: 0, end: preset.duration}, duration: preset.duration};});
+      setVideo(current => {if (current) URL.revokeObjectURL(current.url); return {file, url: URL.createObjectURL(file), range: {start: 0, end: preset.duration}, duration: preset.duration};}); startFresh();
       setPictures(current => {current.forEach(p => URL.revokeObjectURL(p.url)); return preset.refs.map((r, i) => ({slot: r.slot, file: files[i], url: URL.createObjectURL(files[i])}));});
       setExpectedSlots([...preset.refs, ...preset.bring].map(r => r.slot).sort((a, b) => a - b));
       setGuideSignature(JSON.stringify([file.name, file.size, 0])); setSubjects([]); setGuideRepresentation('original');
@@ -504,7 +508,7 @@ export default function Studio() {
             <div className="prompt-footer">{!fixedRecipe && <><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></>}<div className="prompt-generation-actions" id="prompt-generation-actions"/></div>
           </section>
           <input hidden ref={importSettingsInput} type="file" accept="application/json,.json" onChange={e => {importSettings(e.target.files?.[0]); e.target.value = '';}}/>
-          <GenerationPanel key={importRevision} requestedProfile={requestedProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
+          <GenerationPanel key={importRevision} freshRevision={freshRevision} requestedProfile={requestedProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
           </section>
         </section>
 
