@@ -71,7 +71,7 @@ Henge was previously developed as OpenJutsu, Kagemane and Kawarimi. ComfyUI node
 
 ## Reference contract
 
-- Guide Latents is the default method. TARA (experimental) uses the native video-reference channel with temporal alignment instead. Both motion LoRAs can select either method.
+- Guide Latents is the default method. TARA (experimental) uses the native video-reference channel with temporal alignment instead. Both motion LoRAs can select either method. How each path feeds the guide to H3: [docs/conditioning.md](docs/conditioning.md).
 - Up to eleven image slots correspond to native `<Picture N>` tokens.
 - The editor uses `@PictureN`; export converts to `<Picture N>` without renumbering.
 - Removing a reference leaves other slots intact. Reusing an empty slot intentionally replaces that slot's identity.
