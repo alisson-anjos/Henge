@@ -3296,7 +3296,7 @@
       ],
       "flags": {},
       "order": 60,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "name": "images",
@@ -3757,7 +3757,7 @@
         1,
         "mp4 file (long videos, low memory)",
         "bfs_shot_loop",
-        0
+        17
       ],
       "widgets_values_named": {
         "crossfade": 4,
@@ -3774,7 +3774,7 @@
         "keep_colors_strength": 1,
         "save_to": "mp4 file (long videos, low memory)",
         "filename_prefix": "bfs_shot_loop",
-        "mp4_crf": 0
+        "mp4_crf": 17
       }
     },
     {
