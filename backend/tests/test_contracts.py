@@ -144,6 +144,16 @@ class WorkflowContracts(unittest.TestCase):
   b=[{'color':'green','picture_slots':[1],'anchors':[a]}]
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','subject_guidance':{'representation':'2d','bindings':b}},{'conditioning_mode':'tara'},[1])
   validate_request({**self.request(),'mode':'motion','subject_guidance':{'representation':'mask','bindings':b}},{'conditioning_mode':'tara'},[1])
+ def test_likeness_filter(self):
+  import server,os
+  jid='7'*32;server.job_path(jid).mkdir(parents=True,exist_ok=True);job={'id':jid,'created':0,'status':'planning','request':{'mode':'swap'}};server.save(job)
+  answers={1:'{"public_figure": true}',2:'{"public_figure": false}'}
+  ask=lambda instruction,image,stage,tokens:answers[int(stage.rsplit('_',1)[1])]
+  with patch.dict(os.environ,{'HENGE_LIKENESS_FILTER':'off'}):server.likeness_check(job,[(1,'a'),(2,'b')],ask);self.assertNotIn('likeness_warning',server.load(jid))
+  with patch.dict(os.environ,{'HENGE_LIKENESS_FILTER':'warn'}):server.likeness_check(job,[(1,'a'),(2,'b')],ask)
+  self.assertIn('Picture 1 looks like a real public figure',server.load(jid)['likeness_warning']);self.assertNotIn('Picture 2',server.load(jid)['likeness_warning'])
+  with patch.dict(os.environ,{'HENGE_LIKENESS_FILTER':'block'}):
+   with self.assertRaises(ValueError):server.likeness_check(job,[(1,'a')],ask)
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))

@@ -542,3 +542,4 @@ img{display:block;max-width:100%}
 .history-caption .job-status.completed{color:#48d17a}.history-caption .job-status.failed{color:#ef5a50}
 .history-caption .job-status.running,.history-caption .job-status.awaiting_approval{color:#f0c35a}
 .saved-directions{margin-top:8px}.saved-directions>summary{cursor:pointer;padding:12px 0;font-weight:600}.saved-directions>summary small{font-weight:400;margin-left:6px}
+.likeness-warning{margin:6px 0;padding:9px 11px;border:1px solid #f0b42966;border-radius:8px;background:#f0b4290f;color:#f0c35a;font-size:12px}

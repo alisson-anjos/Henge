@@ -171,6 +171,12 @@ HENGE_USER=henge   # optional, default "henge"
 
 It covers every page and API route. Anyone with the password can start jobs on your GPU.
 
+## Real people (optional filter)
+
+Set `HENGE_LIKENESS_FILTER=warn` to have the planner warn when a reference picture looks like a real public figure,
+or `block` to stop such jobs before they generate. It is `off` by default. Only generate real people with their
+consent.
+
 ## Automatic prompts
 
 Configure these server-only variables in `.env.local` and restart the server:

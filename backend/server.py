@@ -414,6 +414,27 @@ def marks_sentence(r,representation):
     return (' Color markers: '+'; '.join(parts)+'. Keep each assignment through position changes, occlusion and cuts. The colors are '
             'placement markers only, not appearance: never put them on skin, fur, clothing, eyes or objects, and remove them completely.')
 
+LIKENESS_MODES=('off','warn','block')
+LIKENESS_INSTRUCTION=('Look at this picture. Does it show a real, recognizable public figure: a celebrity, actor, musician, '
+    'athlete, politician or other famous real person? Drawn, animated or invented characters, animals and ordinary '
+    'unknown people are not. Do not name anyone. Answer with JSON only: {"public_figure": true or false}.')
+
+def likeness_filter():
+    """HENGE_LIKENESS_FILTER on the pod: off (default) | warn (the plan says so) | block (the job stops before
+    generating) when a reference picture looks like a real public figure."""
+    mode=os.environ.get('HENGE_LIKENESS_FILTER','off').strip().lower()
+    return mode if mode in LIKENESS_MODES else 'off'
+
+def likeness_check(job,pictures,ask):
+    mode=likeness_filter()
+    if mode=='off' or not pictures:return
+    flagged=[slot for slot,image in pictures if re.search(r'"?public_figure"?\s*:\s*true|^\s*yes\b',ask(LIKENESS_INSTRUCTION,image,f'vlm_likeness_{slot}',48),re.I)]
+    if not flagged:return
+    names=', '.join(f'Picture {s}' for s in flagged)
+    if mode=='block':
+        raise ValueError(f'{names} looks like a real public figure. This Henge is set to block real people\'s likeness (HENGE_LIKENESS_FILTER=block); use a picture of yourself, of someone who agreed, or of an invented character.')
+    save(job,likeness_warning=f'{names} looks like a real public figure. Only generate with their consent, and do not publish it as real.')
+
 def planning(job):
     if job['request']['mode']=='sharpness':
         # Little More Sharpness uses one fixed caption and no references: nothing to review, render directly.
@@ -426,7 +447,8 @@ def planning(job):
         label=(f"Describing Picture {stage.rsplit('_',1)[-1]} independently" if stage.startswith('vlm_picture_') else
                'Analyzing guide performance and setting' if stage=='vlm_guide' else
                'Checking whether Picture 1 is a person or an animal' if stage=='vlm_species' else
-               'Writing the final H3 prompt' if stage=='vlm_prompt' else 'Planning runtime options')
+               'Writing the final H3 prompt' if stage=='vlm_prompt' else
+               'Checking the references for real public figures' if stage.startswith('vlm_likeness_') else 'Planning runtime options')
         save(job,stage=stage,message=label)
         if os.environ.get('VLM_CHAT_URL') and os.environ.get('VLM_MODEL'):
             content=[{'type':'text','text':instruction}]
@@ -446,6 +468,7 @@ def planning(job):
         (work/(stage+'.txt')).write_text(text)
         return text
     bindings=r.get('subject_guidance',{}).get('bindings',[])
+    likeness_check(job,pictures,ask)
     if r['mode']=='swap' and len(pictures)==1 and len(bindings)<=1 and job['options'].get('enhance_prompt',True):
         # One character, no bindings: the Character Swap v1.1 training-format prompt.
         details=ask(CHARACTER_INSTRUCTION,pictures[0][1],'vlm_picture_1',1024)
@@ -819,7 +842,7 @@ def health():
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
-    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -995,7 +1018,7 @@ def retry(jid:str):
     with LOCK:
         job=load(jid)
         if job['status'] not in ('failed','cancelled'):raise HTTPException(409,'Only a failed or cancelled job can be retried')
-        stale=('error','shot_warnings','result_url','comparison_url','sampling_preview_url','sampling_preview_updated','guide_preview_url','prompt_id','step','step_total','eta_seconds','seconds_per_step','segment','total_segments')
+        stale=('error','shot_warnings','likeness_warning','result_url','comparison_url','sampling_preview_url','sampling_preview_updated','guide_preview_url','prompt_id','step','step_total','eta_seconds','seconds_per_step','segment','total_segments')
         for key in stale:job.pop(key,None)
         job.update(status='queued_render' if job.get('plan') else 'queued_plan',stage='queued',progress=0,message='Retrying',updated=time.time())
         # save() refuses to leave 'cancelled'; a retry is the explicit way out of it.
