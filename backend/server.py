@@ -470,7 +470,7 @@ def fibo_state(job):
     plan=job.get('plan') or {}
     if not plan.get('use_fibo'):return {'enabled':False}
     req=fibo_request(job);cached=(FIBO_CACHE/f"{req['key']}.png").is_file()
-    if cached and job.get('fibo_key')!=req['key']:
+    if cached and job.get('fibo_key')!=req['key'] and job['status']!='cancelled':
         shutil.copyfile(FIBO_CACHE/f"{req['key']}.png",job_path(job['id'])/'fibo_preview.png')
         save(job,fibo_preview_url=f"/api/backend/jobs/{job['id']}/files/fibo_preview.png?v={req['key'][:8]}",fibo_key=req['key'])
     job=load(job['id'])
@@ -498,7 +498,10 @@ def camera_cuts(job):
     run_=subprocess.run(['ffmpeg','-v','info','-ss',str(start),'-i',str(INPUT/job['assets']['video']),'-t',str(end-start),'-vf',"select='gt(scene,0.35)',showinfo",'-an','-f','null','-'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=300)
     if run_.returncode:raise ValueError('Camera-cut analysis failed')
     frames=[round(float(t)*24) for t in re.findall(r'pts_time:([0-9.]+)',run_.stderr.decode(errors='replace'))]
-    save(job,camera_cuts={'interval':key,'frames':frames});return frames
+    # Cached on the job; a finished or cancelled job only gets a preview.
+    try:save(job,camera_cuts={'interval':key,'frames':frames})
+    except InterruptedError:pass
+    return frames
 
 def plan_shots(job):
     """The shot split a render uses (and the approval screen previews): [{start, frames, overlap, length, reset_context}]
