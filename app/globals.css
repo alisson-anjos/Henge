@@ -48,26 +48,10 @@ img{display:block;max-width:100%}
 .create-heading .eyebrow{font-size:11px}
 .create-heading h1{font:800 24px/1.08 var(--display);letter-spacing:-.03em;margin:6px 0 0}
 .create-heading h1 span{color:#6e6b80}
-.mode-picker{padding:12px;border:1px solid #20202b;border-radius:17px;background:linear-gradient(145deg,#111119,#0c0c12);box-shadow:0 16px 38px rgba(0,0,0,.16)}
-.mode-picker-heading{display:flex;align-items:center;justify-content:space-between;padding:0 3px 9px;color:var(--muted)}
-.mode-picker-heading .eyebrow{color:#bbb8c9}
-.mode-picker-heading .mono{font-size:9px;color:var(--accent)}
-.mode-switch{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.mode-switch button{position:relative;display:grid;grid-template-columns:34px minmax(0,1fr);gap:9px;align-items:center;min-height:62px;padding:9px 26px 9px 9px;border:1px solid #22222e;border-radius:12px;background:#101017;color:var(--muted);text-align:left;overflow:hidden}
-.mode-switch button:before{content:"";position:absolute;inset:auto 0 0;height:2px;background:var(--mode-accent);opacity:0;transform:scaleX(.35);transition:opacity .2s,transform .25s}
-.mode-switch button:hover:not(:disabled){border-color:rgba(var(--mode-rgb),.42);background:rgba(var(--mode-rgb),.045);transform:translateY(-1px)}
-.mode-icon{display:grid;place-items:center;width:34px;height:34px;border:1px solid rgba(var(--mode-rgb),.18);border-radius:10px;background:rgba(var(--mode-rgb),.07);color:var(--mode-accent)}
-.mode-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
-.mode-copy strong{color:#d3d0de;font-size:12px;line-height:1.1;white-space:nowrap}
-.mode-copy small{color:#706d7e;font-size:9px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mode-selected{position:absolute;right:8px;top:8px;display:grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--mode-accent);color:#09090d;opacity:0;transform:scale(.7);transition:opacity .2s,transform .2s}
-.mode-switch .selected{border-color:rgba(var(--mode-rgb),.5);background:linear-gradient(135deg,rgba(var(--mode-rgb),.15),rgba(var(--mode-rgb),.035));box-shadow:inset 0 0 0 1px rgba(var(--mode-rgb),.06),0 8px 24px rgba(0,0,0,.18)}
-.mode-switch .selected:before,.mode-switch .selected .mode-selected{opacity:1;transform:scale(1)}
-.mode-switch .selected .mode-icon{background:var(--mode-accent);border-color:var(--mode-accent);color:#09090d;box-shadow:0 5px 16px rgba(var(--mode-rgb),.18)}
-.mode-switch .selected .mode-copy strong{color:var(--text)}
-.mode-switch .selected .mode-copy small{color:#aaa7b7}
-.mode-description{display:flex;align-items:flex-start;gap:8px;margin:10px 3px 0;color:var(--muted);font-size:11px;line-height:1.45}
-.mode-description-dot{width:5px;height:5px;margin-top:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px rgba(var(--accent-rgb),.7);flex:none}
+.mode-switch{display:grid;grid-template-columns:1fr 1fr;padding:4px;border:1px solid var(--line);border-radius:14px;background:#0e0e15}
+.mode-switch button{display:flex;gap:8px;align-items:center;justify-content:center;min-height:44px;border-radius:10px;font-weight:600;color:var(--muted);padding:0 6px;line-height:1.2}
+.mode-switch .selected{background:var(--accent);color:#0a0a0f;box-shadow:0 0 18px rgba(var(--accent-rgb),.08)}
+.mode-description{margin:-4px 2px 2px;color:var(--muted);font-size:13px;line-height:1.5}
 .input-card{padding:16px;display:flex;flex-direction:column;gap:12px}
 .label-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
 .label-row h2{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;margin:0}
@@ -598,4 +582,3 @@ img{display:block;max-width:100%}
 @media(max-width:560px){.assistant-panel.expanded{left:8px;right:8px;width:auto;height:calc(100vh - 90px)}}
 .shot-redo{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0 4px}.shot-redo:hover{color:var(--accent)}
 .trim-overlay{position:fixed;inset:0;z-index:55;display:grid;place-items:center;padding:16px;background:#080706d9;backdrop-filter:blur(8px)}
-@media(max-width:700px){.controls>.mode-picker{grid-column:1/-1}}

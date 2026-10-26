@@ -150,12 +150,6 @@ export default function Studio() {
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const style = {'--accent': MODE_STYLE[mode].accent, '--accent-rgb': MODE_STYLE[mode].rgb} as CSSProperties;
   const modeName = (value: Mode) => ({swap: t.swap, motion: t.motion, headswap: tr('Head Swap', 'Troca de cabeça', 'Cambio de cabeza'), sharpness: tr('Sharpness', 'Nitidez', 'Nitidez')})[value];
-  const modeHint = (value: Mode) => ({
-    swap: tr('Replace characters', 'Trocar personagens', 'Cambiar personajes'),
-    motion: tr('Transfer movement', 'Transferir movimento', 'Transferir movimiento'),
-    headswap: tr('Change the face', 'Mudar o rosto', 'Cambiar el rostro'),
-    sharpness: tr('Enhance details', 'Realçar detalhes', 'Realzar detalles'),
-  })[value];
   // Model names for History (from the bridge's model list), to search and filter generations by model.
   const [modelLabels, setModelLabels] = useState<Record<string, string>>({});
   const [historyModel, setHistoryModel] = useState('all');
@@ -640,11 +634,8 @@ export default function Studio() {
       <main className="workspace">
         <aside className="controls">
           <div className="create-heading rise"><span className="eyebrow accent">{t.create}</span><h1>{t[`h1a_${mode}`]}<br/><span>{t[`h1b_${mode}`]}</span></h1></div>
-          <section className="mode-picker" aria-labelledby="mode-picker-title">
-            <div className="mode-picker-heading"><span id="mode-picker-title" className="eyebrow">{t.mode}</span><span className="mono">{String(MODES.indexOf(mode) + 1).padStart(2, '0')} / {String(MODES.length).padStart(2, '0')}</span></div>
-            <div className="mode-switch" role="group" aria-label={t.mode}>{MODES.map(m => <button key={m} disabled={!ready || busy} className={mode === m ? 'selected' : ''} onClick={() => setMode(m)} aria-pressed={mode === m} style={{'--mode-accent': MODE_STYLE[m].accent, '--mode-rgb': MODE_STYLE[m].rgb} as CSSProperties}><span className="mode-icon"><Icon name={m} size={18}/></span><span className="mode-copy"><strong>{modeName(m)}</strong><small>{modeHint(m)}</small></span><span className="mode-selected"><Icon name="check" size={12}/></span></button>)}</div>
-            <p className="mode-description"><span className="mode-description-dot"/>{modeDescription}</p>
-          </section>
+          <div className="mode-switch" role="group" aria-label={t.mode}>{MODES.map(m => <button key={m} disabled={!ready || busy} className={mode === m ? 'selected' : ''} onClick={() => setMode(m)} aria-pressed={mode === m}><Icon name={m} size={16}/>{modeName(m)}</button>)}</div>
+          <p className="mode-description">{modeDescription}</p>
           {mode === 'sharpness' && <section className="input-card surface output-settings target-resolution"><div className="label-row"><h2>{tr('Target resolution', 'Resolução final', 'Resolución final')}</h2></div>{qualityRow}
             {guideSize && (() => {const [w, h] = outputSize(guideSize.width, guideSize.height, QUALITY_SHORT[quality], QUALITY_SHORT[quality] > 720); return <div className="resolution-summary mono nc"><div><span className="eyebrow muted">{tr('Source', 'Origem', 'Origen')}</span><strong>{guideSize.width}×{guideSize.height}</strong></div><span className="muted">→</span><div><span className="eyebrow muted">{tr('Target', 'Alvo', 'Destino')}</span><strong className="accent">{w}×{h}</strong></div>{QUALITY_SHORT[quality] > 720 && <small className="muted">{tr(`render ${w / 2}×${h / 2} → ×2`, `render ${w / 2}×${h / 2} → ×2`, `render ${w / 2}×${h / 2} → ×2`)}</small>}</div>;})()}
             {guideSize && QUALITY_SHORT[quality] <= Math.min(guideSize.width, guideSize.height) && <p className="validation" role="alert">{tr(`Your video is already ${Math.min(guideSize.width, guideSize.height)}p. Choose a larger size, or the result will not gain resolution.`, `Seu vídeo já está em ${Math.min(guideSize.width, guideSize.height)}p. Escolha um tamanho maior, senão o resultado não ganha resolução.`, `Tu vídeo ya está en ${Math.min(guideSize.width, guideSize.height)}p. Elige un tamaño mayor o el resultado no ganará resolución.`)}</p>}
