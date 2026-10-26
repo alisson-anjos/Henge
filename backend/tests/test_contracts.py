@@ -154,6 +154,14 @@ class WorkflowContracts(unittest.TestCase):
   self.assertIn('Picture 1 looks like a real public figure',server.load(jid)['likeness_warning']);self.assertNotIn('Picture 2',server.load(jid)['likeness_warning'])
   with patch.dict(os.environ,{'HENGE_LIKENESS_FILTER':'block'}):
    with self.assertRaises(ValueError):server.likeness_check(job,[(1,'a')],ask)
+ def test_processing_time_counts_running_only(self):
+  import server
+  jid='8'*32;server.job_path(jid).mkdir(parents=True,exist_ok=True);job={'id':jid,'created':0,'status':'queued_plan'}
+  t=[100.]
+  with patch.object(server.time,'time',side_effect=lambda:t[0]):
+   server.save(job);t[0]=110;server.save(job,status='running');t[0]=130;server.save(job,status='awaiting_approval')
+   t[0]=500;server.save(job,status='running');t[0]=560;server.save(job,status='completed')
+  self.assertEqual(server.load(jid)['run_seconds'],80.0);self.assertNotIn('run_started',server.load(jid))
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))

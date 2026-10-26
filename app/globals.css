@@ -549,3 +549,12 @@ img{display:block;max-width:100%}
 .generation-open{display:flex;flex-direction:column;text-align:left;width:100%;background:none;border:0;padding:0;color:inherit;cursor:pointer}
 .generation-downloads{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}
 .generation-downloads a{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;font-size:11px}
+.history-search{min-width:220px;padding:9px 12px;border:1px solid var(--line);border-radius:999px;background:#0c0c11;color:inherit;font:inherit;font-size:13px}
+.history-search:focus{outline:none;border-color:var(--accent)}
+.history-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
+.history-end{text-align:center;color:var(--muted);font-size:12px;padding:6px 0 18px}
+.history-none{grid-column:1/-1;text-align:center;padding:30px 0}
+@media(max-width:560px){.history-search{flex:1;min-width:0}}
+.history-model{padding:9px 12px;border:1px solid var(--line);border-radius:999px;background:#0c0c11;color:inherit;font:inherit;font-size:13px}
+.history-caption .job-model{font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-caption .job-time{font-size:10px}

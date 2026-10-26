@@ -53,7 +53,13 @@ def save(job,**patch):
     with LOCK:
         p=job_path(job['id'])/'job.json'
         if p.exists() and json.loads(p.read_text()).get('status')=='cancelled' and patch.get('status')!='cancelled':raise InterruptedError('Cancelled')
-        job.update(patch);job['updated']=time.time();tmp=p.with_suffix('.tmp');tmp.write_text(json.dumps(job,ensure_ascii=False,indent=2));tmp.replace(p)
+        before=job.get('status');job.update(patch);now=time.time();job['updated']=now
+        # Processing time: only the time spent running (planning, previews, rendering), not waiting in the queue or
+        # for the user's approval.
+        if job.get('status')=='running' and before!='running':job['run_started']=now
+        elif before=='running' and job.get('status')!='running' and job.get('run_started'):
+            job['run_seconds']=round(job.get('run_seconds',0)+now-job.pop('run_started'),1)
+        tmp=p.with_suffix('.tmp');tmp.write_text(json.dumps(job,ensure_ascii=False,indent=2));tmp.replace(p)
     return job
 
 def public(job):
@@ -1018,7 +1024,7 @@ def retry(jid:str):
     with LOCK:
         job=load(jid)
         if job['status'] not in ('failed','cancelled'):raise HTTPException(409,'Only a failed or cancelled job can be retried')
-        stale=('error','shot_warnings','likeness_warning','result_url','comparison_url','sampling_preview_url','sampling_preview_updated','guide_preview_url','prompt_id','step','step_total','eta_seconds','seconds_per_step','segment','total_segments')
+        stale=('error','shot_warnings','likeness_warning','run_seconds','run_started','result_url','comparison_url','sampling_preview_url','sampling_preview_updated','guide_preview_url','prompt_id','step','step_total','eta_seconds','seconds_per_step','segment','total_segments')
         for key in stale:job.pop(key,None)
         job.update(status='queued_render' if job.get('plan') else 'queued_plan',stage='queued',progress=0,message='Retrying',updated=time.time())
         # save() refuses to leave 'cancelled'; a retry is the explicit way out of it.
