@@ -50,9 +50,9 @@ const MODES: Record<GuideRepresentation, Record<Language, string>> = {
     pt: '3D: cada pessoa marcada vira um corpo 3D colorido com rosto (SAM 3D Body), então pose, mãos e expressão passam junto com a cor. Só pessoas, não animais; mais lento.',
     es: '3D: cada persona marcada se vuelve un cuerpo 3D de color con cara (SAM 3D Body), así que la pose, las manos y la expresión pasan con el color. Solo personas, no animales; más lento.'},
   mask: {
-    en: 'Mask (Character Swap only): the video keeps its own pixels and only the area around the marked people is generated again. Good for keeping the scene untouched.',
-    pt: 'Mask (só Character Swap): o vídeo mantém os próprios pixels e só a área em volta das pessoas marcadas é gerada de novo. Bom para não mexer no cenário.',
-    es: 'Mask (solo Character Swap): el vídeo conserva sus píxeles y solo se regenera la zona alrededor de las personas marcadas. Bueno para no tocar el escenario.'},
+    en: 'Mask: the video keeps its own pixels and only the area around the marked people is generated again. Good for keeping the scene untouched; the new character must fit in that area (adjust it on the approval screen).',
+    pt: 'Mask: o vídeo mantém os próprios pixels e só a área em volta das pessoas marcadas é gerada de novo. Bom para não mexer no cenário; o novo personagem precisa caber nessa área (ajuste na tela de aprovação).',
+    es: 'Mask: el vídeo conserva sus píxeles y solo se regenera la zona alrededor de las personas marcadas. Bueno para no tocar el escenario; el nuevo personaje debe caber en esa zona (ajústala en la aprobación).'},
 };
 
 export default function SubjectBindings({subjects, onChange, representation, onRepresentation, pictures, lang, pickingId, onPick, onPrompt, mode, markOpacity = 1, onMarkOpacity}: {subjects: SubjectBinding[]; onChange: (value: SubjectBinding[]) => void; representation: GuideRepresentation; onRepresentation: (value: GuideRepresentation) => void; pictures: Picture[]; lang: Language; pickingId: string | null; onPick: (id: string | null) => void; onPrompt: () => void; mode?: string; markOpacity?: number; onMarkOpacity?: (value: number) => void}) {
@@ -60,14 +60,13 @@ export default function SubjectBindings({subjects, onChange, representation, onR
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const warning = representation === 'original' && subjects.length > 1
     ? tr('With Original, the colors never reach the model. To keep each person on the right reference, use 2D (or 3D for people).', 'Com Original, as cores não chegam ao modelo. Para manter cada pessoa na referência certa, use 2D (ou 3D para pessoas).', 'Con Original, los colores no llegan al modelo. Para mantener cada persona con su referencia, usa 2D (o 3D para personas).')
-    : representation === 'mask' && mode && mode !== 'swap' ? tr('Mask works only in Character Swap. Choose 2D or 3D here.', 'Mask só funciona no Character Swap. Escolha 2D ou 3D aqui.', 'Mask solo funciona en Character Swap. Elige 2D o 3D aquí.')
     : representation !== 'original' && !subjects.length ? tr('Add and mark at least one subject: 2D, 3D and Mask need it.', 'Adicione e marque pelo menos um personagem: 2D, 3D e Mask precisam disso.', 'Añade y marca al menos un personaje: 2D, 3D y Mask lo necesitan.')
     : '';
   function patch(id: string, change: Partial<SubjectBinding>) {onChange(subjects.map(s => s.id === id ? {...s, ...change} : s));}
   function add() {const color = SUBJECT_COLORS.find(c => !subjects.some(s => s.color === c.name)); if (!color) return; const id = crypto.randomUUID(); onChange([...subjects, {id, label: `${lang === 'en' ? 'Subject' : 'Personagem'} ${subjects.length + 1}`, color: color.name, picture_slots: [], anchors: []}]); onPick(id);}
   const complete = subjects.length > 0 && subjects.every(s => s.anchors.length && s.picture_slots.length && s.picture_slots.every(n => pictures.some(p => p.slot === n)));
   return <section className={`${styles.panel} surface`} aria-label={t.title}>
-    <div className={styles.heading}><h2>{t.title}</h2><div className={styles.modes} role="group" aria-label={t.mode}>{(['original', '2d', '3d', 'mask'] as const).map(value => <button type="button" key={value} title={MODES[value][lang]} aria-pressed={representation === value} disabled={value === 'mask' && !!mode && mode !== 'swap' && representation !== 'mask'} onClick={() => onRepresentation(value)}>{value === 'original' ? (lang === 'pt' ? 'Original' : lang === 'es' ? 'Original' : 'Original') : value.toUpperCase()}</button>)}</div></div>
+    <div className={styles.heading}><h2>{t.title}</h2><div className={styles.modes} role="group" aria-label={t.mode}>{(mode === 'headswap' ? ['original', 'mask'] as const : ['original', '2d', '3d', 'mask'] as const).map(value => <button type="button" key={value} title={MODES[value][lang]} aria-pressed={representation === value} onClick={() => onRepresentation(value)}>{value === 'original' ? (lang === 'pt' ? 'Original' : lang === 'es' ? 'Original' : 'Original') : value.toUpperCase()}</button>)}</div></div>
     <p className={styles.modeHelp}>{MODES[representation][lang]}</p>
     {warning && <p className={styles.warning} role="alert">{warning}</p>}
     {representation === '2d' && onMarkOpacity && <label className={styles.opacity}><span>{tr('Mark opacity', 'Opacidade da marcação', 'Opacidad de la marca')} <b className="mono">{Math.round(markOpacity * 100)}%</b></span>

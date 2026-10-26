@@ -136,7 +136,7 @@ def validate_request(r,options,slots):
     if not used.issubset(slots):raise ValueError('Prompt references an unattached picture')
     guidance=r.get('subject_guidance',{});representation=guidance.get('representation','original')
     if representation not in ['original','2d','3d','mask']:raise ValueError('Invalid guide representation')
-    if representation=='mask' and r['mode']!='swap':raise ValueError('Latent mask is available for Character Swap')
+    # Mask works in every mode; Head Swap ignores 2D/3D and Sharpness ignores all of it (their plans set the guide).
     if representation=='mask' and not guidance.get('bindings'):raise ValueError('Latent mask needs the subject to replace marked in the video')
     clamp_float(guidance.get('mark_opacity',1.),.1,1,'mark opacity')
     colors=set()
@@ -433,6 +433,10 @@ def planning(job):
     if r['mode']=='headswap':
         face=ask(FACE_INSTRUCTION,pictures[0][1],'vlm_picture_1',512)
         plan=fixed_plan('headswap',head_swap_prompt(face),'Replace only the head of the person in the video with the face from Picture 1; body, clothing, motion and scene stay unchanged.',face)
+        # Mask: only the marked person's region is generated again; the rest keeps the source pixels.
+        if bindings and r.get('subject_guidance',{}).get('representation')=='mask':
+            plan['representation']='mask'
+            if not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
         save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the facial details before generating.',step=None,step_total=None);return
     if MODELS.get(job['options'].get('profile'),{}).get('ffp'):
         # VFX Edit FFP is prompted with one English sentence after vfx_edit:, not the H3 six-section format.

@@ -137,7 +137,7 @@ export default function Studio() {
       if (s && typeof s === 'object') {
         setPrompt(typeof s.prompt === 'string' ? s.prompt : '');
         setSubjects(readSubjectBindings(s.subjects));
-        setGuideRepresentation(s.guideRepresentation === '2d' ? '2d' : s.guideRepresentation === '3d' ? '3d' : 'original');
+        setGuideRepresentation(['2d', '3d', 'mask'].includes(s.guideRepresentation) ? s.guideRepresentation : 'original');
         setGuideSignature(typeof s.guideSignature === 'string' ? s.guideSignature : '');
         setIntent(typeof s.intent === 'string' ? s.intent : '');
         setMode(MODES.includes(s.mode) ? s.mode : 'swap');
@@ -300,6 +300,8 @@ export default function Studio() {
   }
   /** The direction's settings (mode, prompt, quality, shots, audio, subject guidance); media are left as they are. */
   useEffect(() => {if (mode !== 'sharpness') setQuality(q => ['1440p', '2160p'].includes(q) ? '1080p' : q);}, [mode]);
+  // Head Swap takes Original or Mask; Sharpness always uses the original video.
+  useEffect(() => {if (mode === 'sharpness' || (mode === 'headswap' && ['2d', '3d'].includes(guideRepresentation))) setGuideRepresentation('original');}, [mode, guideRepresentation]);
   // The guide's own size: Sharpness should go above it, so it picks the next size up and warns otherwise.
   const [guideSize, setGuideSize] = useState<{width: number; height: number} | null>(null);
   useEffect(() => {
@@ -331,7 +333,7 @@ export default function Studio() {
   function applyDirection(r: DirectionRequest) {
     if (MODES.includes(r.mode)) setMode(r.mode);
     if (['480p', '720p', '1080p', '1440p', '2160p'].includes(r.quality)) setQuality(r.quality);
-    setSubjects(readSubjectBindings(r.subject_guidance?.bindings)); setGuideRepresentation(r.subject_guidance?.representation === '2d' ? '2d' : r.subject_guidance?.representation === '3d' ? '3d' : 'original'); if (typeof r.subject_guidance?.mark_opacity === 'number') setMarkOpacity(r.subject_guidance.mark_opacity); setGuideSignature(r.video?.source_signature || '');
+    setSubjects(readSubjectBindings(r.subject_guidance?.bindings)); setGuideRepresentation(r.subject_guidance && ['2d', '3d', 'mask'].includes(r.subject_guidance.representation) ? r.subject_guidance.representation : 'original'); if (typeof r.subject_guidance?.mark_opacity === 'number') setMarkOpacity(r.subject_guidance.mark_opacity); setGuideSignature(r.video?.source_signature || '');
     if (typeof r.project === 'string') setProject(r.project);
     setFirstFrameSlot(typeof r.first_frame_slot === 'number' ? r.first_frame_slot : null);
     setPrompt(r.editor_prompt ?? r.prompt ?? ''); setAudioConditioning(r.audio_conditioning?.enabled === true);
@@ -488,7 +490,7 @@ export default function Studio() {
             {working && <div className="jutsu-loading" role="status"><div className="jutsu-seal"><i/><i/><Icon name="spark" size={42}/></div><strong>{tr('Directing your scene', 'Preparando sua direção', 'Preparando tu dirección')}</strong><small>{tr('Reading references and sampled guide frames', 'Lendo referências e quadros do vídeo guia', 'Leyendo referencias y fotogramas de la guía')}</small></div>}
             <span className="stage-corner mono">Henge / {modeName(mode)}</span>
           </div>
-          {video?.range && !fixedRecipe && <SubjectBindings subjects={subjects} onChange={setSubjects} representation={guideRepresentation} onRepresentation={setGuideRepresentation} pictures={pictures} lang={lang} pickingId={pickingId} onPick={setPickingId} onPrompt={() => setNative(true)} mode={mode} markOpacity={markOpacity} onMarkOpacity={setMarkOpacity}/>}
+          {video?.range && (!fixedRecipe || mode === 'headswap') && <SubjectBindings subjects={subjects} onChange={setSubjects} representation={guideRepresentation} onRepresentation={setGuideRepresentation} pictures={pictures} lang={lang} pickingId={pickingId} onPick={setPickingId} onPrompt={() => setNative(true)} mode={mode} markOpacity={markOpacity} onMarkOpacity={setMarkOpacity}/>}
           {subjects.length > 0 && subjectErrors && <p className="validation" role="status">{tr('Mark each subject inside the selected interval and attach its references.', 'Marque cada personagem dentro do intervalo selecionado e vincule suas referências.', 'Marca cada personaje dentro del intervalo seleccionado y vincula sus referencias.')}</p>}
           <section className="creation-card surface" aria-label={tr('Create video', 'Criar vídeo', 'Crear vídeo')}><section className="prompt-card"><div className="prompt-header"><h2><Icon name="spark" size={16}/>{t.direct}</h2>{!fixedRecipe && <div className="editor-tabs"><button aria-pressed={!auto} className={!auto ? 'active' : ''} onClick={() => setAuto(false)}>{t.write}</button><button aria-pressed={auto} className={auto ? 'active' : ''} onClick={() => setAuto(true)}>{t.auto}</button></div>}</div>
             {fixedRecipe && <div className="fixed-recipe"><p>{mode === 'headswap'

@@ -94,6 +94,12 @@ class WorkflowContracts(unittest.TestCase):
   from workflows import marks_preview_graph
   g=marks_preview_graph('c.mp4',384,224,107,107,[],'human',0,[],'out.mp4');self.assertEqual(g['2']['inputs']['representation'],'2d');self.assertIn('"mark_opacity": 1',g['2']['inputs']['mask_settings'])
   with self.assertRaises(ValueError):validate_request({**self.request(),'subject_guidance':{'representation':'2d','mark_opacity':0,'bindings':[]}},{},[1])
+ def test_mask_in_every_mode_but_sharpness(self):
+  anchor={'x':.5,'y':.5,'time_seconds':0,'frame_width':64,'frame_height':64}
+  for mode in ('swap','motion','headswap'):
+   r={**self.request(),'mode':mode,'subject_guidance':{'representation':'mask','bindings':[{'color':'green','picture_slots':[1],'anchors':[anchor]}]}}
+   if mode=='headswap':r['prompt']=''
+   validate_request(r,{},[1])
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))
