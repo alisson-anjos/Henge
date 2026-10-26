@@ -200,7 +200,8 @@ img{display:block;max-width:100%}
 .recent-item{display:flex;align-items:center;gap:10px;border:1px solid #1f1f2a;background:#101018;border-radius:12px;padding:8px;text-align:left}
 .recent-item:hover{border-color:#393545;background:#15151f}
 .recent-thumb{position:relative;width:43px;height:52px;flex-shrink:0;border-radius:7px;overflow:hidden;display:grid;place-items:center;color:#777185}
-.recent-thumb img{width:100%;height:100%;object-fit:cover}
+.recent-thumb img,.recent-thumb video{width:100%;height:100%;object-fit:cover}
+.recent-item.active{border-color:var(--accent)}
 .recent-item>span:last-child{display:flex;flex-direction:column;gap:5px;min-width:0}
 .recent-item strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
 .recent-item small{display:flex;gap:5px;align-items:center;font-size:10px;color:var(--muted)}
