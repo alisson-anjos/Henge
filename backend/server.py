@@ -775,6 +775,7 @@ def source(jid:str,name:str):
 def job_settings(job):
     """One line naming what produced a result: model, guidance, turbo, steps, size, seed."""
     o=job.get('options') or {};model=MODELS.get(o.get('profile',''),{});plan=job.get('plan') or {}
+    job={**(job.get('request') or {}),**job}
     parts=[(job.get('mode') or '').replace('_',' ').title(),'LoRA '+model.get('label',o.get('profile',''))]
     if model.get('engine')=='ltx':
         upscaled=o.get('latent_upscale',True) and QUALITY.get(job.get('quality'),0)>UPSCALE_ABOVE
