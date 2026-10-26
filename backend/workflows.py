@@ -34,6 +34,8 @@ TURBOS={
  'none':{'label':'None (for distilled bases such as FastH3 OmniRef)','lora':None,'steps':8},
  'dmd8':{'label':'DMD 8-step (drbaph)','lora':'henge/dmd_ref2va_8step.safetensors','steps':8},
  'dmad4':{'label':'DMAD 4-step (Kijai)','lora':'henge/turbo_dmad_4step.safetensors','steps':4},
+ 'pdmd4':{'label':'pDMD 4-step (Kijai, experimental)','lora':'henge/turbo_pdmd_4step.safetensors','steps':4},
+ 'pdmd2':{'label':'pDMD 2-step (Kijai, experimental)','lora':'henge/turbo_pdmd_2step.safetensors','steps':2},
  'lightx8':{'label':'lightx2v 8-step v1.1 (768p)','lora':'henge/turbo_lightx2v_8step_v1_1.safetensors','steps':8},
  'lightx4':{'label':'lightx2v 4-step v1.0 (768p)','lora':'henge/turbo_lightx2v_4step_v1_0.safetensors','steps':4},
  'solar4':{'label':'SolarRenderer 4-step (ComfyUI keys)','lora':'henge/turbo_solar_4step.safetensors','steps':4},
