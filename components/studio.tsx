@@ -328,11 +328,6 @@ export default function Studio() {
         if (!await useGenerated(matches[0], nextMode)) throw Error('Could not load that generation result');
         await settle(); return {text: `Generation #${matches[0].id.slice(0, 8)} is now the guide video in ${nextMode} mode. The next generation has not been started.`};
       }
-      case 'confirm_cancel_job': {
-        const resolved = jobId(input.job_id);
-        const approved = window.confirm(String(input.question));
-        return {text: JSON.stringify({approved, job_id: resolved})};
-      }
       case 'send_marks_to_job': {
         const resolved = jobId(input.job_id);
         const r = await fetch(`/api/backend/jobs/${resolved}/subjects`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({bindings: c.subjects, representation: c.guideRepresentation, ...(c.guideRepresentation === '2d' ? {mark_opacity: c.markOpacity} : {})})});

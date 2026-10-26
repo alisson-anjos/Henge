@@ -15,6 +15,7 @@ type Message =
 type Config = {provider: 'anthropic' | 'openai'; model: string; base_url: string; effort: string; has_key: boolean; key_hint: string};
 type JobMention = {id: string; project?: string; mode?: string; status: string; created: number};
 type PendingAttachment = {id: string; name: string; kind: 'image' | 'video'; images: string[]; detail: string};
+type PendingApproval = {question: string; approve: string; decline: string; resolve: (approved: boolean) => void};
 
 const PRESETS: Record<string, {provider: Config['provider']; model: string; base_url: string}> = {
   claude: {provider: 'anthropic', model: 'claude-opus-5-5', base_url: ''},
@@ -54,6 +55,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   const [recentJobs, setRecentJobs] = useState<JobMention[]>([]);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [approval, setApproval] = useState<PendingApproval | null>(null);
   const attachmentInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -165,7 +167,9 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
           if (stop.current) {results.push({id: call.id, name: call.name, text: 'Stopped by the user.', is_error: true}); continue;}
           setBusy(label(call.name, call.input));
           try {
-            const result = await controller.run(call); results.push({id: call.id, name: call.name, ...result});
+            const result = call.name === 'confirm_cancel_job'
+              ? await new Promise<StudioResult>(resolve => setApproval({question: String(call.input.question), approve: String(call.input.approve_label || tr('Yes, cancel', 'Sim, cancelar', 'Sí, cancelar')), decline: String(call.input.decline_label || tr('No, keep running', 'Não, continuar', 'No, continuar')), resolve: approved => resolve({text: JSON.stringify({approved, job_id: String(call.input.job_id)})})}))
+              : await controller.run(call); results.push({id: call.id, name: call.name, ...result});
             const started = call.name === 'generate' && result.text.match(/[a-f0-9]{32}/)?.[0];
             if (started && !chatJobs.current.includes(started)) chatJobs.current = [...chatJobs.current, started];
           }
@@ -206,6 +210,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         {messages.map((m, i) => m.role === 'user' ? <div key={i} className="assistant-msg user">{m.text.split('\n\n[studio state]')[0]}</div>
           : m.role === 'assistant' ? <div key={i} className="assistant-msg">{m.text && <p>{m.text}</p>}{m.tool_calls?.map(c => <small key={c.id} className="assistant-tool mono">⚙ {label(c.name, c.input)}</small>)}</div>
           : <div key={i} className="assistant-results">{m.results.map(r => <div key={r.id}>{r.is_error && <small className="validation">{r.text}</small>}{r.images?.map((src, j) => <img key={j} src={src} alt={r.name}/>)}</div>)}</div>)}
+        {approval && <div className="assistant-approval"><p>{approval.question}</p><div><button type="button" className="quiet-button" onClick={() => {approval.resolve(false); setApproval(null);}}>{approval.decline}</button><button type="button" className="primary" onClick={() => {approval.resolve(true); setApproval(null);}}>{approval.approve}</button></div></div>}
         {busy && <small className="assistant-busy mono">{busy}</small>}
         {error && <p className="validation" role="alert">{error}</p>}
       </div>
@@ -215,7 +220,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         <input ref={attachmentInput} type="file" hidden multiple accept="image/*,video/*" onChange={e => {if (e.target.files) void addAttachments(e.target.files);}}/>
         <button type="button" className="assistant-attach quiet-button" aria-label={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} title={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} disabled={!!busy || attachments.length >= 6} onClick={() => attachmentInput.current?.click()}>＋</button>
         <textarea value={input} rows={2} placeholder={tr('What do you want to make?', 'O que você quer fazer?', '¿Qué quieres hacer?')} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Escape' && mention) {e.preventDefault(); setInput(input.slice(0, mention.index));} else if (e.key === 'Enter' && !e.shiftKey) {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}}/>
-        {busy ? <button type="button" className="quiet-button" onClick={() => {stop.current = true;}}>{tr('Stop', 'Parar', 'Detener')}</button> : <button type="submit" className="primary" disabled={!input.trim() && !attachments.length}>{tr('Send', 'Enviar', 'Enviar')}</button>}
+        {busy ? <button type="button" className="quiet-button" onClick={() => {stop.current = true; if (approval) {approval.resolve(false); setApproval(null);}}}>{tr('Stop', 'Parar', 'Detener')}</button> : <button type="submit" className="primary" disabled={!input.trim() && !attachments.length}>{tr('Send', 'Enviar', 'Enviar')}</button>}
       </form>
     </aside>}
   </>;
