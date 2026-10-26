@@ -17,6 +17,7 @@ import {jobStatusLabel} from '../lib/job-status';
 import SubjectBindings, {SubjectVideo} from './subject-bindings';
 import {bindingPrompt, readSubjectBindings, type SubjectBinding, type GuideRepresentation} from '../lib/subject-bindings';
 import SetupScreen from './setup-screen';
+import {cutModeLabel, type CutMode} from './shot-plan';
 
 function Icon({name, size = 20}: {name: string; size?: number}) {
   const paths: Record<string, React.ReactNode> = {
@@ -87,6 +88,7 @@ export default function Studio() {
   const [shotSeconds, setShotSeconds] = useState(4.5);
   const [timelineFps, setTimelineFps] = useState(24);
   const [contextFrames, setContextFrames] = useState(22);
+  const [cutMode, setCutMode] = useState<CutMode>('fit');
   const [history, setHistory] = useState<SavedDirection[]>([]);
   const [generatedOpen, setGeneratedOpen] = useState(false);
   const [generated, setGenerated] = useState<GeneratedVideo[] | null>(null);
@@ -136,6 +138,7 @@ export default function Studio() {
         setShotSeconds(Math.min(15, Math.max(1, Number(s.shotSeconds) || 4.5)));
         setTimelineFps(Math.min(120, Math.max(1, Number(s.timelineFps) || 24)));
         setContextFrames([5, 22, 39].includes(s.contextFrames) ? s.contextFrames : 22);
+        if (['fit', 'every', 'off'].includes(s.cutMode)) setCutMode(s.cutMode);
         if (['en', 'pt', 'es'].includes(s.lang)) setLang(s.lang);
       }
       const saved = readHistory(localStorage.getItem(HISTORY_KEY));
@@ -146,8 +149,8 @@ export default function Studio() {
   useEffect(() => {
     if (!ready) return;
     document.documentElement.lang = lang;
-    try { localStorage.setItem('henge-draft', JSON.stringify({prompt, intent, mode, project, quality, audioConditioning, keepAudio, shotSeconds, timelineFps, contextFrames, lang, subjects, guideRepresentation, guideSignature})); } catch { /* Editing still works without draft persistence. */ }
-  }, [ready, prompt, intent, mode, project, quality, audioConditioning, keepAudio, shotSeconds, timelineFps, contextFrames, lang, subjects, guideRepresentation, guideSignature]);
+    try { localStorage.setItem('henge-draft', JSON.stringify({prompt, intent, mode, project, quality, audioConditioning, keepAudio, shotSeconds, timelineFps, contextFrames, cutMode, lang, subjects, guideRepresentation, guideSignature})); } catch { /* Editing still works without draft persistence. */ }
+  }, [ready, prompt, intent, mode, project, quality, audioConditioning, keepAudio, shotSeconds, timelineFps, contextFrames, cutMode, lang, subjects, guideRepresentation, guideSignature]);
   useEffect(() => {
     if (!ready) return;
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }
@@ -252,7 +255,7 @@ export default function Studio() {
     if (!video?.range) return null;
     return {
       schema_version: 2, project: project.trim() || t.projectPh, mode, quality,
-      processing: {mode: contextWindow ? 'context_window' : 'single', max_shots: 0, requested_seconds_per_shot: shotSeconds, frames_per_shot: shotFrames, timeline_fps: timelineFps, frame_grid: '17n+5', trim_to_source_length: true, join: 'ordered', execution_status: 'comfy_backend', context_frames: contextFrames},
+      processing: {mode: contextWindow ? 'context_window' : 'single', max_shots: 0, requested_seconds_per_shot: shotSeconds, frames_per_shot: shotFrames, timeline_fps: timelineFps, frame_grid: '17n+5', trim_to_source_length: true, join: 'ordered', execution_status: 'comfy_backend', context_frames: contextFrames, cut_mode: cutMode},
       audio_conditioning: {enabled: audioConditioning, source: audioConditioning ? 'guide_video' : null},
       output_audio: {keep_source: keepAudio}, prompt: fixedRecipe ? '' : nativePrompt(executionPrompt), editor_prompt: fixedRecipe ? '' : prompt,
       subject_guidance: {representation: guideRepresentation, bindings: subjects, status: 'selection_only', marker_colors_are_output_appearance: false},
@@ -296,7 +299,7 @@ export default function Studio() {
     setFirstFrameSlot(typeof r.first_frame_slot === 'number' ? r.first_frame_slot : null);
     setPrompt(r.editor_prompt ?? r.prompt ?? ''); setAudioConditioning(r.audio_conditioning?.enabled === true);
     setKeepAudio(r.output_audio?.keep_source !== false);
-    if (r.processing) {setShotSeconds(r.processing.requested_seconds_per_shot || 4.5); setTimelineFps(r.processing.timeline_fps || 24); setContextFrames(r.processing.context_frames || 22);}
+    if (r.processing) {setShotSeconds(r.processing.requested_seconds_per_shot || 4.5); setTimelineFps(r.processing.timeline_fps || 24); setContextFrames(r.processing.context_frames || 22); if (r.processing.cut_mode) setCutMode(r.processing.cut_mode);}
   }
   /** A server job brings back its own guide (with the chosen interval) and pictures, e.g. after a page reload. */
   const restoring = useRef('');
@@ -403,7 +406,7 @@ export default function Studio() {
             <button className="text-link generated-toggle" aria-expanded={generatedOpen} onClick={openGenerated}><Icon name="film" size={14}/>{tr('Use a video generated in the studio', 'Usar um vídeo gerado no estúdio', 'Usar un vídeo generado en el estudio')}</button>
             {generatedOpen && <div className="generated-picker">{generated === null ? <small className="muted">{tr('Loading…', 'Carregando…', 'Cargando…')}</small> : generated.length ? generated.slice(0, 12).map(item => <button key={item.id} disabled={!!loadingGenerated} onClick={() => useGenerated(item)}><video muted playsInline preload="metadata" src={item.result_url + '#t=0.5'}/><span><strong>{item.project || 'Henge'}</strong><small className="mono">{item.mode ? modeName(item.mode) : ''}{item.duration ? ` · ${item.duration.toFixed(1)}s` : ''}</small></span>{loadingGenerated === item.id && <small className="muted">…</small>}</button>) : <small className="muted">{tr('No finished generations yet.', 'Nenhuma geração concluída ainda.', 'Aún no hay generaciones terminadas.')}</small>}</div>}
             {video?.range && <button className="interval-summary" onClick={() => setEditingVideo(true)}><Icon name="scissors" size={14}/><span className="mono nc">{formatTime(video.range.start)} → {formatTime(video.range.end)}</span><span className="accent mono nc">{selectedDuration.toFixed(1)}s</span></button>}
-            {contextWindow && <details className="context-window-panel" open><summary><Icon name="scissors" size={16}/><strong>{t.autoCut}</strong><span className="mini-badge">{t.unlimited}</span></summary><p>{tr('This interval uses short segments joined in order.', 'Este intervalo usa segmentos curtos unidos em sequência.', 'Este intervalo usa segmentos cortos unidos en orden.')}</p><div className="shot-settings"><label>{t.fixedLabel}<input aria-label={t.fixedLabel} type="number" min="1" max="15" step="0.1" value={shotSeconds} onChange={e => setShotSeconds(Math.min(15, Math.max(1, Number(e.target.value) || 4.5)))}/></label><label>Timeline FPS<input aria-label="Timeline FPS" type="number" min="1" max="120" value={timelineFps} onChange={e => setTimelineFps(Math.min(120, Math.max(1, Number(e.target.value) || 24)))}/></label></div><div className="label-row"><span>{t.ctxLen}</span><div className="context-options">{[5, 22, 39].map(f => <button key={f} aria-pressed={contextFrames === f} className={contextFrames === f ? 'chosen' : ''} onClick={() => setContextFrames(f)}>{f}f</button>)}</div></div><small className="muted">{shotFrames}f · 17n+5 · ~{estimatedShots} {t.cutsWord}</small></details>}
+            {contextWindow && <details className="context-window-panel" open><summary><Icon name="scissors" size={16}/><strong>{t.autoCut}</strong><span className="mini-badge">{t.unlimited}</span></summary><p>{tr('This interval uses short segments joined in order.', 'Este intervalo usa segmentos curtos unidos em sequência.', 'Este intervalo usa segmentos cortos unidos en orden.')}</p><div className="shot-settings"><label>{t.fixedLabel}<input aria-label={t.fixedLabel} type="number" min="1" max="15" step="0.1" value={shotSeconds} onChange={e => setShotSeconds(Math.min(15, Math.max(1, Number(e.target.value) || 4.5)))}/></label><label>Timeline FPS<input aria-label="Timeline FPS" type="number" min="1" max="120" value={timelineFps} onChange={e => setTimelineFps(Math.min(120, Math.max(1, Number(e.target.value) || 24)))}/></label></div><div className="label-row"><span>{t.ctxLen}</span><div className="context-options">{[5, 22, 39].map(f => <button key={f} aria-pressed={contextFrames === f} className={contextFrames === f ? 'chosen' : ''} onClick={() => setContextFrames(f)}>{f}f</button>)}</div></div><label className="cut-mode-field">{tr('Camera cuts', 'Cortes de câmera', 'Cortes de cámara')}<select value={cutMode} onChange={e => setCutMode(e.target.value as CutMode)}>{(['fit', 'every', 'off'] as CutMode[]).map(m => <option key={m} value={m}>{cutModeLabel(m, lang)}</option>)}</select></label><small className="muted">{shotFrames}f · 17n+5 · {cutMode === 'every' ? tr('a shot per camera cut', 'um trecho por corte de câmera', 'un tramo por corte de cámara') : `~${estimatedShots} ${t.cutsWord}`}</small></details>}
           </section>
           {maxPictures > 0 && <section className={'input-card surface reference-dropzone ' + (draggingPictures ? 'dragging' : '')} onDragEnter={e => {e.preventDefault(); if (e.dataTransfer.types.includes('Files')) {pictureDragDepth.current++; setDraggingPictures(true);}}} onDragOver={e => {e.preventDefault(); e.dataTransfer.dropEffect = 'copy';}} onDragLeave={e => {e.preventDefault(); pictureDragDepth.current = Math.max(0, pictureDragDepth.current - 1); if (!pictureDragDepth.current) setDraggingPictures(false);}} onDrop={e => {e.preventDefault(); e.stopPropagation(); pictureDragDepth.current = 0; setDraggingPictures(false); addPictures(e.dataTransfer.files);}}>
             <div className="label-row"><h2><span className="step-number">02</span>{mode === 'headswap' ? tr('Face reference', 'Rosto de referência', 'Rostro de referencia') : t.refs}</h2><span className="mono muted">{String(activePictures.length).padStart(2, '0')} / {String(maxPictures).padStart(2, '0')}</span></div>

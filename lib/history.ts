@@ -17,6 +17,7 @@ export type DirectionRequest = {
     join: string;
     execution_status: string;
     context_frames: number;
+    cut_mode?: 'fit' | 'every' | 'off';
   };
   audio_conditioning: {enabled: boolean; source: string | null};
   output_audio: {keep_source: boolean};

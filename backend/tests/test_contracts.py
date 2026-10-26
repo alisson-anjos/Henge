@@ -45,7 +45,7 @@ class WorkflowContracts(unittest.TestCase):
   job={'request':{'mode':'motion','video':{'start_seconds':2,'end_seconds':51.6},'processing':{'mode':'context_window','requested_seconds_per_shot':15,'context_frames':22}},'options':{}}
   cuts=list(range(72,1190,72))
   with patch.object(server,'camera_cuts',return_value=cuts):
-   fit=server.plan_shots(job)[0];every=server.plan_shots({**job,'options':{'cut_mode':'every'}})[0];off=server.plan_shots({**job,'options':{'detect_cuts':False}})[0]
+   fit=server.plan_shots(job)[0];every=server.plan_shots({**job,'request':{**job['request'],'processing':{**job['request']['processing'],'cut_mode':'every'}}})[0];off=server.plan_shots({**job,'options':{'detect_cuts':False}})[0]
    preview=server.shot_preview(job)
   self.assertEqual((len(fit),len(every)),(4,len(cuts)+1));self.assertTrue(all(s['frames']<=345 for s in off+fit))
   self.assertEqual(preview['cut_mode'],'fit');self.assertEqual(preview['shots'][0]['start'],2);self.assertTrue(preview['shots'][1]['after_cut'])

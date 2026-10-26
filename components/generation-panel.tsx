@@ -7,7 +7,7 @@ import type {Language} from '../lib/design-copy';
 import {isFixedRecipe, type Mode} from '../lib/prompt';
 import {readJson} from '../lib/http';
 import {jobStatusLabel,jobStageLabel} from '../lib/job-status';
-import ShotPlan, {cutModeLabel, type CutMode} from './shot-plan';
+import ShotPlan from './shot-plan';
 import FiboPrep from './fibo-prep';
 
 type Plan = {summary: string; prompt: string; source_kind: string; target_kind: string; use_fibo: boolean; representation: string; preparation_reason?: string; preparation_recommended?: boolean; warnings: string[]; picture_roles: {slot: number; role: string; description: string}[]};
@@ -33,7 +33,6 @@ function normalizeSettings(o: Record<string, unknown>) {
     seed: num(o.seed, 0, 4294967295, 42, true),
     steps: num(o.steps, 1, 60, 8, true),
     clipFps: typeof o.clip_fps === 'number' && [1, 2, 4, 8].includes(o.clip_fps) ? o.clip_fps : 2,
-    cutMode: (['fit', 'every', 'off'] as CutMode[]).includes(o.cut_mode as CutMode) ? o.cut_mode as CutMode : o.detect_cuts === false ? 'off' as CutMode : 'fit' as CutMode,
     enhancePrompt: o.enhance_prompt !== false,
     autoApprove: o.auto_approve === true,
     mask: {...MASK_DEFAULTS, ...(typeof o.mask === 'object' && o.mask ? o.mask as Partial<typeof MASK_DEFAULTS> : {})},
@@ -74,7 +73,6 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
   const [seed, setSeed] = useState(initial.seed);
   const [steps, setSteps] = useState(initial.steps);
   const [clipFps, setClipFps] = useState(initial.clipFps);
-  const [cutMode, setCutMode] = useState<CutMode>(initial.cutMode);
   const [enhancePrompt, setEnhancePrompt] = useState(initial.enhancePrompt);
   const [autoApprove, setAutoApprove] = useState(initial.autoApprove);
   const [maskSettings, setMaskSettings] = useState<typeof MASK_DEFAULTS>(initial.mask);
@@ -95,7 +93,7 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
   function applySettings(options: Record<string, unknown>) {
     const n = normalizeSettings(options);
     setMotionModel(n.motionModel); setFibo(n.fibo); setConditioningMode(n.conditioningMode); setReferenceScale(n.referenceScale); setSeed(n.seed); setSteps(n.steps);
-    setClipFps(n.clipFps); setCutMode(n.cutMode); setEnhancePrompt(n.enhancePrompt); setAutoApprove(n.autoApprove); setMaskSettings(n.mask); setCfg(n.cfg);
+    setClipFps(n.clipFps); setEnhancePrompt(n.enhancePrompt); setAutoApprove(n.autoApprove); setMaskSettings(n.mask); setCfg(n.cfg);
     setStructureCfg(n.structureCfg); setBase(n.base); setLoraStrength(n.loraStrength); setLatentUpscale(n.latentUpscale); setUpscaleDenoise(n.upscaleDenoise); setSharpenFirst(n.sharpenFirst);
     setTurbo(n.turbo); setPrepareReferences(n.prepareReferences); setAttention(n.attention);
   }
@@ -148,7 +146,7 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
     if (!request || !video || !canSubmit || submitting) return;
     setError(''); setSubmitting(true);
     try {
-      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, reference_scale: referenceScale, cut_mode: cutMode, detect_cuts: cutMode !== 'off', enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, base, cfg, ...(activeConditioning === 'tara' ? {structure_cfg: structureCfg} : {}), ...(usesMask ? {mask: maskSettings} : {}), turbo,...(mode === 'sharpness' ? {lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise, sharpen_first: sharpenFirst} : {})})); body.set('video', video);
+      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, base, cfg, ...(activeConditioning === 'tara' ? {structure_cfg: structureCfg} : {}), ...(usesMask ? {mask: maskSettings} : {}), turbo,...(mode === 'sharpness' ? {lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise, sharpen_first: sharpenFirst} : {})})); body.set('video', video);
       pictures.forEach(p => body.set(`picture_${p.slot}`, p.file));
       const response = await fetch('/api/backend/jobs', {method: 'POST', body}); const result = await readJson(response);
       if (!response.ok) throw Error(result.detail || result.error || 'Unable to create job');
@@ -241,10 +239,9 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
       {mode !== 'sharpness' && <label>CFG<input type="number" min="1" max="12" step="0.5" value={cfg} onChange={e => setCfg(Math.min(12, Math.max(1, Number(e.target.value) || 1)))}/></label>}
       {mode !== 'sharpness' && <label>{tr('Attention', 'Atenção', 'Atención')}<select value={attention} onChange={e => setAttention(e.target.value)}><option value="comfy kitchen attention">Comfy Kitchen (INT8)</option><option value="pytorch attention">PyTorch</option></select></label>}
       {mode !== 'sharpness' && <label>CLIP video FPS<select value={activeConditioning === 'tara' ? 2 : clipFps} disabled={activeConditioning === 'tara'} onChange={e => setClipFps(Number(e.target.value))}>{[1, 2, 4, 8].map(n => <option key={n} value={n}>{n}</option>)}</select></label>}
-      {mode !== 'sharpness' && <label>{tr('Camera cuts (how long videos split into shots)', 'Cortes de câmera (como vídeos longos viram trechos)', 'Cortes de cámara (cómo los vídeos largos se dividen en tramos)')}<select value={cutMode} onChange={e => setCutMode(e.target.value as CutMode)}>{(['fit', 'every', 'off'] as CutMode[]).map(m => <option key={m} value={m}>{cutModeLabel(m, lang)}</option>)}</select></label>}
     </div>{onImportSettings && <button className="quiet-button import-settings-button" onClick={onImportSettings}>{tr('Import settings', 'Importar configuração', 'Importar configuración')}</button>}</details>
   </div>;
-  const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, cut_mode: cutMode, detect_cuts: cutMode !== 'off', enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise, sharpen_first: sharpenFirst};
+  const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise, sharpen_first: sharpenFirst};
   const storedOptions = JSON.stringify(shareOptions);
   useEffect(() => {if (restored) try {localStorage.setItem(SETTINGS_KEY, storedOptions);} catch {/* private mode */}}, [restored, storedOptions]);
   const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button>{job && !['completed', 'failed', 'cancelled'].includes(job.status) && <button className="quiet-button" disabled={submitting} onClick={() => action('cancel')}>{tr('Cancel job', 'Cancelar pedido', 'Cancelar pedido')}</button>}<button className="primary" disabled={!health?.online || health?.models[profile]?.available === false || !canSubmit || submitting} onClick={submit}>{submitting ? tr('Sending…', 'Enviando…', 'Enviando…') : tr('Generate', 'Gerar', 'Generar')}</button></>;
