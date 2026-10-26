@@ -52,7 +52,7 @@ function normalizeSettings(o: Record<string, unknown>) {
     attention: o.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention',
   };
 }
-export default function GenerationPanel({registerControls, freshRevision = 0, initialSettings = {}, onSelectJob, onShareSettings, onImportSettings, mode, request, video, pictures, canSubmit, lang, onResult, requestedJobId, requestedProfile}: {registerControls?: (controls: PanelControls) => void; freshRevision?: number; initialSettings?: Record<string, unknown>; onSelectJob?: (request: DirectionRequest, jobId: string) => void; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null; requestedProfile?: string | null}) {
+export default function GenerationPanel({onEnhanceChange, registerControls, freshRevision = 0, initialSettings = {}, onSelectJob, onShareSettings, onImportSettings, mode, request, video, pictures, canSubmit, lang, onResult, requestedJobId, requestedProfile}: {onEnhanceChange?: (on: boolean) => void; registerControls?: (controls: PanelControls) => void; freshRevision?: number; initialSettings?: Record<string, unknown>; onSelectJob?: (request: DirectionRequest, jobId: string) => void; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null; requestedProfile?: string | null}) {
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -161,6 +161,7 @@ export default function GenerationPanel({registerControls, freshRevision = 0, in
       return result.id as string;
     } catch (e) {setError(e instanceof Error ? e.message : 'Unable to submit'); throw e;} finally {setSubmitting(false);}
   }
+  useEffect(() => {onEnhanceChange?.(enhancePrompt);}, [enhancePrompt]);
   // The assistant always calls the latest closures (they read this render's request and options).
   useEffect(() => {registerControls?.({submit, setAutoApprove, selectJob: id => void selectJob(id)});});
   async function saveConnection() {
