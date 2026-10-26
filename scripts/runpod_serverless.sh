@@ -10,10 +10,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME=${ENDPOINT_NAME:-henge-worker}
 IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:runpod-template}
-# One GPU type per endpoint (runpodctl); it must exist in the volume's datacenter and have a CUDA 13 driver.
-GPU=${GPU:-NVIDIA RTX PRO 6000 Blackwell Server Edition}
+# runpodctl creates the endpoint with one GPU type; it must exist in the volume's datacenter and have a CUDA 13 driver.
+# The live endpoint lists RTX 5090 first (priority, ~half the price) with RTX PRO 6000 only as fallback when no 5090 is
+# free; set that order in the RunPod console or with the REST API (PATCH /v1/endpoints/<id> {"gpuTypeIds": [...]}).
+GPU=${GPU:-NVIDIA GeForce RTX 5090}
 WORKERS_MAX=${WORKERS_MAX:-2}
-IDLE_TIMEOUT=${IDLE_TIMEOUT:-120}
+# Idle workers are billed: 15 s covers back-to-back requests of one job (planning, FIBO, shots, downloads) without
+# paying minutes after it ends. 120 s was a large part of the bill.
+IDLE_TIMEOUT=${IDLE_TIMEOUT:-15}
 id() { python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])'; }
 # --fast-disk: weights stay disk-backed (page cache) instead of pinned RAM. Workers can have ~56 GB RAM (RTX 5090), and
 # the H3 text encoder + model + VAE alone are ~51 GB: without it a second conditioning (Sharpness H3 upscale) is OOM-killed.
