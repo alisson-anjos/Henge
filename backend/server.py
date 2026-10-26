@@ -85,7 +85,8 @@ def clamp_float(value,lo,hi,label):
 # Output short side. Sharpness above 720p renders a half-size LMS pass, then latent-upscales and refines at this size.
 QUALITY={'480p':480,'720p':720,'1080p':1080,'1440p':1440,'2160p':2160}
 # LTX Sharpness shot length (8n+1 frames) by output size, so the second pass fits in memory at 2K/4K.
-LTX_SHOT_FRAMES=((1080,121),(1440,73),(2160,41))
+# LTX-2.5 renders up to 20 s per clip at any resolution (720p to 4K): 481 frames at 24 fps, one shot per video up to that.
+LTX_SHOT_FRAMES=481
 UPSCALE_ABOVE=720
 
 def validate_request(r,options,slots):
@@ -469,8 +470,7 @@ def generate(job):
         shots=split_on_cuts(total,per,context,cuts)
     if r['mode']=='sharpness':
         # LTX shots: 8n+1 frames, no context overlap (the source guide keeps consecutive shots aligned).
-        per=next(n for limit,n in LTX_SHOT_FRAMES if short<=limit)
-        shots=[{**shot,'length':ltx_frames(shot['frames'])} for shot in split_frames(total,per,0)]
+        shots=[{**shot,'length':ltx_frames(shot['frames'])} for shot in split_frames(total,LTX_SHOT_FRAMES,0)]
     # Sparse bindings cannot be silently attached to a different actor after a temporal cut.
     bindings=[]
     for s in r.get('subject_guidance',{}).get('bindings',[]):bindings.append({**s,'hex':COLORS[s['color']]})
