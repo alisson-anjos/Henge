@@ -224,8 +224,8 @@ export default function Studio() {
 
   // --- Studio assistant: it reads this render's state and acts through the same setters as the controls. ---
   const panelControls = useRef<PanelControls | null>(null);
-  const studioLive = useRef({mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures});
-  studioLive.current = {mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures};
+  const studioLive = useRef({mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures, promptMode, shotSeconds, cutMode, contextFrames, keepAudio, audioConditioning, timelineFps, project});
+  studioLive.current = {mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures, promptMode, shotSeconds, cutMode, contextFrames, keepAudio, audioConditioning, timelineFps, project};
   const found = useRef(new Map<string, {width: number; height: number; people: {number: number; x: number; y: number}[]}>());
   const settle = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   const studioState = () => {
@@ -233,7 +233,8 @@ export default function Studio() {
     return {mode: c.mode, guide_video: c.video ? {name: c.video.file.name, duration: c.video.duration ?? null, selected: c.video.range ?? null} : null,
       pictures: c.pictures.map(p => ({slot: p.slot, name: p.file.name})), max_pictures: c.maxPictures,
       subjects: c.subjects.map((s, i) => ({subject: i + 1, label: s.label, color: s.color, picture_slots: s.picture_slots, marks: s.anchors.map(a => a.time_seconds)})),
-      guide_representation: c.guideRepresentation, mark_opacity: c.markOpacity, prompt: c.prompt, quality: c.quality,
+      guide_representation: c.guideRepresentation, mark_opacity: c.markOpacity, prompt: c.prompt, prompt_mode: c.promptMode, quality: c.quality,
+      shots: {seconds: c.shotSeconds, cut_mode: c.cutMode, context_frames: c.contextFrames}, output: {keep_audio: c.keepAudio, audio_conditioning: c.audioConditioning, timeline_fps: c.timelineFps}, project: c.project,
       selected_job: c.generationJob ? {id: c.generationJob.id, status: c.generationJob.status, stage: c.generationJob.stage, message: c.generationJob.message} : null};
   };
   async function runStudioCall(call: StudioCall): Promise<StudioResult> {
@@ -267,16 +268,58 @@ export default function Studio() {
         const t = num('time'), hit = found.current.get(t.toFixed(2));
         if (!hit) throw Error(`Call find_people at ${t} first`);
         const person = hit.people.find(p => p.number === num('person')); if (!person) throw Error(`No person #${input.person} at ${t}`);
+        const anchor = {x: person.x, y: person.y, time_seconds: t, frame_width: hit.width, frame_height: hit.height};
+        if (input.subject !== undefined) {
+          const target = c.subjects[num('subject') - 1]; if (!target) throw Error(`No subject ${input.subject}`);
+          setSubjects(current => current.map(s => s.id === target.id ? {...s, anchors: [...s.anchors.filter(a => Math.abs(a.time_seconds - t) > .05), anchor]} : s)); await settle();
+          return {text: `Subject ${input.subject} (${target.color}) is also person #${person.number} at ${t.toFixed(2)} s.`};
+        }
         const slots = (input.picture_slots as number[] || []).map(Number);
         if (!slots.length || slots.some(n => !c.pictures.some(p => p.slot === n))) throw Error('Use attached picture slots');
         const color = SUBJECT_COLORS.find(col => !c.subjects.some(s => s.color === col.name));
         if (!color) throw Error('Every color is in use');
-        const subject: SubjectBinding = {id: crypto.randomUUID(), label: String(input.label || `Subject ${c.subjects.length + 1}`), color: color.name, picture_slots: slots,
-          anchors: [{x: person.x, y: person.y, time_seconds: t, frame_width: hit.width, frame_height: hit.height}]};
+        const subject: SubjectBinding = {id: crypto.randomUUID(), label: String(input.label || `Subject ${c.subjects.length + 1}`), color: color.name, picture_slots: slots, anchors: [anchor]};
         setSubjects(current => [...current, subject]); await settle();
         return {text: `Subject ${c.subjects.length + 1} (${color.name}) = person #${person.number} → Picture ${slots.join(', ')}.`};
       }
       case 'clear_subjects': setSubjects([]); await settle(); return {text: 'All subjects removed.'};
+      case 'remove_subject': {const target = c.subjects[num('subject') - 1]; if (!target) throw Error(`No subject ${input.subject}`); setSubjects(current => current.filter(s => s.id !== target.id)); await settle(); return {text: `Subject ${input.subject} removed.`};}
+      case 'remove_pictures': {
+        const slots = (input.slots as number[] | undefined || []).map(Number);
+        if (!slots.length) {removeAllPictures(); await settle(); return {text: 'All pictures removed.'};}
+        slots.forEach(slot => removePicture(slot)); await settle(); return {text: `Removed Picture ${slots.join(', ')}.`};
+      }
+      case 'set_interval': {
+        if (!c.video) throw Error('Attach a guide video first');
+        const total = c.video.duration ?? Number.POSITIVE_INFINITY; const start = Math.max(0, num('start')), end = Math.min(total, num('end'));
+        if (!(end > start + .2)) throw Error('The interval must be longer than 0.2 s and inside the video');
+        setVideo(v => v ? {...v, range: {start, end}} : v); await settle(); return {text: `Interval ${start.toFixed(2)}–${end.toFixed(2)} s.`};
+      }
+      case 'set_shots': {
+        if (input.seconds !== undefined) setShotSeconds(Math.min(20, Math.max(2, num('seconds'))));
+        if (input.cut_mode !== undefined) setCutMode(String(input.cut_mode) as CutMode);
+        if (input.context_frames !== undefined) setContextFrames(Math.min(48, Math.max(0, Math.round(num('context_frames')))));
+        await settle(); return {text: 'Shot settings updated.'};
+      }
+      case 'set_output': {
+        if (input.keep_audio !== undefined) setKeepAudio(Boolean(input.keep_audio));
+        if (input.audio_conditioning !== undefined) setAudioConditioning(Boolean(input.audio_conditioning));
+        if (input.timeline_fps !== undefined) setTimelineFps(Math.min(60, Math.max(8, num('timeline_fps'))));
+        await settle(); return {text: 'Output settings updated.'};
+      }
+      case 'set_project': setProject(String(input.name ?? '').slice(0, 80)); await settle(); return {text: 'Project renamed.'};
+      case 'get_options': {if (!panelControls.current) throw Error('The generation panel is not ready'); return {text: JSON.stringify(panelControls.current.getOptions())};}
+      case 'set_options': {
+        if (!panelControls.current) throw Error('The generation panel is not ready');
+        panelControls.current.applyOptions((input.options || {}) as Record<string, unknown>); await settle();
+        return {text: 'Options now: ' + JSON.stringify((panelControls.current.getOptions() as {options: unknown}).options)};
+      }
+      case 'select_job': panelControls.current?.selectJob(String(input.job_id)); await settle(); return {text: 'Job shown in the panel.'};
+      case 'send_marks_to_job': {
+        const r = await fetch(`/api/backend/jobs/${String(input.job_id)}/subjects`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({bindings: c.subjects, representation: c.guideRepresentation, ...(c.guideRepresentation === '2d' ? {mark_opacity: c.markOpacity} : {})})});
+        const reply = await r.json(); if (!r.ok) throw Error(reply.detail || `HTTP ${r.status}`);
+        return {text: `Marks sent to job ${input.job_id}; ${reply.status === 'queued_mask' ? 'its preview is being rebuilt (wait_for_job plan).' : 'saved.'}`};
+      }
       case 'set_guide': {
         const rep = String(input.representation) as GuideRepresentation;
         if (!['original', '2d', '3d', 'mask'].includes(rep)) throw Error('Unknown representation');

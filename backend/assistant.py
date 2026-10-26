@@ -41,7 +41,9 @@ How to work:
 4. Choose the guide: several people -> 2d (or mask to keep the scene untouched); one person -> original is fine, mask keeps the scene. If find_people fails with two or more people, do not fall back to original silently: say so and ask the user to mark them with 'Mark in video' (or retry), because with original the model can swap who becomes whom.
 5. Write the prompt with set_prompt only when the user asked for something the mode needs (motion and swap use the user's request; headswap and sharpness ignore it). Refer to pictures as @Picture1, @Picture2.
 6. Before generate, summarize what will run (mode, who becomes whom, guide, quality) in two or three lines. If the user has not asked you to generate, ask first.
-7. After generate, wait_for_job until 'plan'. If the plan has a color or mask preview, view_job_video to check that each color stays on its person; fix with set_job_mark_opacity or tell the user. Then approve_job, wait_for_job until 'done', and view_job_video 'result' to report briefly.
+7. Videos with camera cuts: people seen only after a cut are not recognised automatically. When marks are used, generate with auto-approve off, wait_for_job 'plan', get_job_shots, and for every shot that starts after a cut call find_people a little after its start and mark_subject each visible person with subject=<their number> (people can change places); then send_marks_to_job. Skip people who are not in that shot.
+8. You can change anything the user can: options (get_options / set_options: model, TARA, turbo, steps...), interval, shots, output, project name, pictures and subjects. Say what you changed.
+9. After generate, wait_for_job until 'plan'. If the plan has a color or mask preview, view_job_video to check that each color stays on its person; fix with set_job_mark_opacity or tell the user. Then approve_job, wait_for_job until 'done', and view_job_video 'result' to report briefly.
 
 Be brief. Speak the user's language. Never invent people, pictures or results you have not seen."""
 
@@ -58,10 +60,30 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'mode': {'type': 'string', 'enum': ['swap', 'motion', 'headswap', 'sharpness']}}, 'required': ['mode'], 'additionalProperties': False}},
     {'name': 'set_prompt', 'description': 'Replace the request text in the prompt editor. Use @Picture1, @Picture2 for the pictures.',
      'input_schema': {'type': 'object', 'properties': {'text': {'type': 'string'}}, 'required': ['text'], 'additionalProperties': False}},
-    {'name': 'mark_subject', 'description': 'Mark a person found by find_people (same time) and bind it to picture slots. Adds a subject with its own color.',
+    {'name': 'mark_subject', 'description': 'Mark a person found by find_people (same time). Without subject: a new subject with its own color bound to picture_slots. With subject (its number): another mark of that same subject, e.g. the same person in a later shot after a camera cut.',
      'input_schema': {'type': 'object', 'properties': {'person': {'type': 'integer', 'description': 'number from find_people'}, 'time': {'type': 'number', 'description': 'the time used in find_people'},
-                                                       'picture_slots': {'type': 'array', 'items': {'type': 'integer'}}, 'label': {'type': 'string'}},
-                      'required': ['person', 'time', 'picture_slots'], 'additionalProperties': False}},
+                                                       'picture_slots': {'type': 'array', 'items': {'type': 'integer'}}, 'label': {'type': 'string'}, 'subject': {'type': 'integer', 'description': 'existing subject number to add this mark to'}},
+                      'required': ['person', 'time'], 'additionalProperties': False}},
+    {'name': 'remove_subject', 'description': 'Remove one marked subject (its number in the studio state).',
+     'input_schema': {'type': 'object', 'properties': {'subject': {'type': 'integer'}}, 'required': ['subject'], 'additionalProperties': False}},
+    {'name': 'remove_pictures', 'description': 'Remove reference pictures: the given slots, or all of them when slots is empty.',
+     'input_schema': {'type': 'object', 'properties': {'slots': {'type': 'array', 'items': {'type': 'integer'}}}, 'additionalProperties': False}},
+    {'name': 'set_interval', 'description': 'Select the part of the guide video to use, in seconds of the source video.',
+     'input_schema': {'type': 'object', 'properties': {'start': {'type': 'number'}, 'end': {'type': 'number'}}, 'required': ['start', 'end'], 'additionalProperties': False}},
+    {'name': 'set_shots', 'description': "How long videos are split: seconds per shot (2-20), cut_mode ('fit' = shot length ending at camera cuts, 'every' = a new shot at every cut, 'off' = fixed length) and context_frames carried between shots (0-48). With marks, cuts always start a new shot.",
+     'input_schema': {'type': 'object', 'properties': {'seconds': {'type': 'number'}, 'cut_mode': {'type': 'string', 'enum': ['fit', 'every', 'off']}, 'context_frames': {'type': 'integer'}}, 'additionalProperties': False}},
+    {'name': 'set_output', 'description': 'Output audio and frame rate: keep_audio (the source audio in the result), audio_conditioning (the guide audio drives the generation), timeline_fps.',
+     'input_schema': {'type': 'object', 'properties': {'keep_audio': {'type': 'boolean'}, 'audio_conditioning': {'type': 'boolean'}, 'timeline_fps': {'type': 'number'}}, 'additionalProperties': False}},
+    {'name': 'set_project', 'description': 'Name the project (shown in History).',
+     'input_schema': {'type': 'object', 'properties': {'name': {'type': 'string'}}, 'required': ['name'], 'additionalProperties': False}},
+    {'name': 'get_options', 'description': 'The generation options now (model profile, method, turbo, steps, cfg, seed, structure guidance, FIBO, reference preparation, sharpness upscale...) and what is installed: models, turbos, bases, upscalers, TARA.',
+     'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
+    {'name': 'set_options', 'description': "Change generation options; only the keys given change. Keys: profile (a model id from get_options), conditioning_mode ('guide' | 'tara'), turbo, steps, cfg, seed, structure_cfg (TARA, 1-3), base, fibo ('auto' | 'off'), prepare_references, reference_scale, clip_fps, attention, upscale_method ('h3' | 'nvidia' | 'none'), upscale_steps, upscale_denoise, lora_strength, mask (latent mask settings).",
+     'input_schema': {'type': 'object', 'properties': {'options': {'type': 'object'}}, 'required': ['options'], 'additionalProperties': False}},
+    {'name': 'send_marks_to_job', 'description': "Copy the studio's current marked subjects to a job that waits for approval (after adding marks in shots that start after a cut); its color/mask preview is rebuilt.",
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
+    {'name': 'select_job', 'description': 'Show a job in the generation panel (its plan, previews, result).',
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
     {'name': 'clear_subjects', 'description': 'Remove every marked subject.',
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
     {'name': 'set_guide', 'description': 'Set the guide representation, and for 2d the mark opacity (0.1-1).',
@@ -84,6 +106,10 @@ JOB_TOOLS = [
                       'required': ['job_id', 'which'], 'additionalProperties': False}},
     {'name': 'set_job_mark_opacity', 'description': 'Change the 2d mark opacity of a job waiting for approval.',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'opacity': {'type': 'number'}}, 'required': ['job_id', 'opacity'], 'additionalProperties': False}},
+    {'name': 'get_job_shots', 'description': 'How a job splits the video into shots: index, start and end (seconds in the source), and whether each starts after a camera cut (people may have moved or changed there).',
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
+    {'name': 'retry_job', 'description': 'Run a failed or cancelled job again.',
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
     {'name': 'approve_job', 'description': 'Approve a plan waiting for review so the video renders.',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
     {'name': 'cancel_job', 'description': 'Cancel a job.',

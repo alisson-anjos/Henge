@@ -1194,6 +1194,10 @@ def run_job_tool(name,args):
             ready=job['status'] in TERMINAL or (args['until']=='plan' and job['status']=='awaiting_approval')
             if ready or time.time()>deadline:return job_summary(job)+('' if ready else ' (still running after 15 minutes; wait again)'),[]
             time.sleep(3)
+    if name=='get_job_shots':return json.dumps(shot_preview(load(args['job_id']))),[]
+    if name=='retry_job':
+        try:retry(args['job_id']);return job_summary(load(args['job_id'])),[]
+        except HTTPException as e:raise ValueError(e.detail)
     if name=='view_job_video':
         job=load(args['job_id']);images=job_frames(job,args['which'],args.get('frames'))
         note=' (marks at full opacity; the job uses its mark_opacity)' if args['which']=='marks' else ''
@@ -1307,3 +1311,23 @@ async def save_chat(cid:str,request:Request):
     chat={'messages':messages,'jobs':jobs,'title':first.split('\n\n[studio state]')[0][:80],'updated':time.time()}
     CHATS.mkdir(parents=True,exist_ok=True);tmp=chat_path(cid).with_suffix('.tmp');tmp.write_text(json.dumps(chat,ensure_ascii=False));tmp.replace(chat_path(cid))
     return {'id':cid,'title':chat['title'],'jobs':jobs}
+
+
+@app.post('/jobs/{jid}/subjects')
+async def update_subjects(jid:str,request:Request):
+    """Replace the marked people of a job waiting for approval (e.g. the assistant marked them again in every shot
+    after a camera cut). A color guide or mask gets its preview rebuilt."""
+    body=await request.json()
+    with LOCK:
+        job=load(jid)
+        if job['status']!='awaiting_approval':raise HTTPException(409,'Marks can change only while the plan waits for approval')
+        r=json.loads(json.dumps(job['request']));guidance=r.setdefault('subject_guidance',{})
+        if isinstance(body.get('bindings'),list):guidance['bindings']=body['bindings']
+        for key in ('representation','mark_opacity'):
+            if key in body:guidance[key]=body[key]
+        try:validate_request(json.loads(json.dumps(r)),dict(job['options']),list(map(int,job['assets']['pictures'])))
+        except ValueError as e:raise HTTPException(400,str(e))
+        plan={**job['plan'],'representation':guidance.get('representation','original') if guidance.get('bindings') else 'original'}
+        rebuild=plan['representation'] in ('2d','mask')
+        save(job,request=r,plan=plan,**({'status':'queued_mask','stage':'queued','message':'Updating the guide preview with the new marks'} if rebuild else {'message':'Marks updated'}))
+    return {**public(load(jid)),'request':load(jid)['request']}

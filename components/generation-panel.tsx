@@ -14,7 +14,8 @@ import {readableError} from '../lib/job-error';
 
 type Plan = {summary: string; prompt: string; source_kind: string; target_kind: string; use_fibo: boolean; representation: string; preparation_reason?: string; preparation_recommended?: boolean; warnings: string[]; picture_roles: {slot: number; role: string; description: string}[]};
 /** What the studio assistant can do in this panel. */
-export type PanelControls = {submit: () => Promise<string>; setAutoApprove: (value: boolean) => void; setEnhancePrompt: (value: boolean) => void; selectJob: (id: string) => void};
+export type PanelControls = {submit: () => Promise<string>; setAutoApprove: (value: boolean) => void; setEnhancePrompt: (value: boolean) => void; selectJob: (id: string) => void;
+  getOptions: () => Record<string, unknown>; applyOptions: (patch: Record<string, unknown>) => void};
 export type GenerationJob = {id: string; project: string; run_seconds?: number; run_started?: number; updated?: number; mode?: string; duration?: number; quality?: string; options?: Record<string, unknown>; status: string; stage: string; message?: string; error?: string; progress: number; segment?: number; total_segments?: number; plan?: Plan; sampling_preview_url?: string; result_url?: string; comparison_url?: string; guide_preview_url?: string; fibo_preview_url?: string; created: number; step?: number; step_total?: number; eta_seconds?: number | null; prepared_reference_urls?: string[]; shot_urls?: string[]; mask_preview_url?: string; likeness_warning?: string; marks_preview_url?: string; marks_source_url?: string; seconds_per_step?: number | null};
 type Health = {comfy_url?: string; online: boolean; training_busy: boolean; tara_ready?: boolean; fibo_ready: boolean; models: Record<string, {label: string; task?: string; available?: boolean; method?: string}>; turbos?: Record<string, {label: string; steps: number; available: boolean}>; upscalers?: {h3: boolean; nvidia: boolean}; bases?: Record<string, {label: string; available: boolean}>};
 const relativeTime = (created: number, lang: Language) => {
@@ -163,7 +164,9 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   }
   useEffect(() => {onEnhanceChange?.(enhancePrompt);}, [enhancePrompt]);
   // The assistant always calls the latest closures (they read this render's request and options).
-  useEffect(() => {registerControls?.({submit, setAutoApprove, setEnhancePrompt, selectJob: id => void selectJob(id)});});
+  useEffect(() => {registerControls?.({submit, setAutoApprove, setEnhancePrompt, selectJob: id => void selectJob(id),
+    getOptions: () => ({options: {...shareOptions, profile}, models: health?.models, turbos: health?.turbos, bases: health?.bases, upscalers: health?.upscalers, tara_ready: health?.tara_ready}),
+    applyOptions: patch => applySettings({...shareOptions, profile, ...patch})});});
   async function saveConnection() {
     setConnecting(true); setConnectionMessage('');
     try {
