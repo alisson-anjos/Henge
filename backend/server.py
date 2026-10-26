@@ -8,7 +8,7 @@ import assistant
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageOps
-from workflows import find_people_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
@@ -524,8 +524,12 @@ def cut_mode(job):
     camera cut; off: fixed-length shots. Set with the Auto cut length (request.processing); older jobs carry it in
     options, or only detect_cuts."""
     options=job.get('options') or {}
+    guidance=job['request'].get('subject_guidance') or {}
+    marked=guidance.get('representation','original')!='original' and bool(guidance.get('bindings'))
     for mode in (job['request']['processing'].get('cut_mode'),options.get('cut_mode')):
-        if mode in CUT_MODES:return mode
+        # Marked people are tracked shot by shot: a camera cut inside a shot would lose them, so with marks every
+        # cut starts a new shot (fixed length 'off' stays the user's explicit choice).
+        if mode in CUT_MODES:return 'every' if marked and mode=='fit' else mode
     return 'fit' if options.get('detect_cuts',True) else 'off'
 
 def camera_cuts(job):
@@ -557,6 +561,44 @@ def plan_shots(job):
 def shot_preview(job):
     start=job['request']['video']['start_seconds'];shots,_=plan_shots(job)
     return {'cut_mode':cut_mode(job),'shots':[{'index':i+1,'start':round(start+s['start']/24,3),'end':round(start+(s['start']+s['frames'])/24,3),'context_seconds':round(s['overlap']/24,3),'after_cut':bool(s.get('reset_context')) and i>0} for i,s in enumerate(shots)]}
+
+def subject_looks(job,bindings,inp):
+    """Each marked person's look, from the frame of their first mark, so every shot can recognise them."""
+    follow={s['id']:{} for s in bindings};looks=[]
+    for s in bindings:
+        a=min(s['anchors'],key=lambda a:a['time_seconds']);dest=inp/f"look_{s['color']}.png"
+        if grab_frame(INPUT/job['assets']['video'],a['time_seconds'],dest) is None:continue
+        looks.append((str(dest.relative_to(INPUT)),s['id'],a['x'],a['y']))
+    if not looks:return follow
+    save(job,message='Learning how each marked person looks')
+    try:outputs=execute_graph(job,subject_looks_graph(looks),'subject_looks')
+    except Exception as e:
+        # Without looks the shots still use the marks and continuity; recognition after cuts is just unavailable.
+        save(job,shot_warnings=[f'Could not read how the marked people look ({str(e)[:120]}); after a camera cut they may stay unmarked'])
+        return follow
+    for out in outputs.values():
+        for text in out.get('henge_look',[]):
+            look=json.loads(text)
+            if look.get('signature') and look['id'] in follow:follow[look['id']]['signature']=look['signature']
+    return follow
+
+def follow_update(follow,reports,next_offset):
+    """Update each person's look and where they are at the next shot's first frame from HengeGuide's report.
+    Returns the shot's warnings."""
+    if not reports:return []
+    report=json.loads(reports[0])
+    for s in report.get('subjects',[]):
+        state=follow.setdefault(s['id'],{})
+        if s.get('signature'):state['signature']=s['signature']
+        state.pop('carry',None)
+        if next_offset is not None and s.get('points'):
+            pts=s['points'];k=min(len(pts)-1,max(0,next_offset))
+            near=next((pts[j] for d in range(0,8) for j in (k-d,k+d) if 0<=j<len(pts) and pts[j]),None)
+            if near:state['carry']={'x':near[0],'y':near[1]}
+    seen={s['id'] for s in report.get('subjects',[])}
+    for sid,state in follow.items():
+        if sid not in seen:state.pop('carry',None)
+    return report.get('warnings',[])
 
 def frame_count(path):
     out=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-count_packets','-show_entries','stream=nb_read_packets','-of','csv=p=0',str(path)],capture_output=True,text=True)
@@ -599,18 +641,11 @@ def generate(job):
         elif 'HengeRTXUpscale' not in comfy_info():raise ValueError('NVIDIA upscale needs the nvidia-vfx package on the ComfyUI machine; choose H3 or no upscale')
     else:w,h=W,H
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];shots,context=plan_shots(job)
-    # Sparse bindings cannot be silently attached to a different actor after a temporal cut.
-    bindings=[]
-    for s in r.get('subject_guidance',{}).get('bindings',[]):bindings.append({**s,'hex':COLORS[s['color']]})
-    if plan['representation']!='original':
-        for shot in shots:
-            t0,t1=start+shot['start']/24,start+(shot['start']+shot['frames'])/24
-            for s in bindings:
-                if not any(t0<=a['time_seconds']<t1 for a in s['anchors']):
-                    # Unmarked shot: reuse the nearest marked point at the shot's first frame. HengeGuide still rejects
-                    # an ambiguous person-to-track match, so a wrong guess fails loudly instead of swapping someone else.
-                    near=min(s['anchors'],key=lambda a:min(abs(a['time_seconds']-t0),abs(a['time_seconds']-t1)))
-                    s['anchors']=s['anchors']+[{**near,'time_seconds':round(t0,3)}]
+    # Marked people are followed shot by shot (comfy_nodes/henge/follow.py): the user's marks, continuity across
+    # shots without a cut, and recognition by look after a cut. Their looks are read once, before the shots.
+    bindings=[{**s,'hex':COLORS[s['color']]} for s in r.get('subject_guidance',{}).get('bindings',[])]
+    follow={s['id']:{} for s in bindings};shot_warnings=[]
+    if plan['representation']!='original' and bindings:follow=subject_looks(job,bindings,inp)
     prompt=plan['prompt'];fibo_ref=None
     if plan['use_fibo'] and not swap_figure:
         figure=fibo_request(job)['figure'];fibo_ref=fibo_prepare(job,job);refs.append(str(fibo_ref.relative_to(INPUT)))
@@ -628,8 +663,14 @@ def generate(job):
         # The next shot's context is read from the end of this one, so the worker may drop the overlap only when
         # enough frames remain after it.
         skip=shot['overlap'] if shot['frames']-shot['overlap']>=context else 0
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.)} if plan['representation']=='2d' else options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip);result_node,guide_node='17','18'
+        shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
+                        **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.)} if plan['representation']=='2d' else options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip);result_node,guide_node='17','18'
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
+        if bindings and plan['representation']!='original':
+            nxt=shots[i+1] if i+1<len(shots) else None
+            shot_warnings+=[f'Shot {i+1}: {w}' for w in follow_update(follow,outputs.get('8',{}).get('henge_tracks'),nxt['start']-shot['start'] if nxt else None)]
+            save(job,shot_warnings=shot_warnings)
         results=output_files(outputs,result_node,'videos');guides=output_files(outputs,guide_node,'videos') if guide_node else []
         if not results:raise ValueError('ComfyUI finished without the expected video')
         rendered=FILES.download(results[0],INPUT/relative.replace('.mp4','_result.mp4'))
@@ -905,7 +946,7 @@ def retry(jid:str):
     with LOCK:
         job=load(jid)
         if job['status'] not in ('failed','cancelled'):raise HTTPException(409,'Only a failed or cancelled job can be retried')
-        stale=('error','result_url','comparison_url','sampling_preview_url','sampling_preview_updated','guide_preview_url','prompt_id','step','step_total','eta_seconds','seconds_per_step','segment','total_segments')
+        stale=('error','shot_warnings','result_url','comparison_url','sampling_preview_url','sampling_preview_updated','guide_preview_url','prompt_id','step','step_total','eta_seconds','seconds_per_step','segment','total_segments')
         for key in stale:job.pop(key,None)
         job.update(status='queued_render' if job.get('plan') else 'queued_plan',stage='queued',progress=0,message='Retrying',updated=time.time())
         # save() refuses to leave 'cancelled'; a retry is the explicit way out of it.

@@ -6,6 +6,7 @@ import torch
 from PIL import Image
 import folder_paths,comfy.utils,comfy.sd,comfy.model_management as mm
 from .clip_video import clip_with_video_context
+from . import follow
 
 
 def input_path(name):
@@ -52,22 +53,17 @@ class HengeGuide:
         # Track identity before choosing colors; coordinates are normalized source-image coordinates.
         tracks=SAM3_VideoTrack.execute(images=images,model=sam,conditioning=cond,detection_threshold=float(spec['threshold']) if representation=='mask' else .4,max_objects=8,detect_interval=1)[0]
         packed=tracks.get('packed_masks')
-        if packed is None or packed.shape[1]==0:raise ValueError('SAM found no tracks. Adjust the subject selection.')
+        if packed is None or packed.shape[1]==0:
+            # Nobody in this shot (a cutaway, an empty room): it goes through unmarked instead of failing the job.
+            del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
+            return {'ui':{'henge_tracks':[json.dumps({'warnings':['Nobody found in this shot; it was left unmarked'],'subjects':[]})]},'result':(images,empty)}
         masks=unpack_masks(packed).cpu().bool() # N,objects,h,w
         if tuple(masks.shape[-2:])!=tuple(images.shape[1:3]):masks=torch.nn.functional.interpolate(masks.float(),size=images.shape[1:3],mode='nearest').bool()
-        n,h,w=images.shape[:3];chosen=[];used=set()
-        for s in subjects:
-            anchors=[a for a in s['anchors'] if segment_start<=a['time_seconds']<segment_start+n/24]
-            if not anchors:raise ValueError(f"Mark {s['label']} within this segment ({segment_start:.2f}s). A color is never reassigned by screen position.")
-            scores=torch.zeros(masks.shape[1],dtype=torch.int32)
-            for a in anchors:
-                k=min(n-1,round((a['time_seconds']-segment_start)*24))
-                fw,fh=a['frame_width'],a['frame_height'];scale=min(w/fw,h/fh)
-                x=min(w-1,max(0,round(a['x']*fw*scale+(w-fw*scale)/2)))
-                y=min(h-1,max(0,round(a['y']*fh*scale+(h-fh*scale)/2)));scores+=masks[k,:,y,x].int()
-            best=int(scores.argmax())
-            if scores[best]==0 or best in used or int((scores==scores[best]).sum())>1:raise ValueError('Ambiguous subject-to-track mapping. Add another anchor on the same person.')
-            used.add(best);rgb=tuple(int(s['hex'].lstrip('#')[i:i+2],16) for i in [0,2,4]);chosen.append((best,s,rgb))
+        n,h,w=images.shape[:3]
+        # Marks, continuity from the previous shot and recognition by look (follow.py): never guessed by position.
+        picked,warnings=follow.choose(subjects,masks,images,segment_start)
+        chosen=[(t,s,tuple(int(s['hex'].lstrip('#')[i:i+2],16) for i in [0,2,4])) for t,s,_ in picked]
+        tracking={'ui':{'henge_tracks':[json.dumps(follow.report(picked,masks,images,warnings))]}}
         object_mask=torch.zeros((n,h,w),dtype=torch.bool)
         for noun in json.loads(preserve_objects):
             if noun not in ['phone','microphone','guitar','ukulele','cup','bottle','bicycle','torch','piano','keyboard']:continue
@@ -87,7 +83,7 @@ class HengeGuide:
             # Held props (guitar, microphone...) stay as in the source instead of being regenerated with the person.
             region=mask_region(shape_mask(selected,spec),spec)
             if bool(object_mask.any()):region=region*(~object_mask).float()
-            return (images,region)
+            return {**tracking,'result':(images,region)}
         result=images.clone();del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
         # 2D marks can be translucent (mark_opacity < 1, the BFS Colored Mark look): the guide person stays visible
         # under the tint, so the face and expression come through. 3D always paints the body solid.
@@ -97,7 +93,7 @@ class HengeGuide:
             result[m]=color if alpha>=1 else images[m]*(1-alpha)+color*alpha
         if representation=='2d':
             result[object_mask]=images[object_mask]
-            return (result,selected.float())
+            return {**tracking,'result':(result,selected.float())}
         from comfy_extras.nodes_sam3d_body import SAM3DBody_Loader,SAM3DBody_Predict,SAM3DBody_FaceExpression,SAM3DBody_Smooth
         from .mesh_renderer import render
         # DINOv3's sparse body regression requires FP32 on this checkpoint.
@@ -133,7 +129,7 @@ class HengeGuide:
         mm.unload_all_models();mm.soft_empty_cache()
         result=torch.from_numpy(np.stack(output)).float()/255
         result[object_mask]=images[object_mask]
-        return (result,selected.float())
+        return {**tracking,'result':(result,selected.float())}
 
 
 class HengeH3Conditioning:
@@ -278,6 +274,7 @@ class HengeTextResult:
 
 NODE_CLASS_MAPPINGS['HengeTextResult']=HengeTextResult
 from .find_people import HengeFindPeople
+NODE_CLASS_MAPPINGS['HengeSubjectLook']=follow.HengeSubjectLook
 NODE_CLASS_MAPPINGS['HengeFindPeople']=HengeFindPeople
 from .causal import HengeCausalSampler
 NODE_CLASS_MAPPINGS['HengeCausalSampler']=HengeCausalSampler

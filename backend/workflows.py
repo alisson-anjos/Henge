@@ -154,6 +154,14 @@ def fibo_graph(image,refs,instruction,seed):
     for i,p in enumerate(refs,2):g[str(20+i)]=node('LoadImage',image=p);g['5']['inputs'][f'images.image_{i}']=[str(20+i),0]
     return g
 
+def subject_looks_graph(looks):
+    # One node per marked person: the look of the person under the user's click, used to recognise them after cuts.
+    g={}
+    for i,(image,sid,x,y) in enumerate(looks):
+        g[str(2*i+1)]=node('LoadImage',image=image)
+        g[str(2*i+2)]=node('HengeSubjectLook',image=[str(2*i+1),0],subject_id=sid,x=float(x),y=float(y),sam_checkpoint='sam3.1_multiplex_fp16.safetensors')
+    return g
+
 def find_people_graph(image,kind='person'):
     # One frame: SAM 3.1 finds and numbers every person (or animal) for the studio assistant.
     return {'1':node('LoadImage',image=image),'2':node('HengeFindPeople',image=['1',0],kind=kind,threshold=.4,sam_checkpoint='sam3.1_multiplex_fp16.safetensors'),
