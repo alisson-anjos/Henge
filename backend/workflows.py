@@ -5,10 +5,12 @@ import json,math
 from pathlib import Path
 MODELS={
  'motion':{'label':'Motion Transfer v1.0','task':'motion','lora':'henge/motion_10500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
- # Test merges: 10500 x1.0 + TARA 4500 x0.3, rank concat then per-module SVD keeping 95% / 99% of the Frobenius
- # energy (tools/henge_session_20261025/merge_fro.py); for both Guide Latents and TARA.
- 'motion_mix_dyn95':{'label':'10500 + TARA 0.3 · fro dyn95 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn95.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
- 'motion_mix_dyn99':{'label':'10500 + TARA 0.3 · fro dyn99 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn99.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
+ # Motion Transfer TARA v1.0: the TARA-trained LoRA (step 4500); the studio switches to the TARA method with it.
+ 'motion_tara':{'label':'Motion Transfer TARA v1.0','task':'motion','lora':'henge/motion_tara_4500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True,'method':'tara'},
+ # Motion Transfer Combined (for testing): 10500 x1.0 + TARA 4500 x0.3, rank concat then per-module SVD keeping 95% /
+ # 99% of the Frobenius energy (tools/henge_session_20261025/merge_fro.py); for Guide Latents and TARA.
+ 'motion_mix_dyn95':{'label':'Motion Transfer Combined · dyn95 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn95.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
+ 'motion_mix_dyn99':{'label':'Motion Transfer Combined · dyn99 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn99.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
  # First-frame propagate: Alissonerdx VFX Edit FFP (r128) merged with SolarRenderer control at 0.5, Frobenius dyn99.
  # The whole source is the guide; an optional edited first frame enters as a native image reference (prompt: vfx_edit:).
  'motion_ffp':{'label':'Motion Transfer FFP','task':'motion','lora':'henge/vfx_ffp_solar05_fro_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
