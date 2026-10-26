@@ -724,3 +724,14 @@ img{display:block;max-width:100%}
 .access-popover p{margin:0;font-size:12px;line-height:1.45}.access-popover label{display:grid;gap:5px;font-size:12px}
 @media(max-width:700px){.access-settings>button span{display:none}.access-popover{position:fixed;left:16px;right:16px;top:70px;width:auto}}
 .topbar-end .access-settings .source-link{display:flex}
+.assistant-msg.queued{opacity:.6;border-style:dashed}.assistant-msg.queued small{display:block;margin-top:4px;font-size:10px}
+.markdown{display:grid;gap:6px}.markdown p{margin:0}.markdown ul,.markdown ol{margin:0;padding-left:18px;display:grid;gap:3px}.markdown li>ul,.markdown li>ol{margin-top:3px}.markdown code{font-family:var(--font-mono,monospace);font-size:.9em;padding:1px 4px;border-radius:4px;background:rgba(127,127,127,.18)}.markdown pre{margin:0;padding:8px;border-radius:8px;background:rgba(127,127,127,.14);overflow-x:auto}.markdown pre code{padding:0;background:none}.markdown .md-heading{display:block;margin-top:4px}.markdown a{text-decoration:underline}
+/* Modes in the narrow desktop sidebar (~230-300px): one card per row, so names and hints fit in every language. */
+@media(min-width:701px){
+  .mode-switch{grid-template-columns:1fr;gap:6px}
+  .mode-switch button{min-height:48px;padding:7px 30px 7px 8px;grid-template-columns:30px minmax(0,1fr);gap:9px}
+  .mode-switch .mode-icon{width:30px;height:30px}
+  .mode-copy strong{white-space:normal}
+}
+.mode-copy small{white-space:normal;overflow:visible}
+.access-popover{background:#101017;border:1px solid #2a2a36;box-shadow:0 18px 50px rgba(0,0,0,.55)}

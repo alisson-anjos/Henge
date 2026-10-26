@@ -25,3 +25,4 @@
   const deadline = setTimeout(() => observer.disconnect(), 30000);
   window.addEventListener('pagehide', () => {observer.disconnect();clearTimeout(deadline);}, {once:true});
 })();
+
