@@ -4,7 +4,7 @@ Only branches selected in a validated plan are added: unused loaders never execu
 import json,math
 from pathlib import Path
 MODELS={
- 'motion':{'label':'Original · 10500','task':'motion','lora':'henge/motion_10500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
+ 'motion':{'label':'Motion Transfer v1.0','task':'motion','lora':'henge/motion_10500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
  # Test merges: 10500 x1.0 + TARA 4500 x0.3, rank concat then per-module SVD keeping 95% / 99% of the Frobenius
  # energy (tools/henge_session_20261025/merge_fro.py); for both Guide Latents and TARA.
  'motion_mix_dyn95':{'label':'10500 + TARA 0.3 · fro dyn95 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn95.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},

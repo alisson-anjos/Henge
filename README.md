@@ -7,7 +7,7 @@ An open studio for **motion transfer** and **video swaps**, designed around Mini
 | Mode | What it does | Recipe |
 |---|---|---|
 | Character Swap | Replace the person in a video with a character picture | Character Swap v1.1 LoRA + turbo; v1.1 one-line `body_swap:` prompt; reference background removed (BiRefNet, #808080, 0.5 MP) |
-| Motion transfer | Drive a new character with the guide's performance | Motion 10500 or TARA 4500 LoRA + training adapter V2; Guide Latents or TARA |
+| Motion transfer | Drive a new character with the guide's performance | Motion Transfer v1.0 LoRA (10500 steps) + training adapter V2; Guide Latents or TARA (experimental) |
 | Head Swap | Replace only the head with a face picture | Head Swap v1.0 r32 + turbo; published `head_swap:` template |
 | Sharpness | Sharpen an upload or one of your generations, optionally up to 2K/4K | MiniMax H3 + Little More Sharpness LoRA; for 2K/4K it sharpens at half size and doubles it with the H3 latent upscaler + a short H3 refine (tiled at 4K) or NVIDIA RTX Video Super Resolution; source video only |
 
