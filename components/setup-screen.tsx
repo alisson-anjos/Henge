@@ -4,7 +4,7 @@ import type {Language} from '../lib/design-copy';
 
 type Requirement = {id: string; label: string; file: string; groups: string[]; state: 'installed' | 'downloading' | 'pending' | 'failed' | 'missing'; total?: number; downloaded?: number; error?: string};
 type Setup = {ready: boolean; downloading: boolean; base_ready: boolean; free_gb?: number | null; persistent_volume?: boolean | null};
-type Health = {online: boolean; setup?: Setup; requirements?: Requirement[]; models?: Record<string, {label: string; available?: boolean}>};
+type Health = {online: boolean; offline_reason?: string; comfy_url?: string; setup?: Setup; requirements?: Requirement[]; models?: Record<string, {label: string; available?: boolean}>};
 
 const gb = (bytes?: number) => bytes ? (bytes / 1e9).toFixed(bytes < 1e9 ? 2 : 1) + ' GB' : '';
 
@@ -35,6 +35,15 @@ export default function SetupScreen({lang}: {lang: Language}) {
   const setup = health?.setup, rows = health?.requirements || [];
   const usable = Object.entries(health?.models || {}).filter(([, m]) => m.available).map(([, m]) => m.label);
   const finishedWithErrors = !!setup && !setup.downloading && rows.some(r => r.state !== 'installed');
+  // The full-screen checklist is for a first boot that downloads models. A bridge or GPU backend that drops
+  // (RunPod out of balance, ComfyUI restarting) is a banner over the studio, which stays usable.
+  if (!(setup?.downloading || finishedWithErrors)) {
+    const reason = !reachable ? tr('The Henge backend is offline. Start it (or check the pod) and this clears by itself.', 'O backend do Henge está offline. Inicie-o (ou confira o pod) e este aviso some sozinho.', 'El backend de Henge está desconectado. Inícialo (o revisa el pod) y este aviso desaparece solo.')
+      : /balance/i.test(health?.offline_reason || '') ? tr('GPU unavailable: the RunPod account is out of balance. Add credit and this clears by itself.', 'GPU indisponível: a conta do RunPod está sem saldo. Adicione crédito e este aviso some sozinho.', 'GPU no disponible: la cuenta de RunPod no tiene saldo. Añade crédito y este aviso desaparece solo.')
+      : health?.comfy_url === 'runpod serverless' ? tr('GPU unavailable: the RunPod endpoint does not answer', 'GPU indisponível: o endpoint do RunPod não responde', 'GPU no disponible: el endpoint de RunPod no responde') + (health?.offline_reason ? ` (${health.offline_reason})` : '') + '.'
+      : tr('ComfyUI is offline or starting. Generation resumes when it answers.', 'O ComfyUI está offline ou iniciando. A geração volta quando ele responder.', 'ComfyUI está desconectado o iniciando. La generación vuelve cuando responda.');
+    return <div className="backend-banner" role="status"><span className="setup-dot" aria-hidden="true"/>{reason}</div>;
+  }
   if (dismissed && usable.length) return null;
 
   const installed = rows.filter(r => r.state === 'installed').length;

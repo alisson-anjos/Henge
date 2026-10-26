@@ -27,8 +27,11 @@ class RunPodBackend:
         return r.json()
 
     def online(self):
-        try:self.request('GET','/health',timeout=10);return True
-        except Exception:return False
+        """Whether the endpoint answers; offline_reason says why not (e.g. RunPod's 'insufficient balance')."""
+        try:self.request('GET','/health',timeout=10);self.offline_reason='';return True
+        except Exception as e:
+            text=str(e);m=re.search(r'"detail":"([^"]+)"',text)
+            self.offline_reason=(m.group(1) if m else text)[:200];return False
 
     def inventory(self):
         try:return json.loads(self.inventory_file.read_text())
