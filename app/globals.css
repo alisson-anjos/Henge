@@ -680,6 +680,10 @@ img{display:block;max-width:100%}
 .community-card .template-caption{padding:15px 16px 13px}
 .community-card .template-caption h3{font-size:15px}
 .community-card .template-art:after{content:"";position:absolute;inset:auto 0 0;height:38%;background:linear-gradient(transparent,rgba(8,8,12,.72));pointer-events:none}
+.community-card .template-art>video{width:100%;height:100%;object-fit:cover;display:block;transition:transform .7s,filter .25s}
+.community-card:hover .template-art>video{transform:scale(1.035);filter:brightness(1.06)}
+.community-preview-label{position:absolute;z-index:2;right:10px;top:10px;display:flex;align-items:center;gap:5px;padding:5px 7px;border:1px solid rgba(255,255,255,.12);border-radius:7px;background:rgba(8,8,12,.72);backdrop-filter:blur(7px);color:#cbc7d8;font-size:7px;transition:opacity .2s}
+.community-card:hover .community-preview-label{opacity:0}
 .community-card .template-slots,.community-card .template-cta{z-index:1}
 .community-modes{padding:0 16px 16px;gap:8px}
 .community-modes button{min-height:38px;border-color:#2b2b38;background:#111119}
@@ -705,4 +709,5 @@ img{display:block;max-width:100%}
   .community-page .section-top h2{font-size:28px}
   .community-page .template-grid{grid-template-columns:1fr;gap:16px}
   .community-card .template-art{aspect-ratio:4/3}
+  .community-preview-label{display:none}
 }
