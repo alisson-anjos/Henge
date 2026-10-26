@@ -457,8 +457,10 @@ img{display:block;max-width:100%}
 .template-slots span.bring{border-style:dashed;color:var(--accent)}
 .community-card{display:flex;flex-direction:column}
 .community-card .template-caption{flex:1}
-.community-modes{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 14px 14px}
-.community-modes button{min-height:34px;font-size:11px;gap:6px;padding:0 8px;white-space:nowrap}
+.community-modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:6px;padding:0 14px 14px}
+.community-modes button{min-width:0;min-height:34px;font-size:11px;gap:6px;padding:0 10px;white-space:nowrap;justify-content:center}
+.community-modes button>span{overflow:hidden;text-overflow:ellipsis}
+.community-modes button>svg{flex:none}
 /* First-frame propagate */
 .first-frame-badge{position:absolute;left:4px;top:4px;padding:2px 5px;border-radius:6px;background:var(--accent);color:#0a0a0f;font-size:8px}
 .first-frame-button{width:100%;margin-top:10px;min-height:34px;font-size:11px}

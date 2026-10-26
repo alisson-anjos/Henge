@@ -52,7 +52,10 @@ def supervise(commands):
     for command,cwd in commands:processes.append(subprocess.Popen(command,cwd=cwd))
     try:
         while not stopping:
-            if any(p.poll() is not None for p in processes):raise RuntimeError('A Henge service stopped; inspect the container logs')
+            dead=[p for p in processes if p.poll() is not None]
+            if dead:
+                # -9 with no traceback above means the kernel killed it, almost always for host RAM (cgroup OOM).
+                raise RuntimeError('A Henge service stopped: '+', '.join(f"{Path(str(p.args[1] if len(p.args)>1 else p.args[0])).name} exit {p.returncode}{' (SIGKILL: out of RAM?)' if p.returncode==-9 else ''}" for p in dead))
             time.sleep(1)
     finally:
         shutdown()
