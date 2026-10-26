@@ -199,8 +199,8 @@ export default function Studio() {
     if (!files) return;
     const slots = [...new Set([...expectedSlots, ...Array.from({length: MAX_PICTURES}, (_, i) => i + 1)])].filter(i => i <= maxPictures);
     const available = slots.filter(i => !pictures.some(p => p.slot === i));
-    const valid = Array.from(files).filter(f => ['image/jpeg', 'image/png', 'image/webp'].includes(f.type) && f.size <= 25 * 1024 * 1024);
-    setNotice(valid.length !== files.length ? tr('Use JPG, PNG or WebP, up to 25 MB each.', 'Use JPG, PNG ou WebP, até 25 MB por imagem.', 'Usa JPG, PNG o WebP, hasta 25 MB por imagen.') : valid.length > available.length ? (mode === 'headswap' ? tr('Head Swap uses one face picture.', 'A troca de cabeça usa uma foto de rosto.', 'El cambio de cabeza usa una foto de rostro.') : tr('Up to 11 reference pictures.', 'Até 11 imagens de referência.', 'Hasta 11 imágenes de referencia.')) : '');
+    const valid = Array.from(files).filter(f => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(f.type) && f.size <= 25 * 1024 * 1024);
+    setNotice(valid.length !== files.length ? tr('Use JPG, PNG, WebP or GIF (first frame), up to 25 MB each.', 'Use JPG, PNG, WebP ou GIF (primeiro quadro), até 25 MB por imagem.', 'Usa JPG, PNG, WebP o GIF (primer fotograma), hasta 25 MB por imagen.') : valid.length > available.length ? (mode === 'headswap' ? tr('Head Swap uses one face picture.', 'A troca de cabeça usa uma foto de rosto.', 'El cambio de cabeza usa una foto de rostro.') : tr('Up to 11 reference pictures.', 'Até 11 imagens de referência.', 'Hasta 11 imágenes de referencia.')) : '');
     setPictures(current => [...current, ...valid.slice(0, available.length).map((file, i) => ({slot: available[i], file, url: URL.createObjectURL(file)}))].sort((a, b) => a.slot - b.slot));
   }
   function addVideo(files: FileList | File[] | null, replace = false) {
@@ -208,11 +208,23 @@ export default function Studio() {
     if (replace && video) URL.revokeObjectURL(video.url);
     else if (files.length > 1 || video) { setNotice(tr('Use one guide video. Remove the current guide to replace it.', 'Use um vídeo guia. Remova o atual para substituí-lo.', 'Usa un vídeo guía. Elimina el actual para reemplazarlo.')); return; }
     const file = files[0];
+    if (file.type === 'image/gif') {void addGif(file); return;}
     if (!file.type.startsWith('video/') || file.size > 500 * 1024 * 1024) { setNotice(tr('Choose a video up to 500 MB.', 'Escolha um vídeo de até 500 MB.', 'Elige un vídeo de hasta 500 MB.')); return; }
     const signature = JSON.stringify([file.name, file.size, file.lastModified]);
     if (signature !== guideSignature) setSubjects(current => current.map(s => ({...s, anchors: []})));
     setGuideSignature(signature); setPickingId(null);
     setVideo({file, url: URL.createObjectURL(file)}); setEditingVideo(true); setNotice('');
+  }
+  /** A GIF guide is converted to MP4 by the backend (browsers cannot play GIF in <video>), then added as a video. */
+  async function addGif(gif: File) {
+    if (gif.size > 100 * 1024 * 1024) {setNotice(tr('Choose a GIF up to 100 MB.', 'Escolha um GIF de até 100 MB.', 'Elige un GIF de hasta 100 MB.')); return;}
+    setNotice(tr('Converting the GIF to video…', 'Convertendo o GIF em vídeo…', 'Convirtiendo el GIF en vídeo…'));
+    try {
+      const body = new FormData(); body.set('gif', gif);
+      const response = await fetch('/api/backend/convert-gif', {method: 'POST', body});
+      if (!response.ok) throw Error((await response.json().catch(() => ({}))).detail || `HTTP ${response.status}`);
+      addVideo([new File([await response.blob()], gif.name.replace(/\.gif$/i, '') + '.mp4', {type: 'video/mp4', lastModified: gif.lastModified})]);
+    } catch (e) {setNotice(tr('This GIF could not be converted: ', 'Não foi possível converter este GIF: ', 'No se pudo convertir este GIF: ') + (e instanceof Error ? e.message : String(e)));}
   }
   async function openGenerated() {
     setGeneratedOpen(v => !v);
@@ -426,7 +438,7 @@ export default function Studio() {
           {chosenTemplate && <div className="active-template surface"><Icon name="spark"/><div><span className="eyebrow accent">{t.tplActive}</span><strong>{chosenTemplate.title[lang]}</strong></div><button className="icon-btn" aria-label={t.exitTpl} onClick={() => setActiveTemplate(null)}><Icon name="close" size={15}/></button></div>}
           <section className="input-card surface">
             <div className="label-row"><h2><span className="step-number">01</span>{t.guide}</h2><span className="mono muted">{video ? '01' : '00'} / 01</span></div>
-            <input data-testid="guide-input" hidden ref={videoInput} type="file" accept="video/*" onChange={e => {addVideo(e.target.files); e.target.value = '';}}/>
+            <input data-testid="guide-input" hidden ref={videoInput} type="file" accept="video/*,image/gif" onChange={e => {addVideo(e.target.files); e.target.value = '';}}/>
             <div className={'video-drop ' + (video ? 'has-file' : '')} onDragOver={e => e.preventDefault()} onDrop={e => {e.preventDefault(); addVideo(e.dataTransfer.files);}}>
               {video ? <><span className="file-icon"><Icon name="film"/></span><div><strong>{video.file.name}</strong><small>{(video.file.size / 1048576).toFixed(1)} MB · {selectedDuration.toFixed(1)}s {t.selected}</small></div><button className="icon-btn" aria-label={tr('Edit video interval', 'Editar intervalo do vídeo', 'Editar intervalo del vídeo')} onClick={() => setEditingVideo(true)}><Icon name="scissors" size={16}/></button><button className="icon-btn" aria-label={tr('Remove video', 'Remover vídeo', 'Eliminar vídeo')} onClick={removeVideo}><Icon name="close" size={16}/></button></> : <button className="drop-button" onClick={() => videoInput.current?.click()}><span className="upload-icon"><Icon name="upload"/></span><strong>{t.drop}</strong><small>{t.dropSub}</small></button>}
             </div>
@@ -437,7 +449,7 @@ export default function Studio() {
           </section>
           {maxPictures > 0 && <section className={'input-card surface reference-dropzone ' + (draggingPictures ? 'dragging' : '')} onDragEnter={e => {e.preventDefault(); if (e.dataTransfer.types.includes('Files')) {pictureDragDepth.current++; setDraggingPictures(true);}}} onDragOver={e => {e.preventDefault(); e.dataTransfer.dropEffect = 'copy';}} onDragLeave={e => {e.preventDefault(); pictureDragDepth.current = Math.max(0, pictureDragDepth.current - 1); if (!pictureDragDepth.current) setDraggingPictures(false);}} onDrop={e => {e.preventDefault(); e.stopPropagation(); pictureDragDepth.current = 0; setDraggingPictures(false); addPictures(e.dataTransfer.files);}}>
             <div className="label-row"><h2><span className="step-number">02</span>{mode === 'headswap' ? tr('Face reference', 'Rosto de referência', 'Rostro de referencia') : t.refs}</h2><span className="mono muted">{String(activePictures.length).padStart(2, '0')} / {String(maxPictures).padStart(2, '0')}</span></div>
-            <input data-testid="picture-input" hidden ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => {addPictures(e.target.files); e.target.value = '';}}/>
+            <input data-testid="picture-input" hidden ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={e => {addPictures(e.target.files); e.target.value = '';}}/>
             <div className="reference-grid">{activePictures.map(p => <div className="reference" key={p.slot}><img draggable={false} src={p.url} alt={`Picture ${p.slot}: ${p.file.name}`}/><button className="remove-ref" aria-label={`Remove Picture ${p.slot}`} onClick={() => removePicture(p.slot)}><Icon name="close" size={11}/></button><button className="ref-label mono nc" onClick={() => insertTag(`@Picture${p.slot}`)}>@Picture{p.slot}</button>{p.slot === firstFrameSlot && <span className="first-frame-badge mono">{tr('1st frame', '1º quadro', '1er fotograma')}</span>}</div>)}{activePictures.length < maxPictures && <button className="add-reference" onClick={() => imageInput.current?.click()}><Icon name="plus" size={18}/><span>{t.add}</span></button>}</div>
             {mode === 'motion' && video?.range && <button className="quiet-button first-frame-button" onClick={() => setFrameModal(true)}><Icon name="image" size={14}/>{firstFrameSlot ? tr('Change the edited first frame', 'Trocar o primeiro quadro editado', 'Cambiar el primer fotograma editado') : tr('Edit the first frame (FIBO or upload)', 'Editar o primeiro quadro (FIBO ou upload)', 'Editar el primer fotograma (FIBO o subir)')}</button>}
             <p className="micro-copy">{draggingPictures ? tr('Drop to add references', 'Solte para adicionar referências', 'Suelta para añadir referencias') : mode === 'headswap' ? tr('One clear photo of the new face. The head is placed on the person in the video.', 'Uma foto nítida do novo rosto. A cabeça é aplicada na pessoa do vídeo.', 'Una foto nítida del nuevo rostro. La cabeza se aplica a la persona del vídeo.') : tr('JPG, PNG, WebP · 25 MB each. Slots keep their numbers.', 'JPG, PNG, WebP · 25 MB cada. Os slots mantêm seus números.', 'JPG, PNG, WebP · 25 MB cada. Los slots conservan sus números.')}</p>

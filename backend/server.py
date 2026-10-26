@@ -1,5 +1,5 @@
 """Local Henge job bridge: durable jobs, validated VLM plans, ComfyUI API graphs."""
-import asyncio,base64,hashlib,io,json,math,os,re,shutil,subprocess,threading,time,uuid,zipfile
+import asyncio,base64,hashlib,io,json,math,os,re,shutil,subprocess,tempfile,threading,time,uuid,zipfile
 from pathlib import Path
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
@@ -783,6 +783,18 @@ def approve(jid:str):
         if job['status']!='awaiting_approval':raise HTTPException(409,'This job has no plan awaiting approval')
         save(job,status='queued_render',stage='queued',message='Plan approved; queued for generation')
     return public(job)
+
+@app.post('/convert-gif')
+async def convert_gif(request:Request):
+    """An animated GIF as the guide: browsers cannot play GIF in <video>, so it becomes an MP4 (24 fps, even size)
+    before the trim modal opens. Nothing is kept on the server."""
+    form=await request.form(max_files=1,max_fields=1,max_part_size=100*1024*1024);gif=form.get('gif')
+    if not hasattr(gif,'read'):raise HTTPException(400,'Attach the GIF')
+    with tempfile.TemporaryDirectory() as d:
+        src,dst=Path(d)/'in.gif',Path(d)/'out.mp4';src.write_bytes(await gif.read())
+        p=await asyncio.to_thread(subprocess.run,['ffmpeg','-v','error','-i',str(src),'-vf','fps=24,scale=trunc(iw/2)*2:trunc(ih/2)*2','-c:v','libx264','-crf','17','-pix_fmt','yuv420p','-movflags','+faststart','-an','-y',str(dst)],capture_output=True,timeout=300)
+        if p.returncode or not dst.is_file():raise HTTPException(400,'This GIF could not be converted')
+        return Response(dst.read_bytes(),media_type='video/mp4')
 
 @app.post('/frame-edit')
 async def frame_edit(request:Request):
