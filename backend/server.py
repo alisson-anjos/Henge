@@ -877,7 +877,7 @@ async def configure_connection(request:Request):
 @app.get('/jobs')
 def list_jobs():
     # Newest first by creation: a retried or long-running job keeps its place instead of jumping to the top.
-    jobs=[job for job in (json.loads(p.read_text()) for p in JOBS.glob('*/job.json')) if (job.get('request') or {}).get('mode') not in ('frame_edit','fibo_prepare','find_people')]
+    jobs=[job for job in (json.loads(p.read_text()) for p in JOBS.glob('*/job.json')) if (job.get('request') or {}).get('mode') not in ('frame_edit','fibo_prepare','find_people','translate')]
     return [public(job) for job in sorted(jobs,key=lambda job:job.get('created',0),reverse=True)][:50]
 
 @app.post('/jobs')
@@ -1236,3 +1236,29 @@ async def assistant_step(request:Request):
     if cfg['provider']=='anthropic' and not cfg['api_key'] and not os.environ.get('ANTHROPIC_API_KEY'):raise HTTPException(409,'Set up the assistant first: add an API key in its settings')
     try:return await asyncio.to_thread(assistant.step,cfg,messages,run_job_tool)
     except Exception as e:raise HTTPException(502,f'Assistant error: {str(e)[:800]}')
+
+
+# --- Reading the English prompt in the user's language (display only; the model always gets English) ---
+LANGUAGES={'pt':'Brazilian Portuguese','es':'Spanish','en':'English','fr':'French','de':'German','it':'Italian','ja':'Japanese','ko':'Korean','zh':'Simplified Chinese'}
+
+@app.post('/prompt/translate')
+async def translate_prompt(request:Request):
+    body=await request.json();text=str(body.get('text') or '').strip();lang=str(body.get('lang') or '')
+    if not text or len(text)>16000 or lang not in LANGUAGES:raise HTTPException(400,'Send the prompt and a supported language')
+    instruction=(f'Translate this video-generation prompt into {LANGUAGES[lang]} so a person can read and understand it. '
+                 'Keep the section names (subject_definitions:, summary:, ...), the tags such as <Picture 1>, <Subject 1>, '
+                 '<Video 1> and [Shot 1], and the line breaks exactly as they are. Return only the translation.\n\n'+text)
+    if os.environ.get('VLM_CHAT_URL') and os.environ.get('VLM_MODEL'):
+        r=await asyncio.to_thread(requests.post,os.environ['VLM_CHAT_URL'],headers={'Authorization':'Bearer '+os.environ.get('VLM_API_KEY','')},
+            json={'model':os.environ['VLM_MODEL'],'messages':[{'role':'user','content':instruction}],'temperature':.1,'max_tokens':4096},timeout=180)
+        if not r.ok:raise HTTPException(502,f'Translation failed: HTTP {r.status_code}')
+        return {'text':r.json()['choices'][0]['message']['content'].strip()}
+    # The planner VLM on the same ComfyUI / serverless path, as a hidden job.
+    jid=uuid.uuid4().hex;job_path(jid).mkdir(parents=True)
+    job={'id':jid,'created':time.time(),'status':'running','stage':'translate','progress':0,'request':{'mode':'translate'},'options':{},'message':'Translating the prompt'};save(job)
+    try:
+        outputs=await asyncio.to_thread(execute_graph,job,plan_graph(None,instruction,4096,os.environ.get('HENGE_VLM_CLIP','qwen3.5_9b_w4a8_gptq.safetensors')),'translate')
+        save(job,status='completed',stage='complete',progress=1)
+    except Exception as e:
+        save(job,status='failed',error=str(e)[:800]);raise HTTPException(502,f'Translation failed: {str(e)[:300]}')
+    return {'text':(outputs.get('4',{}).get('text',[''])[0] or '').strip()}

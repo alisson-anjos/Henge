@@ -111,6 +111,13 @@ export default function Studio() {
   const [prompt, setPrompt] = useState('');
   const [intent, setIntent] = useState('');
   const [auto, setAuto] = useState(false);
+  // Prompt modes (one text field): improve = rewritten in English/H3 at Generate; auto = written now into the field
+  // (then sent as is); exact = sent as written. autoSource keeps the user's own text for Undo.
+  const [promptMode, setPromptMode] = useState<'improve' | 'auto' | 'exact'>('improve');
+  const [autoSource, setAutoSource] = useState<string | null>(null);
+  const [readLang, setReadLang] = useState<Language>('pt');
+  const [translation, setTranslation] = useState<{text: string; lang: string; source: string} | null>(null);
+  const [translating, setTranslating] = useState(false);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState('');
   const [native, setNative] = useState(false);
@@ -286,6 +293,9 @@ export default function Studio() {
       default: throw Error(`Unknown studio tool ${call.name}`);
     }
   }
+  // Improve at Generate: in Improve mode, and in Auto Prompt mode until the AI has written the final prompt.
+  useEffect(() => {panelControls.current?.setEnhancePrompt(promptMode === 'improve' || (promptMode === 'auto' && autoSource === null));}, [promptMode, autoSource]);
+  useEffect(() => {setReadLang(lang === 'en' ? 'pt' : lang);}, [lang]);
   const assistantController: StudioController = {state: studioState, run: runStudioCall};
   const contextWindow = selectedDuration > 15;
   const shotFrames = Math.max(22, Math.floor((Math.round(shotSeconds * 24) - 5) / 17) * 17 + 5);
@@ -377,13 +387,22 @@ export default function Studio() {
     if (slot === firstFrameSlot) {setFirstFrameSlot(null); try {localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}}
     setSubjects(current => current.map(s => ({...s, picture_slots: s.picture_slots.filter(n => n !== slot)})));
   }
+  async function readPrompt() {
+    setTranslating(true);
+    try {
+      const r = await fetch('/api/backend/prompt/translate', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({text: prompt, lang: readLang})});
+      const reply = await r.json(); if (!r.ok) throw Error(reply.detail || `HTTP ${r.status}`);
+      setTranslation({text: reply.text, lang: readLang, source: prompt});
+    } catch (e) {setNotice(e instanceof Error ? e.message : String(e));} finally {setTranslating(false);}
+  }
   async function autoPrompt() {
-    if (!video?.range || editingVideo || !pictures.length || !intent.trim()) { setNotice(tr('Add a guide, references and a short brief.', 'Adicione um guia, referências e uma breve descrição.', 'Añade una guía, referencias y una breve descripción.')); return; }
+    const brief = prompt;
+    if (!video?.range || editingVideo || !pictures.length || !brief.trim()) { setNotice(tr('Add a guide, references and a short brief.', 'Adicione um guia, referências e uma breve descrição.', 'Añade una guía, referencias y una breve descripción.')); return; }
     setWorking(true); setNotice('');
     try {
       const request = makeRequest(); if (!request) throw Error('Select a guide interval.');
-      request.prompt = nativePrompt(intent + (subjects.length && !subjectErrors ? '\n' + bindingPrompt(subjects, guideRepresentation) : ''));
-      request.editor_prompt = intent;
+      request.prompt = nativePrompt(brief + (subjects.length && !subjectErrors ? '\n' + bindingPrompt(subjects, guideRepresentation) : ''));
+      request.editor_prompt = brief; setAutoSource(brief); setTranslation(null);
       const body = new FormData(); body.set('direction', JSON.stringify(request)); body.set('options', JSON.stringify({profile: mode === 'motion' ? 'motion' : 'character', fibo: 'auto', seed: 42, steps: 8, clip_fps: 2})); body.set('video', video.file);
       pictures.forEach(p => body.set(`picture_${p.slot}`, p.file));
       const response = await fetch('/api/backend/jobs', {method: 'POST', body}); const result = await readJson(response);
@@ -609,18 +628,25 @@ export default function Studio() {
           </div>
           {video?.range && (!fixedRecipe || mode === 'headswap') && <SubjectBindings subjects={subjects} onChange={setSubjects} representation={guideRepresentation} onRepresentation={setGuideRepresentation} pictures={pictures} lang={lang} pickingId={pickingId} onPick={setPickingId} onPrompt={() => setNative(true)} mode={mode} markOpacity={markOpacity} onMarkOpacity={setMarkOpacity}/>}
           {mode !== 'sharpness' && subjects.length > 0 && subjectErrors && <p className="validation" role="status">{tr('Mark each subject inside the selected interval and attach its references.', 'Marque cada personagem dentro do intervalo selecionado e vincule suas referências.', 'Marca cada personaje dentro del intervalo seleccionado y vincula sus referencias.')}</p>}
-          <section className="creation-card surface" aria-label={tr('Create video', 'Criar vídeo', 'Crear vídeo')}><section className="prompt-card"><div className="prompt-header"><h2><Icon name="spark" size={16}/>{t.direct}</h2>{!fixedRecipe && <div className="editor-tabs"><button aria-pressed={!auto} className={!auto ? 'active' : ''} onClick={() => setAuto(false)}>{t.write}</button><button aria-pressed={auto} className={auto ? 'active' : ''} onClick={() => setAuto(true)}>{t.auto}</button></div>}</div>
-            {!fixedRecipe && <p className="prompt-mode-help">{auto
-              ? tr('Auto prompt: describe the idea in a few words and the AI writes the full prompt into the editor now, for you to review and edit before generating.', 'Prompt automático: descreva a ideia em poucas palavras e a IA escreve o prompt completo no editor agora, para você revisar e editar antes de gerar.', 'Prompt automático: describe la idea en pocas palabras y la IA escribe el prompt completo en el editor ahora, para revisarlo y editarlo antes de generar.')
-              : tr('Write: you write the request yourself.', 'Escrever: você mesmo escreve o pedido.', 'Escribir: escribes la petición tú mismo.')}{' '}{enhanceOn
-              ? tr('At Generate, "Improve my prompt" (on, in the panel) rewrites it in the H3 format; the plan shows the final prompt before rendering.', 'Ao gerar, "Melhorar meu prompt" (ligado, no painel) reescreve o texto no formato do H3; o plano mostra o prompt final antes do render.', 'Al generar, "Mejorar mi prompt" (activado, en el panel) lo reescribe en el formato de H3; el plan muestra el prompt final antes del render.')
-              : tr('"Improve my prompt" is off: your text goes to the model exactly as written. The plan still runs to read the pictures and the video.', '"Melhorar meu prompt" está desligado: seu texto vai ao modelo exatamente como está. O plano ainda roda para ler as imagens e o vídeo.', '"Mejorar mi prompt" está desactivado: tu texto llega al modelo tal cual. El plan sigue ejecutándose para leer las imágenes y el vídeo.')}</p>}
+          <section className="creation-card surface" aria-label={tr('Create video', 'Criar vídeo', 'Crear vídeo')}><section className="prompt-card"><div className="prompt-header"><h2><Icon name="spark" size={16}/>{t.direct}</h2>{!fixedRecipe && <div className="editor-tabs prompt-modes" role="group" aria-label={tr('Prompt mode', 'Modo do prompt', 'Modo del prompt')}>{([['improve', tr('Improve', 'Melhorar', 'Mejorar')], ['auto', 'Auto Prompt'], ['exact', tr('Exact text', 'Texto exato', 'Texto exacto')]] as const).map(([value, label]) => <button key={value} aria-pressed={promptMode === value} className={promptMode === value ? 'active' : ''} onClick={() => setPromptMode(value)}>{label}</button>)}</div>}</div>
+            {!fixedRecipe && <p className="prompt-mode-help">{promptMode === 'improve'
+              ? tr('Write the idea in any language. At Generate the AI rewrites it in English in the H3 format, and the plan shows the final prompt for review before rendering.', 'Escreva a ideia em qualquer idioma. Ao gerar, a IA reescreve em inglês no formato do H3, e o plano mostra o prompt final para revisão antes do render.', 'Escribe la idea en cualquier idioma. Al generar, la IA la reescribe en inglés en el formato de H3, y el plan muestra el prompt final para revisarlo antes del render.')
+              : promptMode === 'auto'
+              ? tr('Write the idea in any language and press "Write the prompt now": the final English prompt replaces it here, to read (in your language too), edit or undo. Generate then sends it as is.', 'Escreva a ideia em qualquer idioma e clique em "Escrever o prompt agora": o prompt final em inglês aparece aqui no lugar, para ler (também no seu idioma), editar ou desfazer. Ao gerar, ele vai como está.', 'Escribe la idea en cualquier idioma y pulsa "Escribir el prompt ahora": el prompt final en inglés aparece aquí, para leerlo (también en tu idioma), editarlo o deshacerlo. Al generar se envía tal cual.')
+              : tr('Your text goes to the model exactly as written (write it in English). The plan still runs to read the pictures and the video.', 'Seu texto vai ao modelo exatamente como está (escreva em inglês). O plano ainda roda para ler as imagens e o vídeo.', 'Tu texto llega al modelo tal cual (escríbelo en inglés). El plan sigue ejecutándose para leer las imágenes y el vídeo.')}</p>}
             {fixedRecipe && <div className="fixed-recipe"><p>{mode === 'headswap'
               ? tr('The prompt is written for you: the published head_swap: template, with the facial details of Picture 1 described by the VLM. You review those details before generating.', 'O prompt é escrito para você: o template head_swap: publicado, com os detalhes do rosto da Imagem 1 descritos pelo VLM. Você revisa esses detalhes antes de gerar.', 'El prompt se escribe por ti: la plantilla head_swap: publicada, con los rasgos de la Imagen 1 descritos por el VLM. Revisas esos detalles antes de generar.')
               : tr('No prompt needed. MiniMax H3 with the Little More Sharpness LoRA runs on its trained caption, with the source video as guide. For 2K/4K it sharpens at half size and doubles it (H3 or NVIDIA upscaler).', 'Não precisa de prompt. O MiniMax H3 com o LoRA Little More Sharpness roda com a legenda do treino e o vídeo de origem como guia. Em 2K/4K ele deixa nítido em meia resolução e dobra (upscaler H3 ou NVIDIA).', 'No hace falta prompt. MiniMax H3 con el LoRA Little More Sharpness usa su descripción de entrenamiento y el vídeo de origen como guía. En 2K/4K da nitidez a media resolución y duplica (escalador H3 o NVIDIA).')}</p>
               {mode === 'sharpness' && <pre className="native-preview">Enhance this video with sharp, crisp details while preserving a natural photorealistic appearance.</pre>}</div>}
-            {!fixedRecipe && auto && <div className="auto-brief"><label htmlFor="brief">{tr('Describe your edit', 'Descreva sua edição', 'Describe tu edición')}</label><textarea id="brief" value={intent} onChange={e => setIntent(e.target.value)} placeholder={mode === 'swap' ? tr('Replace the dancer with Picture 1. Keep the room and lighting.', 'Substitua a dançarina pela Imagem 1. Mantenha a sala e a luz.', 'Reemplaza a la bailarina por la Imagen 1. Conserva la sala y la luz.') : tr('Use the guide motion for Picture 1, on a rooftop at night.', 'Use o movimento do guia para a Imagem 1, em um telhado à noite.', 'Usa el movimiento de la guía para la Imagen 1, en una azotea de noche.')}/><div><small>{tr('The VLM reads the references and 6 guide frames; planning enters the backend queue.', 'O VLM lê referências e 6 quadros do guia; o planejamento entra na fila do backend.', 'El VLM lee referencias y 6 fotogramas; la planificación entra en la cola.')}</small><button className="quiet-button" disabled={busy || !video?.range || !pictures.length || !intent.trim()} onClick={autoPrompt}><Icon name="spark" size={14}/>{working ? tr('Building…', 'Criando…', 'Creando…') : tr('Build prompt', 'Criar prompt', 'Crear prompt')}</button></div></div>}
+            
             {!fixedRecipe && <div className="prompt-editor"><textarea ref={textarea} aria-label="Execution prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={mode === 'swap' ? t.phSwap : t.phMotion}/>{query && suggestions.length > 0 && <div className="mention-menu">{suggestions.map(tag => <button key={tag} onClick={() => insertTag(tag)}>{tag}</button>)}</div>}</div>}
+            {!fixedRecipe && promptMode === 'auto' && <div className="auto-prompt-bar">
+              {autoSource === null
+                ? <button type="button" className="primary" disabled={working || !prompt.trim()} onClick={autoPrompt}><Icon name="spark" size={14}/>{working ? tr('Writing…', 'Escrevendo…', 'Escribiendo…') : tr('Write the prompt now', 'Escrever o prompt agora', 'Escribir el prompt ahora')}</button>
+                : <><span className="muted">{tr('Final prompt in English, written by the AI.', 'Prompt final em inglês, escrito pela IA.', 'Prompt final en inglés, escrito por la IA.')}</span><button type="button" className="quiet-button" onClick={() => {setPrompt(autoSource); setAutoSource(null); setTranslation(null);}}>{tr('Undo', 'Desfazer', 'Deshacer')}</button><button type="button" className="quiet-button" disabled={working} onClick={() => {setPrompt(autoSource); setAutoSource(null); setTranslation(null); setTimeout(autoPrompt, 0);}}>{tr('Write again', 'Escrever de novo', 'Escribir de nuevo')}</button></>}
+              {prompt.trim() && <span className="read-in"><label>{tr('Read in', 'Ler em', 'Leer en')} <select value={readLang} onChange={e => setReadLang(e.target.value as Language)}><option value="pt">Português</option><option value="es">Español</option><option value="en">English</option></select></label><button type="button" className="quiet-button" disabled={translating} onClick={readPrompt}>{translating ? tr('Translating…', 'Traduzindo…', 'Traduciendo…') : tr('Show', 'Mostrar', 'Mostrar')}</button></span>}
+            </div>}
+            {!fixedRecipe && translation && translation.source === prompt && <div className="prompt-translation"><span className="eyebrow muted">{tr('For reading only: the model gets the English text above.', 'Só para leitura: o modelo recebe o texto em inglês acima.', 'Solo para leer: el modelo recibe el texto en inglés de arriba.')}</span><pre>{translation.text}</pre></div>}
             {!fixedRecipe && invalid.length > 0 && <p className="validation missing-pictures" role="alert">{tr('Missing in the prompt:', 'Falta no prompt:', 'Falta en el prompt:')} {invalid.map(tag => {const slot = Number(tag.match(/\d+/)?.[0]); const bring = bringSlots.find(b => b.slot === slot); return `Picture ${slot}${bring ? ` (${bring.label[lang]})` : ''}`;}).join(', ')}. {tr('Add the picture, or remove the tag from the prompt.', 'Adicione a imagem ou tire a marcação do prompt.', 'Añade la imagen o quita la etiqueta del prompt.')} <button type="button" className="quiet-button" onClick={() => imageInput.current?.click()}>{tr('Add picture', 'Adicionar imagem', 'Añadir imagen')}</button></p>}
             {!fixedRecipe && native && <pre className="native-preview">{nativePrompt(executionPrompt) || tr('Your H3 prompt will appear here.', 'Seu prompt H3 aparecerá aqui.', 'Tu prompt H3 aparecerá aquí.')}</pre>}
             <div className="prompt-footer">{!fixedRecipe && <><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></>}<div className="prompt-generation-actions" id="prompt-generation-actions"/></div>
