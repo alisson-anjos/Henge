@@ -18,6 +18,16 @@ def shutdown(*_):
     for p in reversed(processes):
         if p.poll() is None:p.terminate()
 
+def remove_models(spec):
+    """HENGE_REMOVE_MODELS: comma-separated paths relative to the models folder to delete at boot (models dropped from
+    the manifest, e.g. a retired engine). Paths outside the models folder are refused."""
+    root=(COMFY/'models').resolve()
+    for rel in filter(None,(x.strip() for x in spec.split(','))):
+        target=(COMFY/'models'/rel).resolve()
+        if not target.is_relative_to(root) or target==root:print(f'[henge] refusing to remove {rel}',flush=True);continue
+        if target.is_dir():shutil.rmtree(target);print(f'[henge] removed model folder {rel}',flush=True)
+        elif target.exists():target.unlink();print(f'[henge] removed model {rel}',flush=True)
+
 def link_to_workspace(workspace,names=('models','input','output')):
     """Point ComfyUI's models/input/output and the job state at the volume."""
     root=workspace/'henge';root.mkdir(parents=True,exist_ok=True)
@@ -87,6 +97,7 @@ def main():
         return supervise([comfy_command('127.0.0.1',shlex.split(os.environ.get('HENGE_COMFY_ARGS',''))),([sys.executable,str(APP/'docker/worker_handler.py')],APP)])
     workspace=Path(os.environ.get('HENGE_WORKSPACE','/workspace'))
     if workspace.is_dir() and os.environ.get('HENGE_WORKSPACE')!='off':link_to_workspace(workspace)
+    if os.environ.get('HENGE_REMOVE_MODELS'):remove_models(os.environ['HENGE_REMOVE_MODELS'])
     if not (workspace.is_dir() and workspace.is_mount()):
         print(f'[henge] WARNING: {workspace} is not a mounted volume. Models (~65 GB) will go to the container disk and are lost when the pod is reset. Attach a volume or network volume at {workspace}.',flush=True)
     start_sshd();install_tara_kernel()
