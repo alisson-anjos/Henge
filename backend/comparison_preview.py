@@ -4,17 +4,23 @@ from pathlib import Path
 from PIL import Image,ImageDraw,ImageFont,ImageOps
 
 def reference_header(references,width):
+    """references: (slot, path) for a user picture, or (label, path, True) for an image generated from them (FIBO),
+    drawn with an accent label and frame."""
     columns=min(6,max(1,len(references)));cell=width//columns;rows=math.ceil(len(references)/columns)
     height=36+rows*150+30;image=Image.new('RGB',(width,height),'#101018');draw=ImageDraw.Draw(image)
     try:font=ImageFont.truetype('DejaVuSans.ttf',15)
     except OSError:font=ImageFont.load_default()
     draw.text((14,10),'Reference pictures',font=font,fill='#bbb1db')
-    for i,(slot,path) in enumerate(references):
+    for i,(slot,path,*generated) in enumerate(references):
         x=(i%columns)*cell;y=36+(i//columns)*150
         with Image.open(path) as ref:
             thumb=ImageOps.contain(ref.convert('RGB'),(max(1,cell-16),119))
-        image.paste(thumb,(x+(cell-thumb.width)//2,y+23+(119-thumb.height)//2))
-        draw.text((x+10,y+3),f'Picture {slot}',font=font,fill='white')
+        left,top=x+(cell-thumb.width)//2,y+23+(119-thumb.height)//2
+        image.paste(thumb,(left,top))
+        if generated and generated[0]:
+            draw.rectangle((left-3,top-3,left+thumb.width+2,top+thumb.height+2),outline='#a78bfa',width=3)
+            draw.text((x+10,y+3),str(slot),font=font,fill='#c4b5fd')
+        else:draw.text((x+10,y+3),f'Picture {slot}',font=font,fill='white')
     draw.text((14,height-23),'Guide video',font=font,fill='#bbb1db')
     draw.text((width//2+14,height-23),'Generated result',font=font,fill='#bbb1db')
     return image

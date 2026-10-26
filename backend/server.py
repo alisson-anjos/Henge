@@ -777,6 +777,9 @@ def comparison_with_refs(jid:str):
     job=load(jid);work=job_path(jid)
     if job['status']!='completed' or not (work/'comparison.mp4').is_file():raise HTTPException(409,'The comparison is available after generation completes')
     refs=[(int(slot),INPUT/path) for slot,path in sorted(job['assets']['pictures'].items(),key=lambda x:int(x[0]))]
+    if (work/'fibo_preview.png').is_file():
+        sources=' + '.join(f'Picture {s}' for s in (job.get('plan') or {}).get('fibo_picture_slots',[]))
+        refs.append((f'FIBO · from {sources}' if sources else 'FIBO-generated',work/'fibo_preview.png',True))
     # The job lock prevents two browser/download requests from encoding the same file simultaneously.
     with LOCK:preview_lock=COMPARISON_LOCKS.setdefault(jid,threading.Lock())
     with preview_lock:
