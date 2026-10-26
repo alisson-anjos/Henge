@@ -800,7 +800,7 @@ def comparison_with_refs(jid:str):
     # The job lock prevents two browser/download requests from encoding the same file simultaneously.
     with LOCK:preview_lock=COMPARISON_LOCKS.setdefault(jid,threading.Lock())
     with preview_lock:
-        result=create_comparison_with_refs(work/'comparison.mp4',work/'result.mp4',refs,work/'comparison_with_refs_v2.mp4',job_settings(job),(job.get('plan') or {}).get('prompt',''))
+        result=create_comparison_with_refs(work/'comparison.mp4',work/'result.mp4',refs,work/'comparison_with_refs_v3.mp4',job_settings(job),(job.get('plan') or {}).get('prompt',''))
     return FileResponse(result,filename='henge-guide-result-references.mp4',media_type='video/mp4')
 
 @app.get('/jobs/{jid}/workflow')
