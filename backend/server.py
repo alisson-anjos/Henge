@@ -1,5 +1,5 @@
 """Local Henge job bridge: durable jobs, validated VLM plans, ComfyUI API graphs."""
-import asyncio,base64,io,json,math,os,re,shutil,subprocess,threading,time,uuid
+import asyncio,base64,io,json,math,os,re,shutil,subprocess,threading,time,uuid,zipfile
 from pathlib import Path
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
@@ -501,7 +501,7 @@ def generate(job):
         fibo_ref=image_from_output(outputs,inp/'fibo_prepared.png');refs.append(str(fibo_ref.relative_to(INPUT)));
         if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> is a character sheet (front and back views) of that character in humanoid form; use it for body shape and appearance only, it does not supply motion or a background." if sheet else f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
         shutil.copyfile(fibo_ref,work/'fibo_preview.png');save(job,fibo_preview_url=f"/api/backend/jobs/{job['id']}/files/fibo_preview.png")
-    pieces=[];previous=None
+    pieces=[];previous=None;save(job,shot_urls=[])
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         if shot.get('reset_context'):previous=None
@@ -519,7 +519,9 @@ def generate(job):
         results=output_files(outputs,result_node,'videos');guides=output_files(outputs,guide_node,'videos') if guide_node else []
         if not results:raise ValueError('ComfyUI finished without the expected video')
         rendered=FILES.download(results[0],INPUT/relative.replace('.mp4','_result.mp4'))
-        piece=work/f'piece_{i:03d}.mp4';run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','18','-y',str(piece)]);pieces.append(piece);previous=rendered
+        piece=work/f'piece_{i:03d}.mp4';run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','18','-movflags','+faststart','-y',str(piece)]);pieces.append(piece);previous=rendered
+        # Each finished shot is viewable and downloadable while the next ones render.
+        save(job,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
         if i==0 and guides:FILES.download(guides[0],work/'guide_preview.mp4');save(job,guide_preview_url=f"/api/backend/jobs/{job['id']}/files/guide_preview.mp4")
     concat=work/'concat.txt';concat.write_text(''.join(f"file '{p.name}'\n" for p in pieces));joined=work/'joined.mp4';run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(concat),'-c','copy','-y',str(joined)])
     output=work/'result.mp4';args=['ffmpeg','-v','error','-i',str(joined)]
@@ -759,10 +761,21 @@ def cancel(jid:str):
 
 @app.get('/jobs/{jid}/files/{name}')
 def file(jid:str,name:str):
-    if name not in ['result.mp4','comparison.mp4','guide_preview.mp4','fibo_preview.png','sampling_preview.jpg','mask_preview.mp4'] and not re.fullmatch(r'reference_(?:[1-9]|1[01])_prepared\.png',name):raise HTTPException(404,'Unknown output')
+    shot=re.fullmatch(r'piece_(\d{3})\.mp4',name)
+    if name not in ['result.mp4','comparison.mp4','guide_preview.mp4','fibo_preview.png','sampling_preview.jpg','mask_preview.mp4'] and not shot and not re.fullmatch(r'reference_(?:[1-9]|1[01])_prepared\.png',name):raise HTTPException(404,'Unknown output')
     load(jid);p=job_path(jid)/name
     if not p.is_file():raise HTTPException(404,'Output not yet available')
-    return FileResponse(p,filename=name,media_type='image/jpeg' if p.suffix=='.jpg' else 'image/png' if p.suffix=='.png' else 'video/mp4')
+    return FileResponse(p,filename=f'henge-{jid[:8]}-shot_{int(shot[1])+1:02d}.mp4' if shot else name,media_type='image/jpeg' if p.suffix=='.jpg' else 'image/png' if p.suffix=='.png' else 'video/mp4')
+
+@app.get('/jobs/{jid}/shots.zip')
+def shots_zip(jid:str):
+    """Every finished shot so far, uncompressed (they are already H.264)."""
+    load(jid);work=job_path(jid);pieces=sorted(work.glob('piece_[0-9][0-9][0-9].mp4'))
+    if not pieces:raise HTTPException(404,'No finished shots yet')
+    buffer=io.BytesIO()
+    with zipfile.ZipFile(buffer,'w',zipfile.ZIP_STORED) as z:
+        for p in pieces:z.write(p,f'shot_{int(p.stem[6:])+1:02d}.mp4')
+    return Response(buffer.getvalue(),media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="henge-{jid[:8]}-shots.zip"'})
 
 @app.get('/jobs/{jid}/source/{name}')
 def source(jid:str,name:str):
