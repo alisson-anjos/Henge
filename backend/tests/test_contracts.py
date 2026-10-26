@@ -54,32 +54,33 @@ class WorkflowContracts(unittest.TestCase):
   from PIL import Image
   def job(jid,options={}):
    (server.INPUT/'henge'/jid).mkdir(parents=True,exist_ok=True);server.job_path(jid).mkdir(parents=True,exist_ok=True)
-   pic=server.INPUT/'henge'/jid/'cat.png';Image.new('RGB',(8,8),'gray').save(pic)
-   j={'id':jid,'created':0,'status':'awaiting_approval','request':{'mode':'motion','video':{'start_seconds':0}},'options':{'seed':1,**options},'assets':{'pictures':{'1':str(pic.relative_to(server.INPUT))}},
+   pic=server.INPUT/'henge'/jid/'cat.png';Image.new('RGB',(8,8),'gray').save(pic);(server.INPUT/'henge'/jid/'guide.mp4').write_bytes(b'v')
+   j={'id':jid,'created':0,'status':'awaiting_approval','request':{'mode':'motion','video':{'start_seconds':0}},'options':{'seed':1,**options},'assets':{'video':f'henge/{jid}/guide.mp4','pictures':{'1':str(pic.relative_to(server.INPUT))}},
       'plan':{'use_fibo':True,'fibo_picture_slots':[1],'source_kind':'human','target_kind':'animal','fibo_instruction':'x','picture_roles':[{'slot':1,'description':'A cat.'}]}}
    server.save(j);return j
   def fake(outputs,dest):Image.new('RGB',(8,8),'white').save(dest);return dest
-  with patch.object(server,'execute_graph',return_value={}) as run,patch.object(server,'image_from_output',side_effect=fake):
+  with patch.object(server,'execute_graph',return_value={}) as run,patch.object(server,'image_from_output',side_effect=fake),patch.object(server,'run'):
    server.fibo_prepare(job('1'*32),job('1'*32));server.fibo_prepare(job('2'*32),job('2'*32));self.assertEqual(run.call_count,1)
    server.fibo_prepare(job('3'*32),job('3'*32),regenerate=True);self.assertEqual(run.call_count,2)
    edited=job('4'*32,{'fibo_instruction':'A cat knight, front and back.'});server.fibo_prepare(edited,edited);self.assertEqual(run.call_count,3)
-   self.assertEqual(run.call_args[0][1]['5']['inputs']['prompt'],'A cat knight, front and back.')
+   graph=run.call_args[0][1];self.assertEqual(graph['5']['inputs']['prompt'],'A cat knight, front and back.')
+   self.assertTrue(graph['4']['inputs']['image'].endswith('cat.png'));self.assertTrue(graph['22']['inputs']['image'].endswith('fibo_source.png'))
   self.assertTrue(server.fibo_state(server.load('2'*32))['ready'])
  def test_character_swap_animal_gets_one_fibo_figure(self):
   import server
-  from edit_modes import character_sheet_instruction
-  self.assertIn('Exactly one figure',character_sheet_instruction(1,single=True));self.assertIn('front view and back view',character_sheet_instruction(1))
+  from edit_modes import character_figure_instruction
+  text=character_figure_instruction(2);self.assertIn('Exactly one figure',text);self.assertIn('the person in <image_3>',text)
   jid='5'*32;(server.INPUT/'henge'/jid).mkdir(parents=True,exist_ok=True);server.job_path(jid).mkdir(parents=True,exist_ok=True)
   pic=server.INPUT/'henge'/jid/'cat.png';__import__('PIL.Image').Image.new('RGB',(8,8),'gray').save(pic)
-  job={'id':jid,'created':0,'status':'planning','request':{'mode':'swap','prompt':'','video':{'start_seconds':0}},'options':{},'assets':{'pictures':{'1':str(pic.relative_to(server.INPUT))}}}
+  (server.INPUT/'henge'/jid/'guide.mp4').write_bytes(b'v')
+  job={'id':jid,'created':0,'status':'planning','request':{'mode':'swap','prompt':'','video':{'start_seconds':0}},'options':{},'assets':{'video':f'henge/{jid}/guide.mp4','pictures':{'1':str(pic.relative_to(server.INPUT))}}}
   server.save(job)
   answers={'vlm_picture_1':'Male, orange tabby cat, white paws','vlm_species':'Animal'}
   def fake_graph(job,graph,stage):return {'4':{'text':[answers[stage]]}}
   with patch.object(server,'prepare_evidence',return_value=([(1,pic)],pic,{})),patch.object(server,'fibo_available',return_value=True),patch.object(server,'execute_graph',side_effect=fake_graph):
    server.planning(job)
   plan=server.load(jid)['plan'];self.assertTrue(plan['use_fibo'] and plan['preparation_recommended']);self.assertEqual(plan['target_kind'],'animal')
-  req=server.fibo_request(server.load(jid));self.assertTrue(req['single']);self.assertIn('Exactly one figure',req['instruction'])
-  self.assertFalse(server.fibo_state(server.load(jid))['sheet'])
+  req=server.fibo_request(server.load(jid));self.assertTrue(req['figure']);self.assertIn('Exactly one figure',req['instruction'])
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))

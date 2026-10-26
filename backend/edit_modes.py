@@ -134,18 +134,17 @@ def ffp_prompt(sentence,first_frame=None):
     return text
 
 
-def character_sheet_instruction(count,description='',single=False):
-    """FIBO instruction for a human guide driving an animal: redraw the animal (all of the given images show it) as an
-    upright humanoid with a plain background, so no scenery reaches the video model. `single` asks for one front-view
-    figure (Character Swap uses it in place of Picture 1) instead of a front and back sheet."""
-    images=', '.join(f'<image_{i}>' for i in range(1,count+1))
+def character_figure_instruction(count,description=''):
+    """FIBO instruction for a human guide driving an animal. <image_1>..<image_count> show the animal; the image after
+    them is the guide's first frame, used only for the pose. One full-body humanoid figure on plain gray: a sheet with
+    several figures, or animal leg proportions, let the video model put paws or extra bodies in the wrong places."""
+    images=', '.join(f'<image_{i}>' for i in range(1,count+1));pose=f'<image_{count+1}>'
     subject=f'the animal in {images}'+(f' ({description.strip().rstrip(".")})' if description.strip() else '')
-    body=(f'{subject} redrawn as an anthropomorphic, upright bipedal character with a human body structure: '
-          'human-proportioned torso, full-length arms ending in hands, and long human-length legs with the knees halfway '
-          'down, standing on two feet. Keep its exact animal head and face, fur or skin colors, patterns, markings and '
-          'every distinguishing feature; paw markings belong only on the hands and feet. ')
-    view=('Exactly one figure, full body front view, standing in a neutral relaxed pose, head to feet large in frame. '
-          if single else 'Show the full body twice side by side, front view and back view, both with the head, standing '
-          'in a neutral relaxed pose, head to feet in frame. ')
-    return (('Full-body portrait of ' if single else 'Character sheet of ')+body+view+
-            'Plain flat neutral gray background, no scenery, no floor, no props, no text, soft even studio lighting.')
+    return (f'Full-body portrait of {subject} redrawn as an anthropomorphic, upright bipedal character with a human body '
+            'structure: human-proportioned torso, full-length arms ending in hands, and long human-length legs with the '
+            'knees halfway down, standing on two feet. Keep its exact animal head and face, fur or skin colors, patterns, '
+            'markings and every distinguishing feature; paw markings belong only on the hands and feet. '
+            f'Give it the same body pose as the person in {pose}: facing direction, arm and leg positions. Take nothing '
+            f'else from {pose}: not the face, hair, clothes, body shape or background. Exactly one figure, head to feet '
+            'large in frame. Plain flat neutral gray background, no scenery, no floor, no props, no text, soft even '
+            'studio lighting.')

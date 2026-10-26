@@ -2,7 +2,7 @@
 import {useEffect, useState} from 'react';
 import type {Language} from '../lib/design-copy';
 
-type State = {enabled: boolean; sheet?: boolean; instruction?: string; default_instruction?: string; ready?: boolean; preview_url?: string | null};
+type State = {enabled: boolean; figure?: boolean; instruction?: string; default_instruction?: string; ready?: boolean; preview_url?: string | null};
 
 /** Approval screen: the FIBO reference this job will use. A reference already prepared from the same pictures is
  * reused; it can be regenerated, with the instruction edited. */
@@ -31,7 +31,7 @@ export default function FiboPrep({jobId, lang}: {jobId: string; lang: Language})
   if (!state?.enabled) return null;
   const edited = instruction.trim() !== (state.instruction || '').trim();
   return <div className="fibo-prep">
-    <div className="label-row"><strong>{state.sheet ? tr('FIBO character sheet', 'Character sheet do FIBO', 'Character sheet de FIBO') : tr('FIBO reference', 'Referência do FIBO', 'Referencia de FIBO')}</strong>
+    <div className="label-row"><strong>{state.figure ? tr('FIBO humanoid figure', 'Figura humanoide do FIBO', 'Figura humanoide de FIBO') : tr('FIBO reference', 'Referência do FIBO', 'Referencia de FIBO')}</strong>
       <small className="muted">{state.ready ? tr('Ready · reused, not generated again', 'Pronta · reaproveitada, não será gerada de novo', 'Lista · reutilizada, no se genera de nuevo') : tr('Generated before the video if you approve', 'Gerada antes do vídeo ao aprovar', 'Se genera antes del vídeo al aprobar')}</small></div>
     {state.ready && state.preview_url ? <img src={state.preview_url} alt={tr('FIBO reference', 'Referência do FIBO', 'Referencia de FIBO')}/> : <div className="fibo-prep-empty">{busy ? tr('FIBO is generating… (about 1–3 min)', 'O FIBO está gerando… (cerca de 1–3 min)', 'FIBO está generando… (unos 1–3 min)') : tr('Not generated yet', 'Ainda não gerada', 'Aún no generada')}</div>}
     <label>{tr('FIBO instruction', 'Instrução do FIBO', 'Instrucción de FIBO')}<textarea value={instruction} disabled={busy} onChange={e => setInstruction(e.target.value)}/></label>

@@ -10,7 +10,7 @@ from PIL import Image,ImageDraw,ImageOps
 from workflows import split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
-from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_sheet_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
+from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -397,7 +397,7 @@ def planning(job):
             # An animal reference for a human performer: FIBO can redraw it as one upright humanoid figure.
             kind=ask('Is the main subject of this picture a human, an animal or something else? Answer with one word: human, animal or other.',pictures[0][1],'vlm_species',16)
             if re.search(r'\banimal\b',kind.lower()):
-                plan.update(target_kind='animal',fibo_picture_slots=[1],fibo_instruction=character_sheet_instruction(1,single=True),
+                plan.update(target_kind='animal',fibo_picture_slots=[1],fibo_instruction=character_figure_instruction(1),
                     preparation_recommended=True,use_fibo=True,
                     preparation_reason='The guide shows a human performer and the reference depicts an animal. Preparing an upright, human-compatible version may help transfer the performance while retaining the animal identity.')
         # Keep the user's guide choice (original / 2d / 3d / latent mask) for the marked subject.
@@ -442,22 +442,20 @@ def file_digest(path,h):
 
 def fibo_request(job):
     """What FIBO prepares for a job: base image, extra images, instruction, and a cache key. An animal for a human
-    performer becomes a humanoid character sheet from the animal pictures alone (no guide frame, so no guide scenery);
-    other cases edit the guide's first frame. options.fibo_instruction (set on the approval screen) overrides the text.
-    The key leaves out the planner's wording for the sheet, so a new plan of the same pictures reuses the sheet."""
+    performer becomes one upright humanoid figure drawn from the animal pictures, posed like the guide's first frame
+    (which goes in last, for the pose only, so no guide scenery); other cases edit the guide's first frame.
+    options.fibo_instruction (set on the approval screen) overrides the text. The key leaves out the planner's wording
+    for the figure, so a new plan of the same pictures reuses it."""
     plan=job['plan'];assets=job['assets'];slots=plan['fibo_picture_slots'];selected=[assets['pictures'][str(i)] for i in slots]
-    sheet=plan['source_kind']=='human' and plan['target_kind']=='animal';override=str(job['options'].get('fibo_instruction') or '').strip()
-    # Character Swap replaces Picture 1 with the result, so it gets one front-view figure instead of a sheet.
-    single=sheet and job['request']['mode']=='swap'
-    if sheet:
+    figure=plan['source_kind']=='human' and plan['target_kind']=='animal';override=str(job['options'].get('fibo_instruction') or '').strip()
+    if figure:
         described={str(x.get('slot')):x.get('description','') for x in plan.get('picture_roles',[])}
-        default=character_sheet_instruction(len(selected),'' if single else described.get(str(slots[0]),''),single)
+        default=character_figure_instruction(len(selected),described.get(str(slots[0]),''))
     else:default=plan['fibo_instruction']
-    h=hashlib.sha256(f"v2|{('figure' if single else 'sheet') if sheet else 'frame'}|{override or ('' if sheet else default)}".encode())
+    h=hashlib.sha256(f"v3|{'figure' if figure else 'frame'}|{override or ('' if figure else default)}".encode())
     for p in selected:file_digest(INPUT/p,h)
-    if not sheet:
-        h.update(f"|{job['request']['video']['start_seconds']}|".encode());file_digest(INPUT/assets['video'],h)
-    return {'sheet':sheet,'single':single,'selected':selected,'instruction':override or default,'default_instruction':default,'key':h.hexdigest()[:32]}
+    h.update(f"|{job['request']['video']['start_seconds']}|".encode());file_digest(INPUT/assets['video'],h)
+    return {'figure':figure,'selected':selected,'instruction':override or default,'default_instruction':default,'key':h.hexdigest()[:32]}
 
 def fibo_prepare(job,runner,regenerate=False):
     """The FIBO reference for a job, from the cache when the same pictures (and instruction) were prepared before.
@@ -466,10 +464,10 @@ def fibo_prepare(job,runner,regenerate=False):
     cached=FIBO_CACHE/f"{req['key']}.png"
     if regenerate or not cached.is_file():
         seed=int(time.time())%2**31 if regenerate else int(job['options'].get('seed',42))
-        if req['sheet']:graph=fibo_graph(req['selected'][0],req['selected'][1:],req['instruction'],seed)
-        else:
-            frame=inp/'fibo_source.png';run(['ffmpeg','-v','error','-ss',str(job['request']['video']['start_seconds']),'-i',str(INPUT/job['assets']['video']),'-frames:v','1','-threads','1','-y',str(frame)])
-            graph=fibo_graph(str(frame.relative_to(INPUT)),req['selected'],req['instruction'],seed)
+        frame=inp/'fibo_source.png';run(['ffmpeg','-v','error','-ss',str(job['request']['video']['start_seconds']),'-i',str(INPUT/job['assets']['video']),'-frames:v','1','-threads','1','-y',str(frame)])
+        frame=str(frame.relative_to(INPUT))
+        if req['figure']:graph=fibo_graph(req['selected'][0],req['selected'][1:]+[frame],req['instruction'],seed)
+        else:graph=fibo_graph(frame,req['selected'],req['instruction'],seed)
         made=image_from_output(execute_graph(runner,graph,'fibo_edit'),inp/'fibo_new.png');shutil.move(made,cached)
     prepared=inp/'fibo_prepared.png';shutil.copyfile(cached,prepared);shutil.copyfile(cached,job_path(job['id'])/'fibo_preview.png')
     # During generation `job` is the live record; on the approval screen it was read before the long FIBO run.
@@ -484,7 +482,7 @@ def fibo_state(job):
         shutil.copyfile(FIBO_CACHE/f"{req['key']}.png",job_path(job['id'])/'fibo_preview.png')
         save(job,fibo_preview_url=f"/api/backend/jobs/{job['id']}/files/fibo_preview.png?v={req['key'][:8]}",fibo_key=req['key'])
     job=load(job['id'])
-    return {'enabled':True,'sheet':req['sheet'] and not req['single'],'instruction':req['instruction'],'default_instruction':req['default_instruction'],'ready':cached,'preview_url':job.get('fibo_preview_url') if cached else None}
+    return {'enabled':True,'figure':req['figure'],'instruction':req['instruction'],'default_instruction':req['default_instruction'],'ready':cached,'preview_url':job.get('fibo_preview_url') if cached else None}
 
 def upscale_method(options):
     """Sharpness above 720p: h3 | nvidia | none (older jobs only carry latent_upscale)."""
@@ -534,8 +532,9 @@ def shot_preview(job):
 def generate(job):
     r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'henge'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
     if r['mode']=='headswap':refs=[str(head_reference(INPUT/refs[0],inp/'head_reference.png').relative_to(INPUT))]
-    # Character Swap with an animal: the FIBO humanoid figure (plain gray background) becomes Picture 1 itself.
-    swap_figure=plan['use_fibo'] and fibo_request(job)['single']
+    # Character Swap with an animal: the FIBO humanoid figure (plain gray background) becomes Picture 1 itself, since
+    # the Character Swap prompt and LoRA take a single reference.
+    swap_figure=r['mode']=='swap' and plan['use_fibo'] and fibo_request(job)['figure']
     if swap_figure:refs[0]=str(fibo_prepare(job,job).relative_to(INPUT))
     if r['mode'] in ('swap','motion') and options.get('prepare_references',True):
         # A person/outfit/object picture contributes only its subject: its backdrop must not become the scene.
@@ -580,8 +579,8 @@ def generate(job):
                     s['anchors']=s['anchors']+[{**near,'time_seconds':round(t0,3)}]
     prompt=plan['prompt'];fibo_ref=None
     if plan['use_fibo'] and not swap_figure:
-        sheet=fibo_request(job)['sheet'];fibo_ref=fibo_prepare(job,job);refs.append(str(fibo_ref.relative_to(INPUT)))
-        if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> is a character sheet (front and back views) of that character in humanoid form; use it for body shape and appearance only, it does not supply motion or a background." if sheet else f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
+        figure=fibo_request(job)['figure'];fibo_ref=fibo_prepare(job,job);refs.append(str(fibo_ref.relative_to(INPUT)))
+        if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> shows that character in humanoid form, in the starting pose of the guide; use it for body shape, limb proportions and appearance only, it does not supply motion or a background." if figure else f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
     pieces=[];previous=None;save(job,shot_urls=[])
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
