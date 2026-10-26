@@ -17,6 +17,7 @@ def scene(swap=False,n=6,h=64,w=96):
 def subject(sid,**extra):return {'id':sid,'label':sid,'anchors':[],**extra}
 
 class FollowTest(unittest.TestCase):
+    @unittest.skipUnless(follow.LOOK_MATCHING,'recognition by look is off')
     def test_marks_then_recognition_after_people_swap_places(self):
         images,masks=scene()
         a={'x':.25,'y':.5,'time_seconds':0,'frame_width':96,'frame_height':64};b={**a,'x':.75}

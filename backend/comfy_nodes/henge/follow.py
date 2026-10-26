@@ -56,6 +56,12 @@ def points(masks: torch.Tensor) -> list:
     return out
 
 
+# Recognition by colour histogram was measured on a real cut (car clip): the man matched the woman's look 0.81 against
+# his own 0.49, a confident wrong answer. Off until a real re-identification feature replaces it; a person seen only
+# after a cut is left unmarked (and reported) rather than given someone else's colour.
+LOOK_MATCHING = False
+
+
 def choose(subjects: list, masks: torch.Tensor, images: torch.Tensor, segment_start: float, min_look: float = .25, margin: float = .08):
     """Assign SAM tracks (masks: N, tracks, H, W) to subjects. Returns (chosen [(track, subject, how)], warnings)."""
     n, tracks, h, w = masks.shape
@@ -94,7 +100,7 @@ def choose(subjects: list, masks: torch.Tensor, images: torch.Tensor, segment_st
         pending.append(s)
     # Recognise the rest by look, best matches first, so two people never claim the same track.
     options = []
-    for s in pending:
+    for s in pending if LOOK_MATCHING else []:
         if not s.get('signature'):
             warnings.append(f"{s['label']}: not marked yet and never seen before; left unmarked in this shot"); continue
         for t in range(tracks):
@@ -114,8 +120,8 @@ def choose(subjects: list, masks: torch.Tensor, images: torch.Tensor, segment_st
             continue
         used.add(t); done.add(s['id']); chosen.append((t, s, 'look'))
     for s in pending:
-        if s.get('signature') and s['id'] not in done:
-            warnings.append(f"{s['label']}: could not tell who it is after the camera cut; left unmarked in this shot")
+        if s['id'] not in done and (s.get('signature') or not LOOK_MATCHING):
+            warnings.append(f"{s['label']}: not marked in this shot (it starts after a camera cut); left unmarked. Mark them once in this shot to colour them.")
     return chosen, warnings
 
 

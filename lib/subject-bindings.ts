@@ -1,8 +1,10 @@
+// Green and purple first (the BFS Colored Mark pair): red, orange and yellow sit near skin tones and leak into the
+// result (a red-marked man came out with red skin).
 export const SUBJECT_COLORS = [
-  {name: 'red', hex: '#DC463C'}, {name: 'blue', hex: '#2D7DE1'},
-  {name: 'green', hex: '#32B45A'}, {name: 'yellow', hex: '#EBCD23'},
-  {name: 'magenta', hex: '#CD37B4'}, {name: 'cyan', hex: '#1EC8CD'},
-  {name: 'orange', hex: '#F08223'}, {name: 'purple', hex: '#874BD2'},
+  {name: 'green', hex: '#32B45A'}, {name: 'purple', hex: '#874BD2'},
+  {name: 'cyan', hex: '#1EC8CD'}, {name: 'blue', hex: '#2D7DE1'},
+  {name: 'magenta', hex: '#CD37B4'}, {name: 'yellow', hex: '#EBCD23'},
+  {name: 'orange', hex: '#F08223'}, {name: 'red', hex: '#DC463C'},
 ] as const;
 export type GuideRepresentation = 'original' | '2d' | '3d' | 'mask';
 export type SubjectAnchor = {x: number; y: number; time_seconds: number; frame_width: number; frame_height: number};
