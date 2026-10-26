@@ -214,7 +214,7 @@ def fibo_available(info=None):
 
 def execute_serverless(job,graph,stage):
     (job_path(job['id'])/(stage+'.api.json')).write_text(json.dumps(graph,indent=2))
-    labels={'SamplerCustomAdvanced':'Sampling video','DaSiWaH3TiledUpscale':'Upscaling and refining with H3','DaSiWa_RTX_UpscalerRefiner':'Upscaling with NVIDIA RTX Video Super Resolution','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit','RemoveBackground':'Removing the reference background'}
+    labels={'SamplerCustomAdvanced':'Sampling video','HengeH3LatentUpscale':'Upscaling the latent (H3 upscaler)','HengeRTXUpscale':'Upscaling with NVIDIA RTX Video Super Resolution','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit','RemoveBackground':'Removing the reference background'}
     def on_status(rid,progress):
         if progress is None:save(job,prompt_id=rid,stage=stage,status='running',step=None,step_total=None,eta_seconds=None,seconds_per_step=None);return
         if progress.get('queued'):save(job,message='Waiting for a serverless worker (a cold start loads the models and can take minutes)');return
@@ -237,7 +237,7 @@ def execute_graph(job,graph,stage):
         sent=await asyncio.to_thread(FILES.upload_graph_inputs,graph)
         folder=job_path(job['id']);(folder/(stage+'.api.json')).write_text(json.dumps(sent,indent=2))
         client='henge-'+job['id'];pid=None;pace={}
-        labels={'SamplerCustomAdvanced':'Loading the video model into the GPU (the first run after a restart can take minutes)','DaSiWaH3TiledUpscale':'Upscaling and refining with H3','DaSiWa_RTX_UpscalerRefiner':'Upscaling with NVIDIA RTX Video Super Resolution','KSampler':'Preparing appearance image','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
+        labels={'SamplerCustomAdvanced':'Loading the video model into the GPU (the first run after a restart can take minutes)','HengeH3LatentUpscale':'Upscaling the latent (H3 upscaler)','HengeRTXUpscale':'Upscaling with NVIDIA RTX Video Super Resolution','KSampler':'Preparing appearance image','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(URL.replace('http://','ws://').replace('https://','wss://')+'/ws?clientId='+client,heartbeat=30) as ws:
                 async with session.post(URL+'/prompt',json={'prompt':sent,'client_id':client,'extra_data':{'henge_job':job['id'],'stage':stage}}) as res:
@@ -544,10 +544,10 @@ def generate(job):
         # nvidia: RTX Video Super Resolution on the frames). Both double exactly, so the output is 2x the render.
         w,h=size(short//2);W,H=w*2,h*2;upscale={'method':method,'steps':options.get('upscale_steps',1),'denoise':options.get('upscale_denoise',.15)}
         if method=='h3':
-            choices=comfy_choices(comfy_info(),'DaSiWaH3TiledUpscale','upscale_model')
+            choices=comfy_choices(comfy_info(),'HengeH3LatentUpscale','model_name')
             upscale['model']=next((m for m in H3_UPSCALERS if m in choices),None)
-            if not upscale['model']:raise ValueError('H3 upscale needs DaSiWa nodes and a latent upscaler in models/latent_upscale_models (h3_upscaler_lms_v0.1); choose NVIDIA or no upscale')
-        elif 'DaSiWa_RTX_UpscalerRefiner' not in comfy_info():raise ValueError('NVIDIA upscale needs the DaSiWa nodes with nvidia-vfx; choose H3 or no upscale')
+            if not upscale['model']:raise ValueError('H3 upscale needs a latent upscaler in models/latent_upscale_models (h3_upscaler_lms_v0.1); choose NVIDIA or no upscale')
+        elif 'HengeRTXUpscale' not in comfy_info():raise ValueError('NVIDIA upscale needs the nvidia-vfx package on the ComfyUI machine; choose H3 or no upscale')
     else:w,h=W,H
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];shots,context=plan_shots(job)
     # Sparse bindings cannot be silently attached to a different actor after a temporal cut.
@@ -653,8 +653,8 @@ def health():
     models={key:{**value,'available':unknown or value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed) and (not value.get('unet') or value['unet'] in unets) and mode_ready[key]} for key,value in MODELS.items()}
     turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
-    # Sharpness 2K/4K upscalers (DaSiWa nodes): the H3 one also needs a learned latent upscaler checkpoint.
-    upscalers={'h3':unknown or any(m in comfy_choices(info,'DaSiWaH3TiledUpscale','upscale_model') for m in H3_UPSCALERS),'nvidia':unknown or 'DaSiWa_RTX_UpscalerRefiner' in info}
+    # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
+    upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
     return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')

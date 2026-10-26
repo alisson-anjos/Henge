@@ -289,7 +289,7 @@
       "profiles": [
         "sharpness"
       ],
-      "note": "MiniMax H3 3D latent upscaler (LBH-123-AI base, MIT) fine-tuned on the LMS data, for the H3 2K/4K upscale (DaSiWa MiniMaxH3 Enhanced Upscale)."
+      "note": "MiniMax H3 3D latent upscaler (LBH-123-AI base, MIT) fine-tuned on the LMS data, for the Sharpness H3 2K/4K upscale."
     }
   ]
 }

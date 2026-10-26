@@ -121,11 +121,14 @@ class WorkflowContracts(unittest.TestCase):
   self.assertEqual(g['3']['inputs']['lora_name'],'henge/head_swap_v1_0_r32.safetensors');self.assertEqual(g['13']['inputs']['scheduler'],'beta');self.assertFalse(g['9']['inputs']['guide_context'])
  def test_sharpness_upscale_methods(self):
   args=('v.mp4',[],'Enhance.',512,288,107,107,'sharpness',1,8,'original',[],'human',0)
-  g=h3_graph(*args,upscale={'method':'h3','model':'h3_upscaler_lms_v0.1.safetensors','steps':2,'denoise':.3})
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/lms_v1_fro_dyn95.safetensors');self.assertEqual(g['30']['class_type'],'DaSiWaH3TiledUpscale')
-  self.assertEqual((g['30']['inputs']['latent'],g['30']['inputs']['conditioning'],g['15']['inputs']['av_latent']),(['14',0],['9',0],['30',0]));self.assertEqual(g['16']['class_type'],'VAEDecodeTiled')
+  g=h3_graph(*args,upscale={'method':'h3','model':'h3_upscaler_lms_v0.1.safetensors','steps':1,'denoise':.15})
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/lms_v1_fro_dyn95.safetensors');self.assertEqual(g['30']['class_type'],'HengeH3LatentUpscale')
+  self.assertEqual((g['30']['inputs']['width'],g['32']['inputs']['width'],g['16']['inputs']['samples']),(1024,1024,['38',0]));self.assertNotIn('41',g)
+  self.assertEqual(g['34']['inputs']['denoise'],.15);self.assertEqual(g['16']['class_type'],'VAEDecodeTiled')
+  big=h3_graph('v.mp4',[],'Enhance.',1088,1920,107,107,'sharpness',1,8,'original',[],'human',0,upscale={'method':'h3','model':'m'})
+  self.assertEqual(big['41']['class_type'],'HengeH3TiledDiffusion');self.assertEqual(big['36']['inputs']['model'],['41',0])
   n=h3_graph(*args,upscale={'method':'nvidia'})
-  self.assertEqual(n['30']['class_type'],'DaSiWa_RTX_UpscalerRefiner');self.assertEqual((n['30']['inputs']['width'],n['30']['inputs']['height']),(1024,576));self.assertEqual(n['17']['inputs']['images'],['30',0])
+  self.assertEqual(n['30']['class_type'],'HengeRTXUpscale');self.assertEqual((n['30']['inputs']['width'],n['30']['inputs']['height']),(1024,576));self.assertEqual(n['17']['inputs']['images'],['30',0])
   self.assertNotIn('30',h3_graph(*args))
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'sharpness','quality':'2160p'},{'profile':'sharpness','upscale_method':'ltx'},[])
  def test_first_frame_propagate(self):

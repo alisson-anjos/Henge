@@ -9,7 +9,7 @@ An open studio for **motion transfer** and **video swaps**, designed around Mini
 | Character Swap | Replace the person in a video with a character picture | Character Swap v1.1 LoRA + turbo; v1.1 one-line `body_swap:` prompt; reference background removed (BiRefNet, #808080, 0.5 MP) |
 | Motion transfer | Drive a new character with the guide's performance | Motion 10500 or TARA 4500 LoRA + training adapter V2; Guide Latents or TARA |
 | Head Swap | Replace only the head with a face picture | Head Swap v1.0 r32 + turbo; published `head_swap:` template |
-| Sharpness | Sharpen an upload or one of your generations, optionally up to 2K/4K | MiniMax H3 + Little More Sharpness LoRA; for 2K/4K it sharpens at half size and doubles it with DaSiWa's MiniMaxH3 Enhanced Upscale (learned latent upscaler + short tiled H3 refine) or NVIDIA RTX Video Super Resolution; source video only |
+| Sharpness | Sharpen an upload or one of your generations, optionally up to 2K/4K | MiniMax H3 + Little More Sharpness LoRA; for 2K/4K it sharpens at half size and doubles it with the H3 latent upscaler + a short H3 refine (tiled at 4K) or NVIDIA RTX Video Super Resolution; source video only |
 
 Options: turbo LoRA (DMD 8-step, DMAD 4-step, lightx2v 8/4-step or none), base model (MiniMax H3 ref2va or
 FastH3 OmniRef 8-step), CFG, Comfy Kitchen attention, auto-approve, and segmented processing with
@@ -128,3 +128,11 @@ Model-download helpers and exported API graphs are in `scripts/` and `workflows/
 python -m unittest discover -s backend/tests -q
 npm run build
 ```
+
+## Credits
+
+The Sharpness 2K/4K H3 upscaler is copied, with small changes, from
+[bbaudio-2025/Comfyui-MMH3-UltimateUpscale](https://github.com/bbaudio-2025/Comfyui-MMH3-UltimateUpscale) (MIT):
+the [LBH-123-AI](https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler) 3D latent upscaler and per-step
+tiled diffusion for H3. We found the approach in
+[ComfyUI-DaSiWa-Nodes](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes). Details in THIRD_PARTY_NOTICES.md.

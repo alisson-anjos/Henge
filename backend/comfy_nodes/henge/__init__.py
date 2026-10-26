@@ -284,3 +284,5 @@ async def validate_henge_graph(request):
     body=await request.json()
     result=await execution.validate_prompt(uuid.uuid4().hex,body['prompt'],None)
     return web.json_response({'valid':result[0],'error':result[1],'outputs':result[2],'node_errors':result[3]})
+from .upscale import NODE_CLASS_MAPPINGS as UPSCALE_NODES
+NODE_CLASS_MAPPINGS.update(UPSCALE_NODES)

@@ -38,9 +38,9 @@ BASES={
  'h3':{'label':'MiniMax H3 ref2va','unet':'minimax_h3_ref2va_pruned_int8_convrot.safetensors'},
  'omniref':{'label':'FastH3 OmniRef 8-step (FastVideo)','unet':'fasth3_omniref_8step_pruned_int8_convrot.safetensors'},
 }
-# Sharpness above 720p renders at half the output size, then doubles it with one of two upscalers:
-# h3: DaSiWa MiniMaxH3 Enhanced Upscale (learned H3 latent upscaler, then a short tiled refine by the same H3 model);
-# nvidia: DaSiWa RTX Upscaler & Refiner (NVIDIA RTX Video Super Resolution on the decoded frames, no diffusion).
+# Sharpness above 720p renders at half the output size, then doubles it with one of two upscalers (henge/upscale.py):
+# h3: learned H3 latent upscaler, then a short partial-denoise refine by the same H3 model (tiled above ~2 MP);
+# nvidia: NVIDIA RTX Video Super Resolution on the decoded frames (no diffusion, no invented detail).
 UPSCALE_METHODS=('h3','nvidia','none')
 # Learned H3 latent upscalers, preferred first (LBH-123-AI 3D upscaler, MIT; ours is fine-tuned on the LMS data).
 H3_UPSCALERS=('h3_upscaler_lms_v0.1.safetensors','minimax_h3_latent_upscaler_3d_bf16.safetensors')
@@ -115,14 +115,26 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         # Output at twice the rendered size (`width`/`height` are the render size); see UPSCALE_METHODS.
         W,H=width*2,height*2
         if upscale['method']=='h3':
-            g['30']=node('DaSiWaH3TiledUpscale',model=g['10']['inputs']['model'],conditioning=['9',0],latent=['14',0],scale=2.,upscale_model=upscale['model'],
-                         steps=int(upscale.get('steps',1)),denoise=float(upscale.get('denoise',.15)),seed=seed+1000,cfg=1.,sampler_name='euler',scheduler='simple',spike_guard=True)
-            g['15']['inputs']['av_latent']=['30',0]
+            # Learned H3 latent upscale to the output size, then a short partial-denoise pass guided by the source at
+            # that size (`video` holds the output-size shot). Above ~2 MP the refine model samples overlapping tiles.
+            g['30']=node('HengeH3LatentUpscale',latent=['15',0],model_name=upscale['model'],width=W,height=H,precision='fp16')
+            g['31']=node('HengeLoadShot',video=video,pictures=json.dumps(refs),width=W,height=H,length=length)
+            g['32']=node('HengeH3Conditioning',**{**g['9']['inputs'],'guide':['31',0],'references':['31',1],'width':W,'height':H,'reference_scale':max(.25,min(1.,width/W))})
+            if context_video:
+                # Continuity frames come from the previous upscaled result: feed the refine at the output size.
+                g['40']=node('HengeLoadShot',video=context_video,pictures='[]',width=W,height=H,length=context_count);g['32']['inputs']['context_images']=['40',0]
+            refine_model=g['10']['inputs']['model']
+            if W*H>2_100_000:g['41']=node('HengeH3TiledDiffusion',model=refine_model,tile_width=1024,tile_height=1024,tile_overlap=256,method='gaussian');refine_model=['41',0]
+            g['33']=node('LTXVConcatAVLatent',video_latent=['30',0],audio_latent=['15',1])
+            g['34']=node('BasicScheduler',model=refine_model,scheduler=g['13']['inputs']['scheduler'],steps=int(upscale.get('steps',1)),denoise=float(upscale.get('denoise',.15)))
+            g['35']=node('RandomNoise',noise_seed=seed+1000)
+            g['36']=node('CFGGuider',model=refine_model,positive=['32',0],negative=['32',0],cfg=1.)
+            g['37']=node('SamplerCustomAdvanced',noise=['35',0],guider=['36',0],sampler=['12',0],sigmas=['34',0],latent_image=['33',0])
+            g['38']=node('LTXVSeparateAVLatent',av_latent=['37',0])
             # 2K/4K frames: decode in tiles so the VAE fits beside the model.
-            g['16']=node('VAEDecodeTiled',samples=['15',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
+            g['16']=node('VAEDecodeTiled',samples=['38',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
         elif upscale['method']=='nvidia':
-            g['30']=node('DaSiWa_RTX_UpscalerRefiner',images=['16',0],denoise=False,denoise_quality='Ultra',deblur=False,deblur_quality='Ultra',upscale='VSR',upscale_quality='Ultra',
-                         resize_type='Manual',scale=2.,megapixels=2.,width=W,height=H,divisible_by='8',ratio_preset='16:9',resize_method='Center Crop (Fill)',device_id=0,chunking=True)
+            g['30']=node('HengeRTXUpscale',images=['16',0],width=W,height=H,quality='ULTRA')
             g['17']['inputs']['images']=['30',0]
         else:raise ValueError('Unknown upscale method')
     if causal:

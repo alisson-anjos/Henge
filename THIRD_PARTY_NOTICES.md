@@ -33,4 +33,13 @@ Bricolage Grotesque, Geist and Geist Mono are bundled locally from Google Fonts 
 
 The Studio + History visual reference and its supplied artwork were provided by the project owner in the Claude Design export.
 
-- [ComfyUI-DaSiWa-Nodes](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes) (GPLv3; latent-upscaler architecture MIT): installed as a separate ComfyUI custom-node pack in the Docker image for the Sharpness 2K/4K upscalers. Not bundled in this repository.
+- Sharpness 2K/4K upscalers (`backend/comfy_nodes/henge/upscale.py`): copied with small changes from
+  [bbaudio-2025/Comfyui-MMH3-UltimateUpscale](https://github.com/bbaudio-2025/Comfyui-MMH3-UltimateUpscale)
+  (MIT, Copyright (c) 2026 bbaudio-2025): `nodes/h3_latent_upscaler.py` (the MiniMax H3 3D latent upscaler from
+  [LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler](https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler), MIT)
+  and `nodes/tiled_diffusion.py` (per-step tiled diffusion with global window positions, a port of
+  [shiimizu/ComfyUI-TiledDiffusion](https://github.com/shiimizu/ComfyUI-TiledDiffusion)). Changes: log prefixes,
+  no `io.ComfyNode` wrappers, Henge node classes. The approach was found through
+  [darksidewalker/ComfyUI-DaSiWa-Nodes](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes) (GPLv3), whose code is
+  not used. NVIDIA RTX Video Super Resolution runs through NVIDIA's `nvidia-vfx` package (NVIDIA proprietary
+  license), installed in the Docker image.
