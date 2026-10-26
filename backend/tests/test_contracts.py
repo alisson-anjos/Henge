@@ -139,6 +139,11 @@ class WorkflowContracts(unittest.TestCase):
   from workflows import find_people_graph,subject_looks_graph
   g=find_people_graph('henge/x/frame.png','animal');self.assertEqual(g['2']['inputs']['kind'],'animal');self.assertEqual(g['2']['class_type'],'HengeFindPeople')
   g=subject_looks_graph([('henge/x/a.png','id1',.3,.5)]);self.assertEqual(g['2']['class_type'],'HengeSubjectLook')
+ def test_tara_refuses_color_marks(self):
+  a={'x':.5,'y':.5,'time_seconds':0,'frame_width':64,'frame_height':64}
+  b=[{'color':'green','picture_slots':[1],'anchors':[a]}]
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','subject_guidance':{'representation':'2d','bindings':b}},{'conditioning_mode':'tara'},[1])
+  validate_request({**self.request(),'mode':'motion','subject_guidance':{'representation':'mask','bindings':b}},{'conditioning_mode':'tara'},[1])
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))

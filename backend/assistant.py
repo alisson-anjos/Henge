@@ -32,6 +32,7 @@ Guide representation (how marked people reach the model):
 - 2d: each marked person is tracked and tinted with its color; mark_opacity 0.35 keeps the face and expression visible, 1 is a solid color. Best for keeping several people apart (swap, motion).
 - 3d: each person becomes a colored 3D body with face. People only.
 - mask: only the area around the marked people is generated again; the rest keeps the source pixels. Works in swap, motion and headswap.
+TARA (method) was trained without color marks: with TARA use only original or mask, never 2d/3d.
 
 How to work:
 1. Read the studio state. If the guide video or the pictures are missing, ask the user to attach them (you cannot upload files).
