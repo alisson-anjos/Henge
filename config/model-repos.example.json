@@ -241,7 +241,7 @@
     },
     {
       "id": "moge",
-      "url": null,
+      "url": "https://huggingface.co/Comfy-Org/MoGe/resolve/main/geometry_estimation/moge_2_vitl_normal_fp16.safetensors",
       "destination": "geometry_estimation/moge_2_vitl_normal_fp16.safetensors",
       "profiles": [
         "sam3d"
