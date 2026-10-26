@@ -356,7 +356,13 @@ export default function Studio() {
   // Improve at Generate: in Improve mode, and in Auto Prompt mode until the AI has written the final prompt.
   useEffect(() => {panelControls.current?.setEnhancePrompt(promptMode === 'improve' || (promptMode === 'auto' && autoSource === null));}, [promptMode, autoSource]);
   useEffect(() => {setReadLang(lang === 'en' ? 'pt' : lang);}, [lang]);
-  const assistantController: StudioController = {state: studioState, run: runStudioCall};
+  const assistantController: StudioController = {state: studioState, run: runStudioCall, ingest: async files => {
+    const images=files.filter(file => file.type.startsWith('image/')), videos=files.filter(file => file.type.startsWith('video/'));
+    if (videos.length) addVideo([videos[0]], true);
+    if (images.length) addPictures(images);
+    await settle();
+    return {text: `${videos.length ? `${videos[0].name} loaded as guide. ` : ''}${images.length ? `${images.length} reference image(s) loaded in attachment order.` : ''}`};
+  }};
   const contextWindow = selectedDuration > 15;
   const shotFrames = Math.max(22, Math.floor((Math.round(shotSeconds * 24) - 5) / 17) * 17 + 5);
   const estimatedShots = selectedDuration ? Math.ceil(Math.round(selectedDuration * timelineFps) / shotFrames) : 0;
@@ -380,7 +386,7 @@ export default function Studio() {
     setPrompt(prompt.slice(0, from) + tag + ' ' + prompt.slice(end));
     requestAnimationFrame(() => { area?.focus(); area?.setSelectionRange(from + tag.length + 1, from + tag.length + 1); });
   }
-  function addPictures(files: FileList | null) {
+  function addPictures(files: FileList | File[] | null) {
     if (!files) return;
     const slots = [...new Set([...expectedSlots, ...Array.from({length: MAX_PICTURES}, (_, i) => i + 1)])].filter(i => i <= maxPictures);
     const available = slots.filter(i => !pictures.some(p => p.slot === i));

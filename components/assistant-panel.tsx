@@ -5,7 +5,7 @@ import type {Language} from '../lib/design-copy';
 /** One studio action the assistant asked for, run here so the user sees the screen change. */
 export type StudioCall = {id: string; name: string; input: Record<string, unknown>};
 export type StudioResult = {text: string; images?: string[]; is_error?: boolean};
-export type StudioController = {state: () => Record<string, unknown>; run: (call: StudioCall) => Promise<StudioResult>};
+export type StudioController = {state: () => Record<string, unknown>; run: (call: StudioCall) => Promise<StudioResult>; ingest: (files: File[]) => Promise<StudioResult>};
 
 type Result = {id: string; name: string; text: string; images?: string[]; is_error?: boolean};
 type Message =
@@ -14,6 +14,7 @@ type Message =
   | {role: 'tool'; results: Result[]};
 type Config = {provider: 'anthropic' | 'openai'; model: string; base_url: string; effort: string; has_key: boolean; key_hint: string};
 type JobMention = {id: string; project?: string; mode?: string; status: string; created: number};
+type PendingAttachment = {id: string; name: string; kind: 'image' | 'video'; images: string[]; detail: string};
 
 const PRESETS: Record<string, {provider: Config['provider']; model: string; base_url: string}> = {
   claude: {provider: 'anthropic', model: 'claude-opus-5-5', base_url: ''},
@@ -51,6 +52,9 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [recentJobs, setRecentJobs] = useState<JobMention[]>([]);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const attachmentInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const stop = useRef(false);
@@ -114,10 +118,41 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
     }
   }
 
+  const canvasFrame = (source: CanvasImageSource, width: number, height: number) => {
+    const scale = Math.min(1, 1280 / Math.max(width, height)), canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale)); canvas.height = Math.max(1, Math.round(height * scale));
+    canvas.getContext('2d')!.drawImage(source, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', .82);
+  };
+  async function prepareAttachment(file: File): Promise<PendingAttachment> {
+    const id = crypto.randomUUID();
+    if (file.type.startsWith('image/')) {
+      const bitmap = await createImageBitmap(file);
+      try {return {id, name: file.name, kind: 'image', images: [canvasFrame(bitmap, bitmap.width, bitmap.height)], detail: `${bitmap.width}x${bitmap.height}`};}
+      finally {bitmap.close();}
+    }
+    if (!file.type.startsWith('video/')) throw Error(tr('Use an image or video file.', 'Use um arquivo de imagem ou vídeo.', 'Usa un archivo de imagen o vídeo.'));
+    const url = URL.createObjectURL(file), video = document.createElement('video'); video.preload = 'metadata'; video.muted = true; video.src = url;
+    try {
+      await new Promise<void>((resolve, reject) => {video.onloadedmetadata = () => resolve(); video.onerror = () => reject(Error(tr('Could not read this video.', 'Não foi possível ler este vídeo.', 'No se pudo leer este vídeo.')));});
+      const duration = video.duration, times = [.08, .35, .65, .92].map(f => Math.min(Math.max(0, duration * f), Math.max(0, duration - .05))), images: string[] = [];
+      for (const time of times) {video.currentTime = time; await new Promise<void>((resolve, reject) => {video.onseeked = () => resolve(); video.onerror = () => reject(Error('Video seek failed'));}); images.push(canvasFrame(video, video.videoWidth, video.videoHeight));}
+      return {id, name: file.name, kind: 'video', images, detail: `${duration.toFixed(1)}s · ${video.videoWidth}x${video.videoHeight} · ${images.length} frames`};
+    } finally {URL.revokeObjectURL(url); video.removeAttribute('src'); video.load();}
+  }
+  async function addAttachments(files: FileList | File[]) {
+    const incoming = Array.from(files).slice(0, Math.max(0, 6 - attachments.length)); if (!incoming.length) return;
+    setBusy(tr('Preparing attachments…', 'Preparando anexos…', 'Preparando adjuntos…')); setError('');
+    try {const prepared = await Promise.all(incoming.map(prepareAttachment)); await controller.ingest(incoming); setAttachments(current => [...current, ...prepared].slice(0, 6));}
+    catch (e) {setError(e instanceof Error ? e.message : String(e));}
+    finally {setBusy(''); if (attachmentInput.current) attachmentInput.current.value = '';}
+  }
+
   async function send() {
-    const text = input.trim(); if (!text || busy) return;
-    setInput(''); setError(''); stop.current = false;
-    let history: Message[] = [...messages, {role: 'user', text: `${text}\n\n[studio state] ${JSON.stringify(controller.state())}`}];
+    const text = input.trim(); if ((!text && !attachments.length) || busy) return;
+    const attached = attachments; setInput(''); setAttachments([]); setError(''); stop.current = false;
+    const attachmentNote = attached.length ? `\n\n[attachments already loaded into the studio in this order] ${attached.map((a, i) => `${i + 1}. ${a.kind}: ${a.name} (${a.detail})`).join('; ')}` : '';
+    let history: Message[] = [...messages, {role: 'user', text: `${text || tr('Look at these attachments.', 'Veja estes anexos.', 'Mira estos adjuntos.')}${attachmentNote}\n\n[studio state] ${JSON.stringify(controller.state())}`, images: attached.flatMap(a => a.images)}];
     setMessages(history); persist(history);
     try {
       for (let round = 0; round < 40 && !stop.current; round++) {
@@ -148,7 +183,8 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   const insertJob = (id: string) => setInput(value => value.replace(/#[a-f0-9]*$/i, `#${id.slice(0, 8)} `));
   return <>
     <button type="button" className="assistant-fab" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? '×' : '✦'}<span>{tr('Assistant', 'Assistente', 'Asistente')}</span></button>
-    {open && <aside className={'assistant-panel surface' + (expanded ? ' expanded' : '')} aria-label={tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')}>
+    {open && <aside className={'assistant-panel surface' + (expanded ? ' expanded' : '') + (dragging ? ' dragging' : '')} aria-label={tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')} onDragEnter={e => {e.preventDefault(); setDragging(true);}} onDragOver={e => e.preventDefault()} onDragLeave={e => {if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);}} onDrop={e => {e.preventDefault(); setDragging(false); void addAttachments(e.dataTransfer.files);}}>
+      {dragging && <div className="assistant-drop-overlay">{tr('Drop images or videos here', 'Solte imagens ou vídeos aqui', 'Suelta imágenes o vídeos aquí')}</div>}
       <header><strong>{tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')}</strong>
         <small className="muted mono">{jobId ? `#${jobId.slice(0, 8)}${config ? ` · ${config.model}` : ''}` : config ? `${config.model}` : ''}</small>
         <span><button type="button" className="quiet-button" onClick={newChat} disabled={!!busy}>{tr('New chat', 'Nova conversa', 'Nueva conversación')}</button>
@@ -175,8 +211,11 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
       </div>
       <form className="assistant-input" onSubmit={e => {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}>
         {mentionJobs.length > 0 && <div className="assistant-job-mentions" role="listbox" aria-label={tr('Recent generations', 'Gerações recentes', 'Generaciones recientes')}>{mentionJobs.map(j => <button key={j.id} type="button" role="option" onClick={() => insertJob(j.id)}><span className="mono">#{j.id.slice(0, 8)}</span><strong>{j.project || 'Henge'}</strong><small>{j.mode || ''} · {j.status}</small></button>)}</div>}
+        {attachments.length > 0 && <div className="assistant-attachments">{attachments.map(a => <div key={a.id}>{a.images[0] && <img src={a.images[0]} alt=""/>}<span><strong>{a.name}</strong><small>{a.detail}</small></span><button type="button" aria-label={tr('Remove attachment', 'Remover anexo', 'Quitar adjunto')} onClick={() => setAttachments(current => current.filter(x => x.id !== a.id))}>×</button></div>)}</div>}
+        <input ref={attachmentInput} type="file" hidden multiple accept="image/*,video/*" onChange={e => {if (e.target.files) void addAttachments(e.target.files);}}/>
+        <button type="button" className="assistant-attach quiet-button" aria-label={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} title={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} disabled={!!busy || attachments.length >= 6} onClick={() => attachmentInput.current?.click()}>＋</button>
         <textarea value={input} rows={2} placeholder={tr('What do you want to make?', 'O que você quer fazer?', '¿Qué quieres hacer?')} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Escape' && mention) {e.preventDefault(); setInput(input.slice(0, mention.index));} else if (e.key === 'Enter' && !e.shiftKey) {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}}/>
-        {busy ? <button type="button" className="quiet-button" onClick={() => {stop.current = true;}}>{tr('Stop', 'Parar', 'Detener')}</button> : <button type="submit" className="primary" disabled={!input.trim()}>{tr('Send', 'Enviar', 'Enviar')}</button>}
+        {busy ? <button type="button" className="quiet-button" onClick={() => {stop.current = true;}}>{tr('Stop', 'Parar', 'Detener')}</button> : <button type="submit" className="primary" disabled={!input.trim() && !attachments.length}>{tr('Send', 'Enviar', 'Enviar')}</button>}
       </form>
     </aside>}
   </>;
