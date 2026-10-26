@@ -37,6 +37,9 @@ class WorkflowContracts(unittest.TestCase):
  def test_camera_cuts_reset_context_without_dropping_frames(self):
   shots=split_on_cuts(720,107,22,[95,250,400]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),720)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,95,250,400]);self.assertTrue(all(s['overlap']==0 for s in shots if s['reset_context']))
+ def test_cuts_do_not_shorten_the_requested_shot_length(self):
+  shots=split_on_cuts(1190,345,22,list(range(72,1190,72)));self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),1190)
+  self.assertEqual(len(shots),4);self.assertTrue(all(s['frames']<=345 and s['reset_context'] and s['overlap']==0 for s in shots))
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))

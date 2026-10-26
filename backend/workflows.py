@@ -148,16 +148,26 @@ def plan_graph(image,instructions,max_tokens=2500,clip_name='qwen3.5_9b_w4a8_gpt
 
 
 def split_on_cuts(total,per_shot,context,cuts,min_gap=24):
-    # Scene detection fires on flashes, fades and fast pans; a cut closer than min_gap frames to the
-    # previous boundary (or the end) would only buy a near-empty shot rendered at full length.
-    boundaries=[0]
+    # Shots stay as long as the requested length allows; a camera cut only chooses where one ends: the last cut
+    # within reach, so the next shot starts clean at the cut (no context). Cuts inside a shot are rendered straight
+    # through. With no cut in reach the shot is split mid-scene and the next one carries `context` frames.
+    # Scene detection fires on flashes, fades and fast pans; a cut closer than min_gap frames to a boundary (or the
+    # end) would only buy a near-empty shot.
+    marks=[]
     for c in sorted({int(c) for c in cuts}):
-        if c-boundaries[-1]>=min_gap and total-c>=min_gap:boundaries.append(c)
-    boundaries.append(total)
-    output=[]
-    for start,end in zip(boundaries,boundaries[1:]):
-        for i,shot in enumerate(split_frames(end-start,per_shot,context)):
-            output.append({**shot,'start':shot['start']+start,'reset_context':i==0})
+        if c-(marks[-1] if marks else 0)>=min_gap and total-c>=min_gap:marks.append(c)
+    output=[];start=0;overlap=0
+    while start<total:
+        if start+per_shot>=total:end=total
+        else:
+            reachable=[c for c in marks if start+overlap+min_gap<=c<=start+per_shot]
+            end=reachable[-1] if reachable else None
+        if end is None:
+            output.append({'start':start,'frames':per_shot,'overlap':overlap,'length':grid_frames(per_shot),'reset_context':overlap==0})
+            start+=per_shot-context;overlap=context
+        else:
+            output.append({'start':start,'frames':end-start,'overlap':overlap,'length':grid_frames(end-start),'reset_context':overlap==0})
+            start=end;overlap=0
     return output
 
 
