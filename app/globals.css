@@ -549,6 +549,7 @@ img{display:block;max-width:100%}
 .history-caption .job-status.running,.history-caption .job-status.awaiting_approval{color:#f0c35a}
 .saved-directions{margin-top:8px}.saved-directions>summary{cursor:pointer;padding:12px 0;font-weight:600}.saved-directions>summary small{font-weight:400;margin-left:6px}
 .likeness-warning{margin:6px 0;padding:9px 11px;border:1px solid #f0b42966;border-radius:8px;background:#f0b4290f;color:#f0c35a;font-size:12px}
+.fibo-plan-status{display:grid;gap:7px;margin:12px 0;padding:11px;border:1px solid var(--line);border-radius:9px;background:#111118}.fibo-plan-status strong{font-size:12px}.fibo-plan-status.used strong{color:var(--accent)}.fibo-plan-status small{color:var(--muted);line-height:1.5}.fibo-plan-status .fibo-preview{margin-top:4px;max-width:100%;max-height:420px;border-radius:7px}.generation-job>.fibo-preview{display:none}
 .backend-banner{position:sticky;top:0;z-index:70;display:flex;align-items:center;gap:10px;padding:9px 16px;background:#2a1f0c;border-bottom:1px solid #f0b42966;color:#f0c35a;font-size:13px}
 .backend-banner .setup-dot{width:8px;height:8px;border-radius:50%;background:#f0b429;flex-shrink:0}
 .generation-card{display:flex;flex-direction:column;padding:0;overflow:hidden}

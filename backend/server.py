@@ -1194,9 +1194,10 @@ JOB_VIDEOS={'marks':'marks_preview.mp4','mask':'mask_preview.mp4','guide':'guide
 def job_summary(job):
     plan=job.get('plan') or {}
     previews=[k for k,v in JOB_VIDEOS.items() if (job_path(job['id'])/v).is_file()]
+    fibo_preview=(job_path(job['id'])/'fibo_preview.png').is_file()
     return json.dumps({'id':job['id'],'reference':'#'+job['id'][:8],'mode':(job.get('request') or {}).get('mode'),'status':job['status'],'stage':job.get('stage'),'message':job.get('message'),'error':job.get('error'),
                        'shot':f"{job['segment']}/{job['total_segments']}" if job.get('segment') else None,'videos':previews,
-                       'plan':{'summary':plan.get('summary'),'representation':plan.get('representation'),'use_fibo':plan.get('use_fibo'),'warnings':plan.get('warnings'),'prompt':(plan.get('prompt') or '')[:2000]} if plan else None},ensure_ascii=False)
+                       'plan':{'summary':plan.get('summary'),'representation':plan.get('representation'),'fibo':{'setting':(job.get('options') or {}).get('fibo','auto'),'used':bool(plan.get('use_fibo')),'preview_available':fibo_preview,'reason':plan.get('preparation_reason') or None},'warnings':plan.get('warnings'),'prompt':(plan.get('prompt') or '')[:2000]} if plan else None},ensure_ascii=False)
 
 def job_frames(job,which,count):
     path=job_path(job['id'])/JOB_VIDEOS[which]
@@ -1229,6 +1230,10 @@ def run_job_tool(name,args):
         job=load(args['job_id']);images=job_frames(job,args['which'],args.get('frames'))
         note=' (marks at full opacity; the job uses its mark_opacity)' if args['which']=='marks' else ''
         return f"{len(images)} frames of the {args['which']} video, in order{note}.",images
+    if name=='view_job_image':
+        job=load(args['job_id']);path=job_path(job['id'])/'fibo_preview.png'
+        if args.get('which')!='fibo' or not path.is_file():raise ValueError('This job has no FIBO preview; its plan did not use FIBO or preparation has not finished')
+        return 'FIBO-prepared appearance and pose reference.',[assistant.jpeg_data_url(path)]
     try:
         if name=='set_job_mark_opacity':set_mark_opacity(args['job_id'],args['opacity']);return 'Mark opacity saved.',[]
         if name=='approve_job':approve(args['job_id']);return job_summary(load(args['job_id'])),[]

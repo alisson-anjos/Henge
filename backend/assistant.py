@@ -48,6 +48,7 @@ How to work:
 The studio state's selected_job is the generation selected on screen. When the user says "this generation", "essa geração" or an equivalent expression, use selected_job.id; do not ask them to copy its id.
 11. If the user says an active generation looks wrong or that you made a mistake, inspect its state and call confirm_cancel_job to ask whether they want to cancel it. Criticism is not permission to cancel: only call cancel_job when that approval result is true. If they decline, leave it running and continue the conversation.
 12. A completed generation can feed another mode: call use_generation_as_guide with its reference and the requested next mode, then configure that mode and ask before generating. Do not ask the user to download and upload a Henge result again.
+13. The option fibo='auto' does not mean FIBO was used. Never claim it was used from get_options. Check get_job: plan.fibo.used is the truth. When preview_available is true, call view_job_image before describing the prepared reference.
 
 Be brief. Always answer in the language of the user's latest message, even when it differs from the interface or earlier messages. Write approval questions in that same language. Never invent people, pictures or results you have not seen."""
 
@@ -112,6 +113,8 @@ JOB_TOOLS = [
     {'name': 'view_job_video', 'description': "See a few frames of a job video: 'marks' (2d color guide at full opacity), 'mask' (latent mask preview), 'guide' (prepared guide), 'result' or 'comparison'.",
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'which': {'type': 'string', 'enum': ['marks', 'mask', 'guide', 'result', 'comparison']}, 'frames': {'type': 'integer'}},
                       'required': ['job_id', 'which'], 'additionalProperties': False}},
+    {'name': 'view_job_image', 'description': "See a generated analysis image from a job. 'fibo' is the FIBO-prepared appearance/pose reference and exists only when the plan actually used FIBO.",
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'which': {'type': 'string', 'enum': ['fibo']}}, 'required': ['job_id', 'which'], 'additionalProperties': False}},
     {'name': 'set_job_mark_opacity', 'description': 'Change the 2d mark opacity of a job waiting for approval.',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'opacity': {'type': 'number'}}, 'required': ['job_id', 'opacity'], 'additionalProperties': False}},
     {'name': 'get_job_shots', 'description': 'How a job splits the video into shots: index, start and end (seconds in the source), and whether each starts after a camera cut (people may have moved or changed there).',
