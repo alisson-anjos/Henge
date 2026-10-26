@@ -132,3 +132,15 @@ def ffp_prompt(sentence,first_frame=None):
     text='vfx_edit: '+re.sub(r'^\s*(vfx_edit:)?\s*','',sentence.strip()).strip().strip('"').strip()
     if first_frame:text+=f' <Picture {first_frame}> is the edited first frame of the video: propagate its changes through the whole clip while keeping the original motion, timing and camera.'
     return text
+
+
+def character_sheet_instruction(count,description=''):
+    """FIBO instruction for a human guide driving an animal: redraw the animal (all of the given images show it) as an
+    upright humanoid on a character sheet with a plain background, so no scenery reaches the video model."""
+    images=', '.join(f'<image_{i}>' for i in range(1,count+1))
+    subject=f'the animal in {images}'+(f' ({description.strip().rstrip(".")})' if description.strip() else '')
+    return (f'Character sheet of {subject} redrawn as an anthropomorphic, upright bipedal character with a human body '
+            'structure: human-proportioned torso, arms with hands, and legs standing on two feet. Keep its exact animal '
+            'head and face, fur or skin colors, patterns, markings and every distinguishing feature. Show the full body '
+            'twice side by side, front view and back view, standing in a neutral relaxed pose, head to feet in frame. '
+            'Plain flat neutral gray background, no scenery, no floor, no props, no text, soft even studio lighting.')

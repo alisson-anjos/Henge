@@ -10,7 +10,7 @@ from PIL import Image,ImageDraw,ImageOps
 from workflows import MODELS,TURBOS,BASES,LTX_SHARPNESS_PROMPT,ltx_frames,ltx_sharpness_graph,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
-from edit_modes import MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
+from edit_modes import MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_sheet_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -84,7 +84,6 @@ def clamp_float(value,lo,hi,label):
 
 # Output short side. Sharpness above 720p renders a half-size LMS pass, then latent-upscales and refines at this size.
 QUALITY={'480p':480,'720p':720,'1080p':1080,'1440p':1440,'2160p':2160}
-# LTX Sharpness shot length (8n+1 frames) by output size, so the second pass fits in memory at 2K/4K.
 # LTX-2.5 renders up to 20 s per clip at any resolution (720p to 4K): 481 frames at 24 fps, one shot per video up to that.
 LTX_SHOT_FRAMES=481
 UPSCALE_ABOVE=720
@@ -102,7 +101,7 @@ def validate_request(r,options,slots):
     if first is not None and (not isinstance(first,int) or first not in slots):raise ValueError('The first frame must be one of the attached pictures')
     if not low<=len(slots)<=high:raise ValueError('Attach exactly one face picture' if r['mode']=='headswap' else 'Sharpness uses only the video; remove the reference pictures' if r['mode']=='sharpness' else 'Attach 1–11 reference images')
     if r.get('quality') not in QUALITY:raise ValueError('Choose 480p, 720p, 1080p, 2K or 4K')
-    if r['quality']=='2160p' and r['mode']!='sharpness':raise ValueError('4K output is only for Sharpness')
+    if r['quality'] in ('1440p','2160p') and r['mode']!='sharpness':raise ValueError('2K and 4K output are only for Sharpness')
     video=r.get('video',{});start=clamp_float(video.get('start_seconds'),0,86400,'start');end=clamp_float(video.get('end_seconds'),0,86400,'end')
     if end<=start:raise ValueError('End must be after start')
     if not isinstance(options.get('enhance_prompt',True),bool):raise ValueError('Enhance prompt must be a boolean')
@@ -488,11 +487,19 @@ def generate(job):
                     s['anchors']=s['anchors']+[{**near,'time_seconds':round(t0,3)}]
     prompt=plan['prompt'];fibo_ref=None
     if plan['use_fibo']:
-        frame=inp/'fibo_source.png';run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-frames:v','1','-threads','1','-y',str(frame)])
         selected=[assets['pictures'][str(i)] for i in plan['fibo_picture_slots']]
-        outputs=execute_graph(job,fibo_graph(str(frame.relative_to(INPUT)),selected,plan['fibo_instruction'],seed),'fibo_edit')
+        sheet=plan['source_kind']=='human' and plan['target_kind']=='animal'
+        if sheet:
+            # Animal for a human performer: a humanoid character sheet from the animal pictures alone (no guide frame,
+            # so no guide scenery), on a plain background.
+            described={str(x.get('slot')):x.get('description','') for x in plan.get('picture_roles',[])}
+            graph=fibo_graph(selected[0],selected[1:],character_sheet_instruction(len(selected),described.get(str(plan['fibo_picture_slots'][0]),'')),seed)
+        else:
+            frame=inp/'fibo_source.png';run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-frames:v','1','-threads','1','-y',str(frame)])
+            graph=fibo_graph(str(frame.relative_to(INPUT)),selected,plan['fibo_instruction'],seed)
+        outputs=execute_graph(job,graph,'fibo_edit')
         fibo_ref=image_from_output(outputs,inp/'fibo_prepared.png');refs.append(str(fibo_ref.relative_to(INPUT)));
-        if options.get('enhance_prompt',True):prompt+=f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities."
+        if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> is a character sheet (front and back views) of that character in humanoid form; use it for body shape and appearance only, it does not supply motion or a background." if sheet else f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
         shutil.copyfile(fibo_ref,work/'fibo_preview.png');save(job,fibo_preview_url=f"/api/backend/jobs/{job['id']}/files/fibo_preview.png")
     pieces=[];previous=None
     for i,shot in enumerate(shots):

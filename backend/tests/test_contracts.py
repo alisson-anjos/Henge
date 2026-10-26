@@ -108,6 +108,13 @@ class WorkflowContracts(unittest.TestCase):
   self.assertEqual(g['31']['inputs']['samples'],['20',2]);self.assertEqual((g['32']['inputs']['width'],g['32']['inputs']['height']),(1088,1920))
   self.assertEqual(g['34']['inputs']['latent'],['31',0]);self.assertEqual(g['34']['inputs']['image'],['33',0]);self.assertEqual(g['21']['inputs']['samples'],['41',2])
   self.assertEqual(g['21']['class_type'],'VAEDecodeTiled');self.assertEqual(g['38']['inputs']['sigmas'].split(',')[0],'0.900000');self.assertEqual(g['2']['inputs']['strength_model'],1.2)
+ def test_high_resolutions_only_for_sharpness(self):
+  for q in ('1440p','2160p'):
+   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','quality':q},{'profile':'motion'},[1])
+ def test_animal_character_sheet_instruction(self):
+  from edit_modes import character_sheet_instruction
+  text=character_sheet_instruction(2,'A husky with blue eyes.')
+  self.assertIn('<image_1>, <image_2> (A husky with blue eyes)',text);self.assertIn('front view and back view',text);self.assertIn('no scenery',text)
  def test_first_frame_propagate(self):
   from edit_modes import ffp_prompt
   validate_request({**self.request(),'mode':'motion','prompt':'Add rain to the scene.'},{'profile':'motion_ffp'},[])
