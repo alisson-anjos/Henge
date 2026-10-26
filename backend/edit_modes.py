@@ -148,3 +148,28 @@ def character_figure_instruction(count,description=''):
             f'else from {pose}: not the face, hair, clothes, body shape or background. Exactly one figure, head to feet '
             'large in frame. Plain flat neutral gray background, no scenery, no floor, no props, no text, soft even '
             'studio lighting.')
+
+
+def multi_swap_prompt(subjects,representation='2d'):
+    """Character Swap with two or more marked people (the BFS two-character recipe, in the v1.1 body_swap format).
+    subjects: [(color, picture_slots, details)] in Subject order. Each subject is defined by its picture and the color
+    that marks the person it replaces; the tints are named as editing markers to remove; nothing describes the guide
+    performers (their looks would leak)."""
+    if len(subjects)<2:raise ValueError('The multi-person template needs at least two subjects')
+    mark='tint' if representation=='2d' else 'color'
+    marked='tinted' if representation=='2d' else 'colored'
+    defs=[];swaps=[];names=[]
+    for i,(color,slots,details) in enumerate(subjects,1):
+        pictures=' and '.join(f'<Picture {n}>' for n in slots)
+        text=' '.join(str(details).split()).strip().strip('"').rstrip('.')[:1500] or 'the character'
+        defs.append(f'<Subject {i}> is the character shown in {pictures}: {text}. Their identity, face, hair, body shape, proportions and clothing define the {color}-marked replacement.')
+        swaps.append(f'the {color}-{marked} person with <Subject {i}>');names.append(f'<Subject {i}>')
+    colors=' and '.join(c for c,_,_ in subjects)
+    replace='Replace '+', '.join(swaps[:-1])+' and '+swaps[-1]
+    return (f"body_swap: subject_definitions: {' '.join(defs)} In the guide video, the translucent {colors} {mark}s are temporary editing markers, not character appearance. "
+            f"{replace}. The guide video provides the scene, framing and the complete performance: body pose, gestures, head motion, gaze, speech and facial expressions.  "
+            f"summary: [video generation + references] {replace}, preserving the guide's camera, framing, timing and motion exactly.  "
+            f"detailed_description: [Shot 1] {', '.join(names[:-1])} and {names[-1]} take the exact places of the marked people and move with the same timing, body pose, gestures, head motion, gaze, speech and facial expressions; "
+            f"each one follows its own marked person through position changes, occlusion and cuts. Remove the temporary color markers completely. "
+            f"Keep the framing of the guide: do not widen the shot or add people who are not in the guide; no inset, no small full-body figure, no picture-in-picture. "
+            f"Preserve the background, lighting and camera. Prevent identity drift, clothing changes, texture crawling and flicker.")

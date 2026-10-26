@@ -104,6 +104,33 @@ class WorkflowContracts(unittest.TestCase):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'mask',[],'human',0,skip_frames=22)
   self.assertEqual(g['18']['inputs']['images'],['26',0]);self.assertEqual(g['26']['class_type'],'HengeMaskPreview');self.assertEqual(g['18']['inputs']['skip_frames'],22)
   self.assertEqual(h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'2d',[],'human',0)['18']['inputs']['images'],['8',0])
+ def test_multi_person_swap_template(self):
+  from edit_modes import multi_swap_prompt
+  t=multi_swap_prompt([('red',[1],'Male, lean build, curly dark hair'),('blue',[2,3],'Female, white trench coat')],'2d')
+  self.assertTrue(t.startswith('body_swap: subject_definitions: <Subject 1> is the character shown in <Picture 1>: Male, lean build, curly dark hair.'))
+  self.assertIn('<Subject 2> is the character shown in <Picture 2> and <Picture 3>',t);self.assertIn('define the blue-marked replacement',t)
+  self.assertIn('Replace the red-tinted person with <Subject 1> and the blue-tinted person with <Subject 2>',t);self.assertIn('  summary: ',t)
+ def test_planning_two_marked_people_uses_the_template(self):
+  import server
+  jid='6'*32;(server.INPUT/'henge'/jid).mkdir(parents=True,exist_ok=True);server.job_path(jid).mkdir(parents=True,exist_ok=True)
+  pics=[]
+  for i in (1,2):
+   p=server.INPUT/'henge'/jid/f'p{i}.png';__import__('PIL.Image').Image.new('RGB',(8,8),'gray').save(p);pics.append((i,p))
+  a={'x':.3,'y':.5,'time_seconds':0,'frame_width':8,'frame_height':8}
+  marks=[{'id':'r','label':'S1','color':'red','picture_slots':[1],'anchors':[a]},{'id':'b','label':'S2','color':'blue','picture_slots':[2],'anchors':[a]}]
+  job={'id':jid,'created':0,'status':'planning','request':{'mode':'swap','prompt':'swap them','video':{'start_seconds':0},'subject_guidance':{'representation':'2d','bindings':marks}},'options':{'auto_approve':True},'assets':{'pictures':{'1':'x','2':'y'}}}
+  server.save(job)
+  texts={'vlm_picture_1':'Male, curly hair','vlm_picture_2':'Female, red coat','vlm_guide':'[]'}
+  with patch.object(server,'prepare_evidence',return_value=(pics,pics[0][1],{})),patch.object(server,'execute_graph',side_effect=lambda j,g,stage:{'4':{'text':[texts[stage]]}}):
+   server.planning(job)
+  plan=server.load(jid)['plan']
+  self.assertIn('<Subject 1> is the character shown in <Picture 1>: Male, curly hair',plan['prompt']);self.assertIn('blue-marked',plan['prompt'])
+  self.assertNotIn('Color markers',plan['prompt']);self.assertEqual(plan['representation'],'2d')
+ def test_marks_go_inside_subject_definitions(self):
+  import server
+  r={'subject_guidance':{'representation':'2d','bindings':[{'color':'red','picture_slots':[1]}]}}
+  out=server.add_marks('motion_transfer:\nsubject_definitions:\nA.\n\nsummary:\nB.',r,'2d')
+  self.assertLess(out.index('Color markers'),out.index('summary:'))
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))

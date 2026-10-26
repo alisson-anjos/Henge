@@ -11,7 +11,7 @@ from PIL import Image,ImageDraw,ImageOps
 from workflows import find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
-from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
+from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -370,6 +370,14 @@ def mask_preview(job):
     FILES.download(videos[0],work/'mask_preview.mp4')
     save(job,mask_preview_url=f"/api/backend/jobs/{job['id']}/files/mask_preview.mp4?v={time.time_ns()}")
 
+def add_marks(prompt,r,representation):
+    """The color binding goes at the end of subject_definitions, where the subjects are defined, when the prompt has
+    sections; otherwise at the end."""
+    sentence=marks_sentence(r,representation)
+    if not sentence:return prompt
+    m=re.search(r'\n\s*summary\s*:',prompt)
+    return prompt[:m.start()].rstrip()+sentence+prompt[m.start():] if m else prompt+sentence
+
 def marks_sentence(r,representation):
     """With a 2D/3D color guide the prompt must say which color becomes which picture; the planner's rewrite can drop
     the user's binding text, so this is added to the final prompt."""
@@ -430,9 +438,24 @@ def planning(job):
             raw=ask('Look at these frames of a video. Which of these objects does the main person hold or play: phone, microphone, guitar, ukulele, cup, bottle, bicycle, torch, piano, keyboard? Answer with a JSON array of the matching words only, for example ["guitar"], or [] if none.',guide,'vlm_guide',64)
             found=re.findall(r'phone|microphone|guitar|ukulele|cup|bottle|bicycle|torch|piano|keyboard',raw.lower())
             plan['preserve_objects']=sorted(set(found))
-        plan['prompt']+=marks_sentence(r,plan['representation'])
+        plan['prompt']=add_marks(plan['prompt'],r,plan['representation'])
         if plan['representation'] in ('mask','2d') and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
         save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the character description before generating.',step=None,step_total=None);return
+    guidance=r.get('subject_guidance',{})
+    if r['mode']=='swap' and len(bindings)>=2 and guidance.get('representation') in ('2d','3d') and job['options'].get('enhance_prompt',True):
+        # Several marked people: one v1.1-style definition per person, bound to its color (the BFS two-character
+        # recipe). Each picture is described alone, without names, and nothing describes the guide performers.
+        subjects=[]
+        for s in bindings:
+            slot=s['picture_slots'][0];image=dict(pictures)[slot]
+            subjects.append((s['color'],s['picture_slots'],ask(CHARACTER_INSTRUCTION,image,f'vlm_picture_{slot}',1024)))
+        plan=fixed_plan('swap',multi_swap_prompt(subjects,guidance['representation']),'Replace each marked person with the character bound to their color, keeping scene, camera and performance (multi-person Character Swap).')
+        plan['picture_roles']=[{'slot':slot,'role':'identity','description':next((d for c,sl,d in subjects if slot in sl),'')} for slot in slots]
+        plan['representation']=guidance['representation']
+        raw=ask('Look at these frames of a video. Which of these objects do the people hold or play: phone, microphone, guitar, ukulele, cup, bottle, bicycle, torch, piano, keyboard? Answer with a JSON array of the matching words only, for example ["guitar"], or [] if none.',guide,'vlm_guide',64)
+        plan['preserve_objects']=sorted(set(re.findall(r'phone|microphone|guitar|ukulele|cup|bottle|bicycle|torch|piano|keyboard',raw.lower())))
+        if plan['representation']=='2d' and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
+        save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the character descriptions before generating.',step=None,step_total=None);return
     if r['mode']=='headswap':
         face=ask(FACE_INSTRUCTION,pictures[0][1],'vlm_picture_1',512)
         plan=fixed_plan('headswap',head_swap_prompt(face),'Replace only the head of the person in the video with the face from Picture 1; body, clothing, motion and scene stay unchanged.',face)
@@ -459,7 +482,7 @@ def planning(job):
     if (plan['use_fibo'] or plan['preparation_recommended']) and not fibo_available():
         plan['use_fibo']=plan['preparation_recommended']=False
         plan['warnings'].append('Reference adaptation (FIBO) is not installed on this ComfyUI; the original pictures are used.')
-    plan['prompt']+=marks_sentence(r,plan['representation'])
+    plan['prompt']=add_marks(plan['prompt'],r,plan['representation'])
     if plan['representation'] in ('mask','2d') and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
     save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.',step=None,step_total=None)
 
