@@ -374,6 +374,22 @@ def mask_preview(job):
     FILES.download(videos[0],work/'mask_preview.mp4')
     save(job,mask_preview_url=f"/api/backend/jobs/{job['id']}/files/mask_preview.mp4?v={time.time_ns()}")
 
+TIMECODES=[
+    re.compile(r'\b(?:from|between)\s+(?:about\s+)?\d{1,2}:\d{2}(?:[.:]\d+)?\s*(?:to|and|-|–)\s*\d{1,2}:\d{2}(?:[.:]\d+)?\s*,?\s*',re.I),
+    re.compile(r'\b(?:from|between)\s+(?:about\s+)?\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds)?\s*(?:to|and|-|–)\s*\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds)\b\s*,?\s*',re.I),
+    re.compile(r'\b(?:at|around|by|after|until|before|near)\s+(?:about\s+|roughly\s+|approximately\s+)?(?:\d{1,2}:\d{2}(?:[.:]\d+)?|\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds))\b\s*,?\s*',re.I),
+    re.compile(r'\(?\s*\d{1,2}:\d{2}(?:[.:]\d+)?\s*(?:-|–|to)\s*\d{1,2}:\d{2}(?:[.:]\d+)?\s*\)?\s*:?\s*'),
+    re.compile(r'\(\s*\d+(?:\.\d+)?\s*(?:s|sec|seconds)?\s*(?:-|–|to)\s*\d+(?:\.\d+)?\s*(?:s|sec|seconds)\s*\)\s*'),
+]
+
+def strip_timecodes(prompt):
+    """Times in the prompt ('From 00:05 to 00:10', 'around 3.4s') name the whole video's timeline, but every shot is
+    rendered alone with its own clock starting at zero. Removed, and the sentence start is capitalised again."""
+    for pattern in TIMECODES:prompt=pattern.sub(' ',prompt)
+    prompt=re.sub(r'[ \t]{2,}',' ',prompt);prompt=re.sub(r' +([,.:;])',r'\1',prompt);prompt=re.sub(r'[ \t]+\n','\n',prompt)
+    # Capitalise sentences that now start with a lowercase word (not section names such as 'summary:').
+    return re.sub(r'([.!?][ \t]+|\][ \t]+)([a-z])',lambda m:m[1]+m[2].upper(),prompt)
+
 def add_marks(prompt,r,representation):
     """The color binding goes at the end of subject_definitions, where the subjects are defined, when the prompt has
     sections; otherwise at the end."""
@@ -481,7 +497,7 @@ def planning(job):
                  picture_slots=slots,reference_inventory=evidence['reference_inventory'],guide_observations=evidence['guide_analysis'])
     raw=ask(ROUTING_SYSTEM+'\nEVIDENCE:\n'+json.dumps(routing,ensure_ascii=False),None,'vlm_routing',1536)
     raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw.strip());plan=json.loads(raw)
-    plan['prompt']=evidence['prompt']
+    plan['prompt']=strip_timecodes(evidence['prompt'])
     plan=validate_plan(plan,slots,job['options'],r)
     if (plan['use_fibo'] or plan['preparation_recommended']) and not fibo_available():
         plan['use_fibo']=plan['preparation_recommended']=False

@@ -131,6 +131,10 @@ class WorkflowContracts(unittest.TestCase):
   r={'subject_guidance':{'representation':'2d','bindings':[{'color':'red','picture_slots':[1]}]}}
   out=server.add_marks('motion_transfer:\nsubject_definitions:\nA.\n\nsummary:\nB.',r,'2d')
   self.assertLess(out.index('Color markers'),out.index('summary:'))
+ def test_timecodes_are_removed(self):
+  import server
+  out=server.strip_timecodes('[Shot 1] From 00:05 to 00:10, they fight. Around 2.0 seconds, the light changes. He waves at 3 people.\nsummary:\nok')
+  self.assertEqual(out,'[Shot 1] They fight. The light changes. He waves at 3 people.\nsummary:\nok')
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))
