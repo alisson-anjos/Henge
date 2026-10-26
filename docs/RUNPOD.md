@@ -36,7 +36,7 @@ RunPod → **My Templates → New Template** (type *Pod*):
 |---|---|
 | Container image | `ghcr.io/alisson-anjos/henge:latest` |
 | Container disk | 30 GB |
-| Volume disk | 150 GB (default profiles incl. OmniRef) |
+| Volume disk | 220 GB (default profiles incl. OmniRef, FIBO and LTX-2.5 for Sharpness) |
 | Volume mount path | `/workspace` |
 | Expose HTTP ports | `8188` (add `8189` to open ComfyUI too) |
 | Expose TCP ports | `22` |
@@ -102,7 +102,7 @@ Set `HENGE_WORKSPACE=off` to keep everything inside the container instead.
 
 Add `omniref` to `HENGE_MODEL_PROFILES` to download
 [FastVideo/FastH3-Omni-Comfy](https://huggingface.co/FastVideo/FastH3-Omni-Comfy)
-(`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; use a 150 GB volume). Pick it in
+(`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; with the default profiles use a 220 GB volume). Pick it in
 **Advanced → Base model**; it is already distilled to 8 steps, so Turbo LoRA switches to
 **None**. The task LoRAs (Character Swap, Head Swap, Motion) still load on top.
 

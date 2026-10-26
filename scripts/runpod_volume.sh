@@ -10,7 +10,7 @@
 # model installed. Already present files are skipped. Serverless workers never download: they only read.
 set -euo pipefail
 DATACENTER=${DATACENTER:-EU-RO-1}
-VOLUME_GB=${VOLUME_GB:-150}
+VOLUME_GB=${VOLUME_GB:-220}
 IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:runpod-template}
 PROFILES=${PROFILES:-character,motion10500,motion4500,solar,ffp,headswap,sharpness,omniref,fibo}
 ENV_JSON=$(PROFILES=$PROFILES python3 -c 'import json,os;print(json.dumps({"HENGE_MODEL_PROFILES":os.environ["PROFILES"],"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"}))')

@@ -63,7 +63,7 @@ Choose the model profiles (comma list), as on a normal pod:
 | `omniref` | OmniRef base | +22 GB |
 | `fibo` | Reference adaptation (FIBO 2 edit: animal to human-compatible pose, first-frame edits) | ~14 GB |
 
-The default, every profile above, needs roughly 125–135 GB: create the volume with 150 GB.
+The default, every profile above, needs roughly 165–175 GB: create the volume with 220 GB (`VOLUME_GB=220`).
 
 ### Option A: script
 
