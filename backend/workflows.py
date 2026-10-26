@@ -186,7 +186,9 @@ def bong_tangent(steps,start=1.,middle=.5,end=0.,pivot_1=.6,pivot_2=.6,slope_1=.
 def ltx_sharpness_graph(video,width,height,length,trim_frames,seed,steps=8,lora_strength=.8,upscale=None):
     """Little More Sharpness on LTX-2.5: the source video is both the encoded latent and an aligned IC-LoRA guide.
     With upscale={'denoise'}, a second pass refines at twice the size after LTX's x2 spatial latent upscaler, guided
-    by the same video loaded at that size; `width`/`height` are the first-pass size."""
+    by the same video loaded at that size; `width`/`height` are the first-pass size. upscale['sharpen_first'] False
+    skips the 8-step half-size pass: the source latent goes straight to the upscaler and the short LoRA pass at the
+    output size does all the sharpening."""
     sigmas=lambda values:','.join(f'{v:.6f}' for v in values)
     g={
       '1':node('UNETLoader',unet_name=LTX['unet'],weight_dtype='default'),
@@ -215,10 +217,11 @@ def ltx_sharpness_graph(video,width,height,length,trim_frames,seed,steps=8,lora_
     if upscale:
         scale=float(upscale['denoise'])/LTX_REFINE_SIGMAS[0]
         g['30']=node('LatentUpscaleModelLoader',model_name=LTX['upscaler'])
-        g['31']=node('LTXVLatentUpsampler',samples=['20',2],upscale_model=['30',0],vae=['4',0])
+        first=upscale.get('sharpen_first',False)
+        g['31']=node('LTXVLatentUpsampler',samples=['20',2] if first else ['10',0],upscale_model=['30',0],vae=['4',0])
         g['32']=node('HengeLoadShot',video=video,pictures='[]',width=width*2,height=height*2,length=length)
         g['33']=node('LTXVPreprocess',image=['32',0],img_compression=0)
-        g['34']=node('LTXVAddGuide',positive=['20',0],negative=['20',1],vae=['4',0],latent=['31',0],image=['33',0],frame_idx=0,strength=1.)
+        g['34']=node('LTXVAddGuide',positive=['20',0] if first else ['7',0],negative=['20',1] if first else ['7',1],vae=['4',0],latent=['31',0],image=['33',0],frame_idx=0,strength=1.)
         g['35']=node('LTXVConcatAVLatent',video_latent=['34',2],audio_latent=['12',0])
         g['36']=node('CFGGuider',model=['2',0],positive=['34',0],negative=['34',1],cfg=1.)
         g['37']=node('RandomNoise',noise_seed=seed+1000)
@@ -228,4 +231,6 @@ def ltx_sharpness_graph(video,width,height,length,trim_frames,seed,steps=8,lora_
         g['41']=node('LTXVCropGuides',positive=['34',0],negative=['34',1],latent=['40',0])
         # Two-pass sizes reach 2K/4K: decode in tiles so the VAE fits beside the model.
         g['21']=node('VAEDecodeTiled',samples=['41',2],vae=['4',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
+        if not first:
+            for k in ('11','13','14','15','17','18','19','20'):del g[k]
     return g

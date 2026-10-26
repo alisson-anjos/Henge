@@ -41,6 +41,7 @@ function normalizeSettings(o: Record<string, unknown>) {
     loraStrength: num(o.lora_strength, 0, 2, .8),
     latentUpscale: typeof o.latent_upscale === 'boolean' ? o.latent_upscale : true,
     upscaleDenoise: num(o.upscale_denoise, .1, 1, .9),
+    sharpenFirst: typeof o.sharpen_first === 'boolean' ? o.sharpen_first : false,
     turbo: typeof o.turbo === 'string' ? o.turbo : 'dmd8',
     prepareReferences: o.prepare_references !== false,
     attention: o.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention',
@@ -83,6 +84,7 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
   const [loraStrength, setLoraStrength] = useState(initial.loraStrength);
   const [latentUpscale, setLatentUpscale] = useState(initial.latentUpscale);
   const [upscaleDenoise, setUpscaleDenoise] = useState(initial.upscaleDenoise);
+  const [sharpenFirst, setSharpenFirst] = useState(initial.sharpenFirst);
   const [turbo, setTurbo] = useState(initial.turbo);
   const [prepareReferences, setPrepareReferences] = useState(initial.prepareReferences);
   const [attention, setAttention] = useState(initial.attention);
@@ -92,7 +94,7 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
     const n = normalizeSettings(options);
     setMotionModel(n.motionModel); setFibo(n.fibo); setConditioningMode(n.conditioningMode); setReferenceScale(n.referenceScale); setSeed(n.seed); setSteps(n.steps);
     setClipFps(n.clipFps); setDetectCuts(n.detectCuts); setEnhancePrompt(n.enhancePrompt); setAutoApprove(n.autoApprove); setMaskSettings(n.mask); setCfg(n.cfg);
-    setStructureCfg(n.structureCfg); setBase(n.base); setLoraStrength(n.loraStrength); setLatentUpscale(n.latentUpscale); setUpscaleDenoise(n.upscaleDenoise);
+    setStructureCfg(n.structureCfg); setBase(n.base); setLoraStrength(n.loraStrength); setLatentUpscale(n.latentUpscale); setUpscaleDenoise(n.upscaleDenoise); setSharpenFirst(n.sharpenFirst);
     setTurbo(n.turbo); setPrepareReferences(n.prepareReferences); setAttention(n.attention);
   }
   const modeLabel = (m: string) => ({swap: tr('Character Swap', 'Troca de personagem', 'Cambio de personaje'), motion: tr('Motion Transfer', 'Transferência de movimento', 'Transferencia de movimiento'), headswap: 'Head Swap', sharpness: tr('Sharpness', 'Nitidez', 'Nitidez')} as Record<string, string>)[m] || m;
@@ -144,7 +146,7 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
     if (!request || !video || !canSubmit || submitting) return;
     setError(''); setSubmitting(true);
     try {
-      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, base, cfg, ...(activeConditioning === 'tara' ? {structure_cfg: structureCfg} : {}), ...(usesMask ? {mask: maskSettings} : {}), turbo,...(mode === 'sharpness' ? {lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise} : {})})); body.set('video', video);
+      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, fibo, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, base, cfg, ...(activeConditioning === 'tara' ? {structure_cfg: structureCfg} : {}), ...(usesMask ? {mask: maskSettings} : {}), turbo,...(mode === 'sharpness' ? {lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise, sharpen_first: sharpenFirst} : {})})); body.set('video', video);
       pictures.forEach(p => body.set(`picture_${p.slot}`, p.file));
       const response = await fetch('/api/backend/jobs', {method: 'POST', body}); const result = await readJson(response);
       if (!response.ok) throw Error(result.detail || result.error || 'Unable to create job');
@@ -230,7 +232,8 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
       </fieldset>}
       {mode === 'sharpness' && <fieldset className="mask-settings"><legend>{tr('Sharpness', 'Nitidez', 'Nitidez')}</legend>
         <label>{tr('Sharpness strength (LoRA, 0.8 recommended)', 'Força do sharpness (LoRA, 0,8 recomendado)', 'Fuerza de nitidez (LoRA, 0,8 recomendado)')}<input type="number" min="0" max="2" step="0.05" value={loraStrength} onChange={e => setLoraStrength(Math.min(2, Math.max(0, Number(e.target.value) || 0)))}/></label>
-        <label>{tr('Latent upscale above 720p (half-size pass → LTX x2 latent upscaler → refine)', 'Latent upscale acima de 720p (passada em meia resolução → upscaler latente x2 do LTX → refino)', 'Latent upscale por encima de 720p (pasada a media resolución → upscaler latente x2 de LTX → refinado)')}<input type="checkbox" checked={latentUpscale} onChange={e => setLatentUpscale(e.target.checked)}/></label>
+        <label>{tr('Latent upscale above 720p (LTX x2 latent upscaler, then a short pass at the output size)', 'Latent upscale acima de 720p (upscaler latente x2 do LTX, depois uma passada curta no tamanho final)', 'Latent upscale por encima de 720p (upscaler latente x2 de LTX, luego una pasada corta al tamaño final)')}<input type="checkbox" checked={latentUpscale} onChange={e => setLatentUpscale(e.target.checked)}/></label>
+        <label>{tr('Sharpen at half size first (8 extra steps, slower)', 'Afiar em meia resolução antes (8 passos a mais, mais lento)', 'Afilar a media resolución antes (8 pasos más, más lento)')}<input type="checkbox" checked={sharpenFirst} disabled={!latentUpscale} onChange={e => setSharpenFirst(e.target.checked)}/></label>
         <label>{tr('Refine denoise (higher = more new detail)', 'Denoise do refino (maior = mais detalhe novo)', 'Denoise del refinado (mayor = más detalle nuevo)')}<input type="number" min="0.1" max="1" step="0.05" value={upscaleDenoise} disabled={!latentUpscale} onChange={e => setUpscaleDenoise(Math.min(1, Math.max(.1, Number(e.target.value) || .5)))}/></label>
       </fieldset>}
       {mode !== 'sharpness' && <label>CFG<input type="number" min="1" max="12" step="0.5" value={cfg} onChange={e => setCfg(Math.min(12, Math.max(1, Number(e.target.value) || 1)))}/></label>}
@@ -239,7 +242,7 @@ export default function GenerationPanel({initialSettings = {}, onSelectJob, onSh
       {mode !== 'sharpness' && <label>{tr('Detect camera cuts (videos over 15 s, split into shots)', 'Detectar cortes de câmera (vídeos acima de 15 s, divididos em shots)', 'Detectar cortes de cámara (videos de más de 15 s, divididos en shots)')}<input type="checkbox" checked={detectCuts} onChange={e => setDetectCuts(e.target.checked)}/></label>}
     </div>{onImportSettings && <button className="quiet-button import-settings-button" onClick={onImportSettings}>{tr('Import settings', 'Importar configuração', 'Importar configuración')}</button>}</details>
   </div>;
-  const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise};
+  const shareOptions = {profile, fibo, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, reference_scale: referenceScale, detect_cuts: detectCuts, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, latent_upscale: latentUpscale, upscale_denoise: upscaleDenoise, sharpen_first: sharpenFirst};
   const storedOptions = JSON.stringify(shareOptions);
   useEffect(() => {if (restored) try {localStorage.setItem(SETTINGS_KEY, storedOptions);} catch {/* private mode */}}, [restored, storedOptions]);
   const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button>{job && !['completed', 'failed', 'cancelled'].includes(job.status) && <button className="quiet-button" disabled={submitting} onClick={() => action('cancel')}>{tr('Cancel job', 'Cancelar pedido', 'Cancelar pedido')}</button>}<button className="primary" disabled={!health?.online || health?.models[profile]?.available === false || !canSubmit || submitting} onClick={submit}>{submitting ? tr('Sending…', 'Enviando…', 'Enviando…') : tr('Generate', 'Gerar', 'Generar')}</button></>;

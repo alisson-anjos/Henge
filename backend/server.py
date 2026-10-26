@@ -110,6 +110,7 @@ def validate_request(r,options,slots):
     if not isinstance(options.get('prepare_references',True),bool):raise ValueError('Reference preparation must be a boolean')
     clamp_float(options.get('cfg',1.),1,12,'CFG');clamp_float(options.get('lora_strength',1.),0,2,'LoRA strength');clamp_float(options.get('upscale_denoise',.5),.1,1,'refine denoise')
     if not isinstance(options.get('latent_upscale',True),bool):raise ValueError('Latent upscale must be a boolean')
+    if not isinstance(options.get('sharpen_first',False),bool):raise ValueError('Sharpen first must be a boolean')
     if clamp_float(options.get('structure_cfg',1.),1,3,'structure guidance')>1 and options.get('conditioning_mode','guide')!='tara':raise ValueError('Structure guidance is a TARA option')
     clamp_float(options.get('causal_chunk',5),1,32,'causal chunk');clamp_float(options.get('causal_window',6),1,16,'causal window')
     if r.get('processing',{}).get('mode')=='causal':
@@ -215,8 +216,10 @@ def fibo_available(info=None):
     return 'TextEncodeFibo2' in info and FIBO_UNET in comfy_choices(info,'UNETLoader','unet_name')
 
 def sampler_label(graph,node):
-    """Name the pass a sampler runs: LTX Sharpness above 720p samples twice (node '39' refines the upscaled latent)."""
+    """Name the pass a sampler runs: LTX Sharpness above 720p samples at the output size after the latent upscaler
+    (node '39'), optionally after an 8-step half-size pass (node '18')."""
     if '39' not in graph or graph['39']['class_type']!='SamplerCustomAdvanced':return 'Sampling video'
+    if '18' not in graph:return 'Upscaling and sharpening'
     return 'Pass 2/2 · refining the upscaled video' if str(node)=='39' else 'Pass 1/2 · sharpening at half size'
 
 def execute_serverless(job,graph,stage):
@@ -456,7 +459,7 @@ def generate(job):
     if r['mode']=='sharpness' and options.get('latent_upscale',True) and short>UPSCALE_ABOVE:
         # LTX two-pass: sharpen at half the output size, then the x2 spatial latent upscaler and a short refine pass
         # guided by the source at the output size. The upscaler doubles exactly, so the output size is 2x the first.
-        w,h=size(short//2);W,H=w*2,h*2;upscale={'denoise':options.get('upscale_denoise',.9)}
+        w,h=size(short//2);W,H=w*2,h*2;upscale={'denoise':options.get('upscale_denoise',.9),'sharpen_first':options.get('sharpen_first',False)}
     else:w,h=W,H
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(r['processing']['requested_seconds_per_shot']*24)-5)/17)))
     if r['processing'].get('mode')=='single' and total<=360:per=max(22,grid_frames(total))

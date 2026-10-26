@@ -101,7 +101,10 @@ class WorkflowContracts(unittest.TestCase):
   self.assertEqual([round(x,4) for x in bong_tangent(8)],[1.,.9713,.9294,.8629,.7443,.5,.2131,.0696,0.]);self.assertEqual((ltx_frames(120),ltx_frames(121)),(121,121))
  def test_ltx_sharpness_latent_upscale_two_pass(self):
   from workflows import ltx_sharpness_graph
-  g=ltx_sharpness_graph('v.mp4',544,960,121,120,7,lora_strength=1.2,upscale={'denoise':.9})
+  fast=ltx_sharpness_graph('v.mp4',544,960,121,120,7,upscale={'denoise':.9})
+  self.assertEqual(fast['31']['inputs']['samples'],['10',0]);self.assertEqual(fast['34']['inputs']['positive'],['7',0]);self.assertNotIn('18',fast)
+  self.assertTrue(all(ref[0] in fast for n in fast.values() for ref in n['inputs'].values() if isinstance(ref,list) and len(ref)==2 and isinstance(ref[0],str)))
+  g=ltx_sharpness_graph('v.mp4',544,960,121,120,7,lora_strength=1.2,upscale={'denoise':.9,'sharpen_first':True})
   self.assertEqual(g['31']['inputs']['samples'],['20',2]);self.assertEqual((g['32']['inputs']['width'],g['32']['inputs']['height']),(1088,1920))
   self.assertEqual(g['34']['inputs']['latent'],['31',0]);self.assertEqual(g['34']['inputs']['image'],['33',0]);self.assertEqual(g['21']['inputs']['samples'],['41',2])
   self.assertEqual(g['21']['class_type'],'VAEDecodeTiled');self.assertEqual(g['38']['inputs']['sigmas'].split(',')[0],'0.900000');self.assertEqual(g['2']['inputs']['strength_model'],1.2)
