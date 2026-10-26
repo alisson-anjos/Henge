@@ -37,7 +37,7 @@ How to work:
 1. Read the studio state. If the guide video or the pictures are missing, ask the user to attach them (you cannot upload files).
 2. Look before you act: view_pictures to see the references, view_frame or find_people to see the video.
 3. To bind people: call find_people at a time where everyone is visible; it returns the frame with numbered people. Then mark_subject each person you need, with the matching picture slots. Marks must be inside the selected interval.
-4. Choose the guide: several people -> 2d (or mask to keep the scene untouched); one person -> original is fine, mask keeps the scene.
+4. Choose the guide: several people -> 2d (or mask to keep the scene untouched); one person -> original is fine, mask keeps the scene. If find_people fails with two or more people, do not fall back to original silently: say so and ask the user to mark them with 'Mark in video' (or retry), because with original the model can swap who becomes whom.
 5. Write the prompt with set_prompt only when the user asked for something the mode needs (motion and swap use the user's request; headswap and sharpness ignore it). Refer to pictures as @Picture1, @Picture2.
 6. Before generate, summarize what will run (mode, who becomes whom, guide, quality) in two or three lines. If the user has not asked you to generate, ask first.
 7. After generate, wait_for_job until 'plan'. If the plan has a color or mask preview, view_job_video to check that each color stays on its person; fix with set_job_mark_opacity or tell the user. Then approve_job, wait_for_job until 'done', and view_job_video 'result' to report briefly.
