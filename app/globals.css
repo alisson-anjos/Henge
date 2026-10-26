@@ -718,3 +718,9 @@ img{display:block;max-width:100%}
   .community-card .template-art{aspect-ratio:4/3}
   .community-preview-label{display:none}
 }
+
+.access-settings{position:relative}.access-settings>button{cursor:pointer;background:none;color:inherit}
+.access-popover{position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:300px;padding:14px;display:grid;gap:10px;border-radius:12px}
+.access-popover p{margin:0;font-size:12px;line-height:1.45}.access-popover label{display:grid;gap:5px;font-size:12px}
+@media(max-width:700px){.access-settings>button span{display:none}.access-popover{position:fixed;left:16px;right:16px;top:70px;width:auto}}
+.topbar-end .access-settings .source-link{display:flex}

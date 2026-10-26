@@ -94,7 +94,7 @@ One container runs the UI, the bridge and ComfyUI; models download on the first 
 1. RunPod → **My Templates → New Template** (Pod): image `ghcr.io/alisson-anjos/henge:runpod-template`,
    container disk 30 GB, volume 180 GB at `/workspace`, HTTP port `8188`.
 2. Environment: `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}` (store the token as the secret `hf_token`), and
-   optionally `HENGE_MODEL_PROFILES` to download fewer models and `HENGE_PASSWORD` to protect the UI.
+   optionally `HENGE_MODEL_PROFILES` to download fewer models and `HENGE_PASSWORD` to require a login (or turn it on later from the 🔓 button in the UI, see [Login](#login-optional)).
 3. Deploy on a GPU with a CUDA 13 driver (set the CUDA filter to 13.0+). An RTX 5090 works; 48–96 GB GPUs
    reload models less often.
 4. Watch the logs; the first boot downloads the models (the setup screen on port 8188 shows progress).
@@ -158,18 +158,31 @@ Images are built by GitHub Actions and published to GitHub Container Registry:
 - [RunPod pod template](docs/RUNPOD.md) · [RunPod Serverless](docs/SERVERLESS.md)
 - [Models and download links](docs/models-and-downloads.md) · [Guide conditioning](docs/conditioning.md)
 
-## Password (optional)
+## Login (optional)
 
-The UI is open by default. To share it beyond your machine (a tunnel such as
-`cloudflared tunnel --url http://localhost:8188`, or a pod's public port), set a password and
-restart the UI; the browser then asks for it:
+The UI is open by default: anyone who reaches its address can start jobs on your GPU or your RunPod account. Before
+you share it (a tunnel such as `cloudflared tunnel --url http://localhost:8188`, a Tailscale address, or a pod's
+public port), turn on a login. You can do it in either of two ways:
 
-```dotenv
-HENGE_PASSWORD=choose-one
-HENGE_USER=henge   # optional, default "henge"
-```
+- **From the UI:** click **🔓 Open** in the top bar, choose a user and a password (8+ characters) and press
+  **Require login**. The browser asks for it right away. The login is saved as a scrypt hash in `access.json` in the
+  bridge data folder (`HENGE_DATA_DIR`), so it survives restarts; the same button changes it or turns it off.
+- **From the environment** (for pod templates and scripts), it overrides the UI setting:
 
-It covers every page and API route. Anyone with the password can start jobs on your GPU.
+  ```dotenv
+  HENGE_PASSWORD=choose-one
+  HENGE_USER=henge   # optional, default "henge"
+  ```
+
+The login covers every page and every `/api` route, including the assistant and its key settings. What stays behind
+it:
+
+| Service | Port | Protection |
+|---|---|---|
+| Henge UI | 8188 | the login above |
+| Bridge (FastAPI) | 8766 | listens on `127.0.0.1` only; reached through the UI |
+| ComfyUI | 8189 | listens on `127.0.0.1` only. `HENGE_EXPOSE_COMFY=1` opens it **without any login**: debugging only |
+| RunPod Serverless worker | — | only callers with your RunPod API key; the key stays in the bridge's environment |
 
 ## Real people (optional filter)
 

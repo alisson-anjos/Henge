@@ -201,8 +201,9 @@ Close both windows to stop.
 ### Sharing the UI
 
 To let someone else use it, open a tunnel to port 8188, e.g.
-`cloudflared tunnel --url http://localhost:8188`, and set `HENGE_PASSWORD` first: every job runs on your
-endpoint and is billed to your account.
+`cloudflared tunnel --url http://localhost:8188`, and turn on a login first (🔓 in the top bar, or `HENGE_PASSWORD`):
+every job runs on your endpoint and is billed to your account. The worker itself needs no extra password: RunPod only
+accepts requests signed with your API key, and that key lives only in the bridge's environment, never in the browser.
 
 ## How a job runs
 

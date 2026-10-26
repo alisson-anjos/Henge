@@ -20,6 +20,7 @@ import {jobStatusLabel} from '../lib/job-status';
 import SubjectBindings, {SubjectVideo} from './subject-bindings';
 import {SUBJECT_COLORS, bindingPrompt, readSubjectBindings, type SubjectBinding, type GuideRepresentation} from '../lib/subject-bindings';
 import SetupScreen from './setup-screen';
+import AccessSettings from './access-settings';
 import {cutModeLabel, type CutMode} from './shot-plan';
 
 function Icon({name, size = 20}: {name: string; size?: number}) {
@@ -362,9 +363,10 @@ export default function Studio() {
   const assistantController: StudioController = {state: studioState, run: runStudioCall, ingest: async files => {
     const images=files.filter(file => file.type.startsWith('image/')), videos=files.filter(file => file.type.startsWith('video/'));
     if (videos.length) addVideo([videos[0]], true);
-    if (images.length) addPictures(images);
+    const added = images.length ? addPictures(images) : 0;
     await settle();
-    return {text: `${videos.length ? `${videos[0].name} loaded as guide. ` : ''}${images.length ? `${images.length} reference image(s) loaded in attachment order.` : ''}`};
+    const kept = images.length ? (added < images.length ? `Only ${added} of ${images.length} image(s) loaded: no free picture slots. ` : `${added} reference image(s) loaded in attachment order${maxPictures ? '' : ' (kept as Pictures; the current Sharpness mode does not use them, switch mode to use them)'}. `) : '';
+    return {text: `${videos.length ? `${videos[0].name} loaded as guide. ` : ''}${kept}`};
   }};
   const contextWindow = selectedDuration > 15;
   const shotFrames = Math.max(22, Math.floor((Math.round(shotSeconds * 24) - 5) / 17) * 17 + 5);
@@ -390,12 +392,17 @@ export default function Studio() {
     requestAnimationFrame(() => { area?.focus(); area?.setSelectionRange(from + tag.length + 1, from + tag.length + 1); });
   }
   function addPictures(files: FileList | File[] | null) {
-    if (!files) return;
-    const slots = [...new Set([...expectedSlots, ...Array.from({length: MAX_PICTURES}, (_, i) => i + 1)])].filter(i => i <= maxPictures);
+    if (!files) return 0;
+    // Sharpness uses no pictures, but keeps them for the other modes (e.g. pictures attached in the assistant chat
+    // while Sharpness was open): they become active again when the mode changes.
+    const limit = maxPictures || MAX_PICTURES;
+    const slots = [...new Set([...expectedSlots, ...Array.from({length: MAX_PICTURES}, (_, i) => i + 1)])].filter(i => i <= limit);
     const available = slots.filter(i => !pictures.some(p => p.slot === i));
     const valid = Array.from(files).filter(f => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(f.type) && f.size <= 25 * 1024 * 1024);
-    setNotice(valid.length !== files.length ? tr('Use JPG, PNG, WebP or GIF (first frame), up to 25 MB each.', 'Use JPG, PNG, WebP ou GIF (primeiro quadro), até 25 MB por imagem.', 'Usa JPG, PNG, WebP o GIF (primer fotograma), hasta 25 MB por imagen.') : valid.length > available.length ? (mode === 'headswap' ? tr('Head Swap uses one face picture.', 'A troca de cabeça usa uma foto de rosto.', 'El cambio de cabeza usa una foto de rostro.') : tr('Up to 11 reference pictures.', 'Até 11 imagens de referência.', 'Hasta 11 imágenes de referencia.')) : '');
+    const added = Math.min(valid.length, available.length);
+    setNotice(valid.length !== files.length ? tr('Use JPG, PNG, WebP or GIF (first frame), up to 25 MB each.', 'Use JPG, PNG, WebP ou GIF (primeiro quadro), até 25 MB por imagem.', 'Usa JPG, PNG, WebP o GIF (primer fotograma), hasta 25 MB por imagen.') : valid.length > available.length ? (mode === 'headswap' ? tr('Head Swap uses one face picture.', 'A troca de cabeça usa uma foto de rosto.', 'El cambio de cabeza usa una foto de rostro.') : tr(`Up to ${MAX_PICTURES} reference pictures.`, `Até ${MAX_PICTURES} imagens de referência.`, `Hasta ${MAX_PICTURES} imágenes de referencia.`)) : !maxPictures && added ? tr('Sharpness does not use pictures; they are kept for the other modes.', 'O Sharpness não usa imagens; elas ficam guardadas para os outros modos.', 'Sharpness no usa imágenes; se guardan para los otros modos.') : '');
     setPictures(current => [...current, ...valid.slice(0, available.length).map((file, i) => ({slot: available[i], file, url: URL.createObjectURL(file)}))].sort((a, b) => a.slot - b.slot));
+    return added;
   }
   function addVideo(files: FileList | File[] | null, replace = false) {
     if (!files?.length) return;
@@ -631,7 +638,7 @@ export default function Studio() {
         {(['studio', 'history', 'community'] as View[]).map(v => <button key={v} className={view === v ? 'active' : ''} onClick={() => setView(v)} aria-current={view === v ? 'page' : undefined}>{t[v]}{v === 'history' && history.length > 0 && <span className="count mono">{history.length}</span>}</button>)}
       </nav>
       <span className="draft-status"><i/>{t.draft}</span>
-      <div className="topbar-end"><div className="language-switch" role="group" aria-label="Language">{(['en', 'pt', 'es'] as Language[]).map(l => <button key={l} className={'mono ' + (lang === l ? 'active' : '')} aria-pressed={lang === l} onClick={() => setLang(l)}>{l.toUpperCase()}</button>)}</div><a className="source-link ghost" href="https://github.com/alisson-anjos/Henge" target="_blank" rel="noreferrer"><Icon name="github" size={16}/>{t.openSource}</a></div>
+      <div className="topbar-end"><AccessSettings lang={lang}/><div className="language-switch" role="group" aria-label="Language">{(['en', 'pt', 'es'] as Language[]).map(l => <button key={l} className={'mono ' + (lang === l ? 'active' : '')} aria-pressed={lang === l} onClick={() => setLang(l)}>{l.toUpperCase()}</button>)}</div><a className="source-link ghost" href="https://github.com/alisson-anjos/Henge" target="_blank" rel="noreferrer"><Icon name="github" size={16}/>{t.openSource}</a></div>
     </header>
 
     {/* Kept mounted on other tabs so the generation panel keeps its settings and selected job. */}

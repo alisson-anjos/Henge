@@ -53,7 +53,8 @@ Ask the user for:
 3. Check: the pod log shows `model downloads finished`, then
    `curl -s https://<pod id>-8188.proxy.runpod.net/api/backend/health` returns `"online": true`.
 4. Give the user the URL `https://<pod id>-8188.proxy.runpod.net`. If it will be shared, set `HENGE_PASSWORD`
-   on the template first.
+   on the template first (or tell the user to turn on a login from the 🔓 button in the top bar). With a login on,
+   the health check needs it too: `curl -u henge:<password> …`.
 
 ## Option C: Serverless
 

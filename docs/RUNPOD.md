@@ -50,9 +50,9 @@ Environment variables (all optional):
 | `HENGE_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |
-| `HENGE_PASSWORD` | — | Optional password for the UI (user `HENGE_USER`, default `henge`). Unset: open to anyone with the pod URL |
+| `HENGE_PASSWORD` | — | Optional login for the UI (user `HENGE_USER`, default `henge`). Unset: open to anyone with the pod URL until you turn a login on from the 🔓 button in the top bar (saved on the volume). The env value wins over the UI one |
 | `HENGE_LIKENESS_FILTER` | `off` | `warn`: the plan warns when a reference picture looks like a real public figure (celebrity, politician, athlete...). `block`: such a job stops before generating. Checked by the planner VLM, one short question per picture; no names are asked or stored |
-| `HENGE_EXPOSE_COMFY` | — | `1` makes ComfyUI listen on `0.0.0.0:8189` for debugging |
+| `HENGE_EXPOSE_COMFY` | — | `1` makes ComfyUI listen on `0.0.0.0:8189` for debugging. ComfyUI has **no login**: anyone with the URL can run graphs on your GPU, so leave it off on shared pods |
 | `PUBLIC_KEY` | — | RunPod injects your SSH key; enables `sshd` |
 
 The motion LoRAs live in the private dataset `Alissonerdx/Kagemage-Backups`
