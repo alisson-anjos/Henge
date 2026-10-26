@@ -8,6 +8,7 @@ import {TEMPLATES, type StudioTemplate} from '../lib/templates';
 import {downloadJSON, FEEDBACK, HISTORY_KEY, HISTORY_LIMIT, readHistory, type DirectionRequest, type SavedDirection} from '../lib/history';
 import VideoTrimModal, {type ClipRange} from './video-trim-modal';
 import {COMMUNITY, type CommunityPreset} from '../lib/community';
+import FirstFrameModal from './first-frame-modal';
 import GenerationPanel, {type GenerationJob} from './generation-panel';
 import JobProgress from './job-progress';
 import {readJson} from '../lib/http';
@@ -60,6 +61,9 @@ export default function Studio() {
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [expectedSlots, setExpectedSlots] = useState<number[]>([]);
   const [video, setVideo] = useState<GuideVideo | null>(null);
+  const [firstFrameSlot, setFirstFrameSlot] = useState<number | null>(null);
+  const [frameModal, setFrameModal] = useState(false);
+  const [requestedProfile, setRequestedProfile] = useState<string | null>(null);
   const [editingVideo, setEditingVideo] = useState(false);
   const [subjects, setSubjects] = useState<SubjectBinding[]>([]);
   const [guideRepresentation, setGuideRepresentation] = useState<GuideRepresentation>('original');
@@ -162,7 +166,8 @@ export default function Studio() {
   const executionPrompt = prompt + (subjects.length && !subjectErrors ? '\n\n' + bindingPrompt(subjects, guideRepresentation) : '');
   const canExport = !!video?.range && !editingVideo && ready && !busy && (fixedRecipe
     ? activePictures.length === maxPictures
-    : pictures.length > 0 && !!prompt.trim() && !invalid.length && !subjectErrors);
+    // Motion's first-frame propagate model also runs from the prompt alone; the bridge rejects that for other models.
+    : (pictures.length > 0 || mode === 'motion') && !!prompt.trim() && !invalid.length && !subjectErrors);
   const selected = history.find(h => h.id === selectedId) || null;
   const filteredHistory = history.filter(h => historyFilter === 'all' || h.request.mode === historyFilter);
   const filteredTemplates = TEMPLATES.filter(x => templateFilter === 'all' || x.cat === templateFilter);
@@ -223,6 +228,7 @@ export default function Studio() {
     const item = pictures.find(p => p.slot === slot);
     if (item) URL.revokeObjectURL(item.url);
     setPictures(pictures.filter(p => p.slot !== slot));
+    if (slot === firstFrameSlot) setFirstFrameSlot(null);
     setSubjects(current => current.map(s => ({...s, picture_slots: s.picture_slots.filter(n => n !== slot)})));
   }
   async function autoPrompt() {
@@ -250,7 +256,8 @@ export default function Studio() {
       output_audio: {keep_source: keepAudio}, prompt: fixedRecipe ? '' : nativePrompt(executionPrompt), editor_prompt: fixedRecipe ? '' : prompt,
       subject_guidance: {representation: guideRepresentation, bindings: subjects, status: 'selection_only', marker_colors_are_output_appearance: false},
       video: {name: video.file.name, source_signature: guideSignature, conditioning: 'guide_latents', source_duration: video.duration, start_seconds: video.range.start, end_seconds: video.range.end, duration: selectedDuration},
-      pictures: activePictures.map(p => ({slot: p.slot, token: `<Picture ${p.slot}>`, name: p.file.name})), generation_status: 'not_submitted',
+      pictures: activePictures.map(p => ({slot: p.slot, token: `<Picture ${p.slot}>`, name: p.file.name})),
+      ...(mode === 'motion' && firstFrameSlot && activePictures.some(p => p.slot === firstFrameSlot) ? {first_frame_slot: firstFrameSlot} : {}), generation_status: 'not_submitted',
     };
   }
   async function importSettings(file?: File) {
@@ -272,6 +279,7 @@ export default function Studio() {
     if (['480p', '720p', '1080p', '1440p', '2160p'].includes(r.quality)) setQuality(r.quality);
     setSubjects(readSubjectBindings(r.subject_guidance?.bindings)); setGuideRepresentation(r.subject_guidance?.representation === '2d' ? '2d' : r.subject_guidance?.representation === '3d' ? '3d' : 'original'); setGuideSignature(r.video?.source_signature || '');
     if (typeof r.project === 'string') setProject(r.project);
+    setFirstFrameSlot(typeof r.first_frame_slot === 'number' ? r.first_frame_slot : null);
     setPrompt(r.editor_prompt ?? r.prompt ?? ''); setAudioConditioning(r.audio_conditioning?.enabled === true);
     setKeepAudio(r.output_audio?.keep_source !== false);
     if (r.processing) {setShotSeconds(r.processing.requested_seconds_per_shot || 4.5); setTimelineFps(r.processing.timeline_fps || 24); setContextFrames(r.processing.context_frames || 22);}
@@ -344,6 +352,13 @@ export default function Studio() {
 
   return <div className={`app-shell mode-${mode}`} style={style}>
     <SetupScreen lang={lang}/>
+    {frameModal && video?.range && <FirstFrameModal videoUrl={video.url} start={video.range.start} pictures={pictures.filter(p => p.slot !== firstFrameSlot)} lang={lang} onClose={() => setFrameModal(false)} onUse={file => {
+      const slot = firstFrameSlot ?? Array.from({length: maxPictures}, (_, i) => i + 1).find(i => !pictures.some(p => p.slot === i));
+      if (!slot) {setNotice(tr('Remove a picture to make room for the first frame.', 'Remova uma Picture para abrir espaço para o primeiro quadro.', 'Quita una imagen para dejar espacio al primer fotograma.')); return;}
+      setPictures(current => [...current.filter(p => {if (p.slot === slot) URL.revokeObjectURL(p.url); return p.slot !== slot;}), {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
+      setFirstFrameSlot(slot); setRequestedProfile('motion_ffp'); setFrameModal(false);
+      setNotice(tr(`Picture ${slot} is the edited first frame. The First-frame propagate model is selected; describe the edit in the prompt.`, `A Imagem ${slot} é o primeiro quadro editado. O modelo First-frame propagate foi selecionado; descreva a edição no prompt.`, `La Imagen ${slot} es el primer fotograma editado. Se seleccionó el modelo First-frame propagate; describe la edición en el prompt.`));
+    }}/>}
     {editingVideo && video && <VideoTrimModal file={video.file} url={video.url} initial={video.range} onConfirm={(range, duration) => {setVideo(v => v ? {...v, range, duration} : v); setEditingVideo(false);}} onCancel={() => {if (!video.range) removeVideo(); setEditingVideo(false);}}/>}
     <header className="topbar">
       <button className="wordmark" onClick={() => setView('studio')} aria-label="Henge Studio"><span className="brandmark"><Icon name="spark" size={23}/></span><strong>Henge</strong><span className="alpha mono">Studio · α</span></button>
@@ -377,7 +392,8 @@ export default function Studio() {
           {maxPictures > 0 && <section className={'input-card surface reference-dropzone ' + (draggingPictures ? 'dragging' : '')} onDragEnter={e => {e.preventDefault(); if (e.dataTransfer.types.includes('Files')) {pictureDragDepth.current++; setDraggingPictures(true);}}} onDragOver={e => {e.preventDefault(); e.dataTransfer.dropEffect = 'copy';}} onDragLeave={e => {e.preventDefault(); pictureDragDepth.current = Math.max(0, pictureDragDepth.current - 1); if (!pictureDragDepth.current) setDraggingPictures(false);}} onDrop={e => {e.preventDefault(); e.stopPropagation(); pictureDragDepth.current = 0; setDraggingPictures(false); addPictures(e.dataTransfer.files);}}>
             <div className="label-row"><h2><span className="step-number">02</span>{mode === 'headswap' ? tr('Face reference', 'Rosto de referência', 'Rostro de referencia') : t.refs}</h2><span className="mono muted">{String(activePictures.length).padStart(2, '0')} / {String(maxPictures).padStart(2, '0')}</span></div>
             <input data-testid="picture-input" hidden ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => {addPictures(e.target.files); e.target.value = '';}}/>
-            <div className="reference-grid">{activePictures.map(p => <div className="reference" key={p.slot}><img draggable={false} src={p.url} alt={`Picture ${p.slot}: ${p.file.name}`}/><button className="remove-ref" aria-label={`Remove Picture ${p.slot}`} onClick={() => removePicture(p.slot)}><Icon name="close" size={11}/></button><button className="ref-label mono nc" onClick={() => insertTag(`@Picture${p.slot}`)}>@Picture{p.slot}</button></div>)}{activePictures.length < maxPictures && <button className="add-reference" onClick={() => imageInput.current?.click()}><Icon name="plus" size={18}/><span>{t.add}</span></button>}</div>
+            <div className="reference-grid">{activePictures.map(p => <div className="reference" key={p.slot}><img draggable={false} src={p.url} alt={`Picture ${p.slot}: ${p.file.name}`}/><button className="remove-ref" aria-label={`Remove Picture ${p.slot}`} onClick={() => removePicture(p.slot)}><Icon name="close" size={11}/></button><button className="ref-label mono nc" onClick={() => insertTag(`@Picture${p.slot}`)}>@Picture{p.slot}</button>{p.slot === firstFrameSlot && <span className="first-frame-badge mono">{tr('1st frame', '1º quadro', '1er fotograma')}</span>}</div>)}{activePictures.length < maxPictures && <button className="add-reference" onClick={() => imageInput.current?.click()}><Icon name="plus" size={18}/><span>{t.add}</span></button>}</div>
+            {mode === 'motion' && video?.range && <button className="quiet-button first-frame-button" onClick={() => setFrameModal(true)}><Icon name="image" size={14}/>{firstFrameSlot ? tr('Change the edited first frame', 'Trocar o primeiro quadro editado', 'Cambiar el primer fotograma editado') : tr('Edit the first frame (FIBO or upload)', 'Editar o primeiro quadro (FIBO ou upload)', 'Editar el primer fotograma (FIBO o subir)')}</button>}
             <p className="micro-copy">{draggingPictures ? tr('Drop to add references', 'Solte para adicionar referências', 'Suelta para añadir referencias') : mode === 'headswap' ? tr('One clear photo of the new face. The head is placed on the person in the video.', 'Uma foto nítida do novo rosto. A cabeça é aplicada na pessoa do vídeo.', 'Una foto nítida del nuevo rostro. La cabeza se aplica a la persona del vídeo.') : tr('JPG, PNG, WebP · 25 MB each. Slots keep their numbers.', 'JPG, PNG, WebP · 25 MB cada. Os slots mantêm seus números.', 'JPG, PNG, WebP · 25 MB cada. Los slots conservan sus números.')}</p>
           </section>}
           <section className="input-card surface generation-settings-card" id="generation-settings"/>
@@ -426,7 +442,7 @@ export default function Studio() {
             <div className="prompt-footer">{!fixedRecipe && <><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></>}<div className="prompt-generation-actions" id="prompt-generation-actions"/></div>
           </section>
           <input hidden ref={importSettingsInput} type="file" accept="application/json,.json" onChange={e => {importSettings(e.target.files?.[0]); e.target.value = '';}}/>
-          <GenerationPanel key={importRevision} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
+          <GenerationPanel key={importRevision} requestedProfile={requestedProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
           </section>
         </section>
 

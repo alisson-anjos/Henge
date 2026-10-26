@@ -1,9 +1,10 @@
-"""Fixed-recipe modes: Head Swap and Sharpness (LMS).
+"""Fixed-recipe modes (Head Swap, Sharpness) and the VFX Edit FFP prompt.
 
 Unlike Character Swap / Motion, these follow published workflows with a fixed prompt
 (Alissonerdx/Minimax-H3-ComfyUI docs/head-swap.md and docs/lms.md), so planning
 does not ask the VLM to compose the H3 prompt.
 """
+import re
 from PIL import Image,ImageOps
 
 # mode -> (profile, min pictures, max pictures)
@@ -120,3 +121,14 @@ def character_reference(source,mask,dest,megapixels=.5,gray=(128,128,128)):
     scale=(megapixels*1024*1024/(flat.width*flat.height))**.5
     flat.resize((max(32,round(flat.width*scale)),max(32,round(flat.height*scale))),Image.LANCZOS).save(dest)
     return dest
+
+FFP_INSTRUCTION=("Rewrite this video edit request as ONE concise English sentence for a video editing model. First state the edit, "
+    "then state what must remain unchanged (for example identity, pose, motion, clothing, framing, lighting and background), but never "
+    "ask to preserve the very thing being changed. Keep every <Picture N> label exactly as written and do not invent others. Do not mention "
+    "<Video 1>. Return only the sentence. Request: {request}")
+
+def ffp_prompt(sentence,first_frame=None):
+    """Published VFX Edit rules: start with vfx_edit:, one sentence; an attached first frame must be named and its role explained."""
+    text='vfx_edit: '+re.sub(r'^\s*(vfx_edit:)?\s*','',sentence.strip()).strip().strip('"').strip()
+    if first_frame:text+=f' <Picture {first_frame}> is the edited first frame of the video: propagate its changes through the whole clip while keeping the original motion, timing and camera.'
+    return text

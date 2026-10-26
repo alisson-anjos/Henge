@@ -291,6 +291,15 @@
         "sharpness"
       ],
       "note": "Little More Sharpness IC-LoRA for LTX-2.5 (rank 16)."
+    },
+    {
+      "id": "ffp",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_ffp/vfx_ffp_solar05_fro_dyn99.safetensors",
+      "destination": "loras/henge/vfx_ffp_solar05_fro_dyn99.safetensors",
+      "profiles": [
+        "ffp"
+      ],
+      "note": "First-frame propagate: VFX Edit FFP r128 x1.0 + SolarRenderer control x0.5, Frobenius dyn99 (220 MB). Private dataset: needs HF_TOKEN."
     }
   ]
 }

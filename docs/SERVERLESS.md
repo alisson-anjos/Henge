@@ -57,6 +57,7 @@ Choose the model profiles (comma list), as on a normal pod:
 | `character` | Character Swap | base H3, text encoder, VAE, VLM planner; always needed |
 | `motion10500`, `motion4500` | Motion Transfer | private LoRAs: need the `hf_token` secret |
 | `solar` | Motion Transfer (Solar) | ~25 GB |
+| `ffp` | Motion Transfer · first-frame propagate (VFX Edit FFP + Solar, dyn99) | 220 MB, private: needs the `hf_token` secret |
 | `headswap` | Head Swap | |
 | `sharpness` | Sharpness (LTX-2.5 + Little More Sharpness, up to 4K) | ~40 GB; LTX-2.5 is gated: accept its license with the `hf_token` account |
 | `omniref` | OmniRef base | +22 GB |

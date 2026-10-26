@@ -1,5 +1,5 @@
 """Local Henge job bridge: durable jobs, validated VLM plans, ComfyUI API graphs."""
-import asyncio,base64,json,math,os,re,shutil,subprocess,threading,time,uuid
+import asyncio,base64,io,json,math,os,re,shutil,subprocess,threading,time,uuid
 from pathlib import Path
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
@@ -10,7 +10,7 @@ from PIL import Image,ImageDraw,ImageOps
 from workflows import MODELS,TURBOS,BASES,LTX_SHARPNESS_PROMPT,ltx_frames,ltx_sharpness_graph,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
-from edit_modes import MODES,FIXED_RECIPE,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
+from edit_modes import MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -95,6 +95,10 @@ def validate_request(r,options,slots):
         # Fixed-recipe modes build their own prompt; the profile is implied by the mode.
         r['prompt']=r['prompt'] or r['mode'];options['profile']=profile;options['enhance_prompt']=True
     elif not r['prompt'].strip():raise ValueError('Provide a valid direction and prompt')
+    # First-frame propagate also works from the prompt alone (no picture).
+    if MODELS.get(options.get('profile'),{}).get('ffp'):low=0
+    first=r.get('first_frame_slot')
+    if first is not None and (not isinstance(first,int) or first not in slots):raise ValueError('The first frame must be one of the attached pictures')
     if not low<=len(slots)<=high:raise ValueError('Attach exactly one face picture' if r['mode']=='headswap' else 'Sharpness uses only the video; remove the reference pictures' if r['mode']=='sharpness' else 'Attach 1–11 reference images')
     if r.get('quality') not in QUALITY:raise ValueError('Choose 480p, 720p, 1080p, 2K or 4K')
     if r['quality']=='2160p' and r['mode']!='sharpness':raise ValueError('4K output is only for Sharpness')
@@ -402,6 +406,13 @@ def planning(job):
         face=ask(FACE_INSTRUCTION,pictures[0][1],'vlm_picture_1',512)
         plan=fixed_plan('headswap',head_swap_prompt(face),'Replace only the head of the person in the video with the face from Picture 1; body, clothing, motion and scene stay unchanged.',face)
         save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the facial details before generating.',step=None,step_total=None);return
+    if MODELS.get(job['options'].get('profile'),{}).get('ffp'):
+        # VFX Edit FFP is prompted with one English sentence after vfx_edit:, not the H3 six-section format.
+        first=r.get('first_frame_slot')
+        sentence=ask(FFP_INSTRUCTION.format(request=r['prompt']),guide,'vlm_prompt',256) if job['options'].get('enhance_prompt',True) else r['prompt']
+        plan=fixed_plan('motion',ffp_prompt(sentence,first),'Edit the guide video as requested'+(f'; Picture {first} is the edited first frame to propagate.' if first else '.'))
+        plan['picture_roles']=[{'slot':s,'role':'style' if s==first else 'identity','description':'Edited first frame' if s==first else ''} for s in slots]
+        save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the edit prompt before generating.',step=None,step_total=None);return
     evidence=prompt_pipeline(ask,r['prompt'],r['mode'],pictures,guide,metadata,job['options'].get('enhance_prompt',True))
     (work/'vlm_evidence.json').write_text(json.dumps(evidence,indent=2,ensure_ascii=False))
     routing=dict(mode=r['mode'],request=r['prompt'],bindings=r.get('subject_guidance',{}),options=job['options'],
@@ -425,7 +436,7 @@ def generate(job):
         roles={str(x.get('slot')):x.get('role') for x in plan.get('picture_roles',[]) if isinstance(x,dict)}
         prepared=[];urls=[]
         for i,ref in enumerate(refs,1):
-            if roles.get(str(i)) in ('environment','style'):prepared.append(ref);continue
+            if roles.get(str(i)) in ('environment','style') or r.get('first_frame_slot')==i:prepared.append(ref);continue
             save(job,message=f'Removing the background of Picture {i}')
             outputs=execute_graph(job,mask_graph(ref,f'henge/{job["id"]}/mask_{i}'),f'reference_{i}')
             dest=character_reference(INPUT/ref,image_from_output(outputs,inp/f'mask_{i}.png'),inp/f'reference_{i}_prepared.png')
@@ -592,7 +603,7 @@ async def configure_connection(request:Request):
 @app.get('/jobs')
 def list_jobs():
     # Newest first by creation: a retried or long-running job keeps its place instead of jumping to the top.
-    jobs=[json.loads(p.read_text()) for p in JOBS.glob('*/job.json')]
+    jobs=[job for job in (json.loads(p.read_text()) for p in JOBS.glob('*/job.json')) if (job.get('request') or {}).get('mode')!='frame_edit']
     return [public(job) for job in sorted(jobs,key=lambda job:job.get('created',0),reverse=True)][:50]
 
 @app.post('/jobs')
@@ -663,6 +674,35 @@ def approve(jid:str):
         if job['status']!='awaiting_approval':raise HTTPException(409,'This job has no plan awaiting approval')
         save(job,status='queued_render',stage='queued',message='Plan approved; queued for generation')
     return public(job)
+
+@app.post('/frame-edit')
+async def frame_edit(request:Request):
+    """FIBO 2 edit of one frame (the first-frame modal): returns the edited PNG. Runs as a hidden job so it uses the same
+    ComfyUI or serverless path as generation."""
+    if not fibo_available():raise HTTPException(409,'Reference adaptation (FIBO) is not installed on this ComfyUI')
+    form=await request.form(max_files=12,max_fields=2,max_part_size=32*1024*1024)
+    instruction=str(form.get('instruction') or '').strip()
+    if not instruction or len(instruction)>4000:raise HTTPException(400,'Describe the edit')
+    jid=uuid.uuid4().hex;inp=INPUT/'henge'/jid;inp.mkdir(parents=True);job_path(jid).mkdir(parents=True)
+    files=[('frame',form.get('frame'))]+sorted(((k,v) for k,v in form.multi_items() if k.startswith('picture_')),key=lambda kv:kv[0])
+    staged=[]
+    for name,upload in files:
+        if not hasattr(upload,'read'):raise HTTPException(400,'Attach the frame as an image')
+        try:
+            with Image.open(io.BytesIO(await upload.read())) as im:dest=inp/f'{name}.png';im.convert('RGB').save(dest)
+        except OSError:raise HTTPException(400,f'{name} is not an image')
+        staged.append(str(dest.relative_to(INPUT)))
+    job={'id':jid,'created':time.time(),'status':'running','stage':'fibo_edit','progress':0,'request':{'mode':'frame_edit'},'options':{},'message':'Editing the frame'};save(job)
+    try:
+        # FIBO otherwise re-poses the picture (seen with a person swap): pin <image_1>'s composition and poses.
+        refs=''.join(f' <image_{i}> is a reference.' for i in range(2,len(staged)+1))
+        prompt=f'Edit <image_1>: {instruction}. Keep everything else in <image_1> exactly as it is: composition, every pose, camera angle, framing and lighting.{refs}'
+        outputs=await asyncio.to_thread(execute_graph,job,fibo_graph(staged[0],staged[1:],prompt,int(time.time())%2**31),'fibo_edit')
+        result=await asyncio.to_thread(image_from_output,outputs,inp/'edited.png')
+        save(job,status='completed',stage='complete',progress=1)
+    except Exception as e:
+        save(job,status='failed',error=str(e)[:1800]);raise HTTPException(500,f'Frame edit failed: {str(e)[:600]}')
+    return FileResponse(result,media_type='image/png')
 
 @app.post('/jobs/{jid}/retry')
 def retry(jid:str):

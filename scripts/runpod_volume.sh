@@ -12,7 +12,7 @@ set -euo pipefail
 DATACENTER=${DATACENTER:-EU-RO-1}
 VOLUME_GB=${VOLUME_GB:-150}
 IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:runpod-template}
-PROFILES=${PROFILES:-character,motion10500,motion4500,solar,headswap,sharpness,omniref,fibo}
+PROFILES=${PROFILES:-character,motion10500,motion4500,solar,ffp,headswap,sharpness,omniref,fibo}
 ENV_JSON=$(PROFILES=$PROFILES python3 -c 'import json,os;print(json.dumps({"HENGE_MODEL_PROFILES":os.environ["PROFILES"],"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"}))')
 # Any GPU with a CUDA 13 driver will do (it only downloads); the first one in stock is used.
 FILL_GPUS=${FILL_GPUS:-NVIDIA RTX PRO 6000 Blackwell Server Edition,NVIDIA A100-SXM4-80GB,NVIDIA L40S,NVIDIA RTX A6000,NVIDIA GeForce RTX 5090,NVIDIA GeForce RTX 4090}

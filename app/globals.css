@@ -459,3 +459,14 @@ img{display:block;max-width:100%}
 .community-card .template-caption{flex:1}
 .community-modes{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 14px 14px}
 .community-modes button{min-height:34px;font-size:11px;gap:6px;padding:0 8px;white-space:nowrap}
+/* First-frame propagate */
+.first-frame-badge{position:absolute;left:4px;top:4px;padding:2px 5px;border-radius:6px;background:var(--accent);color:#0a0a0f;font-size:8px}
+.first-frame-button{width:100%;margin-top:10px;min-height:34px;font-size:11px}
+.first-frame-panes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+.first-frame-panes figure{margin:0;display:grid;gap:6px;min-width:0}
+.first-frame-panes img,.first-frame-empty{width:100%;aspect-ratio:9/16;max-height:52vh;object-fit:contain;border-radius:12px;background:#13131b;border:1px solid #2a2a36}
+.first-frame-empty{display:grid;place-items:center;padding:16px;text-align:center;color:var(--muted);font-size:12px}
+.first-frame-controls{display:grid;gap:10px}
+.first-frame-controls label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
+.first-frame-controls textarea{min-height:70px;padding:10px;background:#13131b;color:var(--text);border:1px solid #2a2a36;border-radius:10px;font:inherit}
+@media(max-width:600px){.first-frame-panes{grid-template-columns:1fr}}
