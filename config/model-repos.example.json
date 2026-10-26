@@ -68,7 +68,8 @@
       "destination": "loras/henge/dmd_ref2va_8step.safetensors",
       "profiles": [
         "character",
-        "headswap"
+        "headswap",
+        "sharpness"
       ]
     },
     {
@@ -77,7 +78,8 @@
       "destination": "loras/henge/turbo_dmad_4step.safetensors",
       "profiles": [
         "character",
-        "headswap"
+        "headswap",
+        "sharpness"
       ],
       "note": "Optional turbo LoRA (4 steps)."
     },
@@ -87,7 +89,8 @@
       "destination": "loras/henge/turbo_pdmd_4step.safetensors",
       "profiles": [
         "character",
-        "headswap"
+        "headswap",
+        "sharpness"
       ],
       "note": "Optional turbo LoRA (4 steps, experimental)."
     },
@@ -97,7 +100,8 @@
       "destination": "loras/henge/turbo_pdmd_2step.safetensors",
       "profiles": [
         "character",
-        "headswap"
+        "headswap",
+        "sharpness"
       ],
       "note": "Optional turbo LoRA (2 steps, experimental)."
     },
@@ -107,7 +111,8 @@
       "destination": "loras/henge/turbo_lightx2v_8step_v1_1.safetensors",
       "profiles": [
         "character",
-        "headswap"
+        "headswap",
+        "sharpness"
       ],
       "note": "Optional turbo LoRA (8 steps)."
     },
@@ -117,7 +122,8 @@
       "destination": "loras/henge/turbo_lightx2v_4step_v1_0.safetensors",
       "profiles": [
         "character",
-        "headswap"
+        "headswap",
+        "sharpness"
       ],
       "note": "Optional turbo LoRA (4 steps)."
     },
@@ -259,60 +265,6 @@
       "note": "Optional base (22 GB): FastH3 OmniRef, distilled to 8 steps. Select it in Advanced > Base model with Turbo LoRA = None."
     },
     {
-      "id": "ltx_transformer",
-      "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
-      "destination": "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
-      "profiles": [
-        "sharpness"
-      ],
-      "note": "LTX-2.5 (gated: accept the license on huggingface.co/Lightricks/LTX-2.5 with the HF_TOKEN account)."
-    },
-    {
-      "id": "ltx_text_encoder",
-      "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
-      "destination": "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
-      "profiles": [
-        "sharpness"
-      ],
-      "note": "LTX-2.5 (gated: accept the license on huggingface.co/Lightricks/LTX-2.5 with the HF_TOKEN account)."
-    },
-    {
-      "id": "ltx_video_vae",
-      "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/vae/ltx-2.5-video-vae-bf16.safetensors",
-      "destination": "vae/ltx-2.5-video-vae-bf16.safetensors",
-      "profiles": [
-        "sharpness"
-      ],
-      "note": "LTX-2.5 (gated: accept the license on huggingface.co/Lightricks/LTX-2.5 with the HF_TOKEN account)."
-    },
-    {
-      "id": "ltx_audio_vae",
-      "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/vae/ltx-2.5-audio-vae-bf16.safetensors",
-      "destination": "vae/ltx-2.5-audio-vae-bf16.safetensors",
-      "profiles": [
-        "sharpness"
-      ],
-      "note": "LTX-2.5 (gated: accept the license on huggingface.co/Lightricks/LTX-2.5 with the HF_TOKEN account)."
-    },
-    {
-      "id": "ltx_spatial_upscaler",
-      "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
-      "destination": "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
-      "profiles": [
-        "sharpness"
-      ],
-      "note": "LTX-2.5 (gated: accept the license on huggingface.co/Lightricks/LTX-2.5 with the HF_TOKEN account). Sharpness above 720p: half-size pass, x2 latent upscale, refine."
-    },
-    {
-      "id": "sharpness",
-      "url": "https://huggingface.co/Alissonerdx/LTX-LoRAs/resolve/main/ltx25_little_more_sharpness_r16_v1.safetensors",
-      "destination": "loras/henge/ltx25_little_more_sharpness_r16_v1.safetensors",
-      "profiles": [
-        "sharpness"
-      ],
-      "note": "Little More Sharpness IC-LoRA for LTX-2.5 (rank 16)."
-    },
-    {
       "id": "ffp",
       "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_ffp/vfx_ffp_solar05_fro_dyn99.safetensors",
       "destination": "loras/henge/vfx_ffp_solar05_fro_dyn99.safetensors",
@@ -320,6 +272,24 @@
         "ffp"
       ],
       "note": "First-frame propagate: VFX Edit FFP r128 x1.0 + SolarRenderer control x0.5, Frobenius dyn99 (220 MB). Private dataset: needs HF_TOKEN."
+    },
+    {
+      "id": "sharpness",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/lms_v1_fro_dyn95.safetensors",
+      "destination": "loras/henge/lms_v1_fro_dyn95.safetensors",
+      "profiles": [
+        "sharpness"
+      ],
+      "note": "LMS sharpness LoRA extracted with Frobenius/SVD (dyn95). Private dataset: needs HF_TOKEN."
+    },
+    {
+      "id": "latent_upscaler",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/latent_upscaler/h3_upscaler_lms_v0.1.safetensors",
+      "destination": "latent_upscale_models/h3_upscaler_lms_v0.1.safetensors",
+      "profiles": [
+        "sharpness"
+      ],
+      "note": "MiniMax H3 3D latent upscaler (LBH-123-AI base, MIT) fine-tuned on the LMS data, for the H3 2K/4K upscale (DaSiWa MiniMaxH3 Enhanced Upscale)."
     }
   ]
 }

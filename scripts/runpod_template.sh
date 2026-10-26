@@ -21,6 +21,6 @@ common=(--name "$NAME" --image "$IMAGE" --container-disk-in-gb 30
   --ports "8188/http,8189/http,22/tcp" --port-labels "8188=Henge UI,8189=ComfyUI,22=SSH"
   --env "$ENV_JSON" --readme "$(cat docker/runpod-template-readme.md)")
 if [ -n "${TEMPLATE_ID:-}" ];then args=(template update "$TEMPLATE_ID" "${common[@]}")
-else args=(template create "${common[@]}" --volume-in-gb 220 --volume-mount-path /workspace);fi
+else args=(template create "${common[@]}" --volume-in-gb 180 --volume-mount-path /workspace);fi
 [ -n "${REGISTRY_AUTH_ID:-}" ] && args+=(--registry-auth-id "$REGISTRY_AUTH_ID")
 runpodctl "${args[@]}"

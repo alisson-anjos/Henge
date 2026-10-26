@@ -7,10 +7,10 @@ import requests
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageOps
-from workflows import split_at_every_cut,MODELS,TURBOS,BASES,LTX_SHARPNESS_PROMPT,LTX_REFINE_SIGMAS,ltx_frames,ltx_sharpness_graph,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
-from edit_modes import MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_sheet_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
+from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_sheet_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -84,8 +84,6 @@ def clamp_float(value,lo,hi,label):
 
 # Output short side. Sharpness above 720p renders a half-size LMS pass, then latent-upscales and refines at this size.
 QUALITY={'480p':480,'720p':720,'1080p':1080,'1440p':1440,'2160p':2160}
-# LTX-2.5 renders up to 20 s per clip at any resolution (720p to 4K): 481 frames at 24 fps, one shot per video up to that.
-LTX_SHOT_FRAMES=481
 UPSCALE_ABOVE=720
 
 def validate_request(r,options,slots):
@@ -107,9 +105,8 @@ def validate_request(r,options,slots):
     if not isinstance(options.get('enhance_prompt',True),bool):raise ValueError('Enhance prompt must be a boolean')
     if not isinstance(options.get('auto_approve',False),bool):raise ValueError('Auto-approve must be a boolean')
     if not isinstance(options.get('prepare_references',True),bool):raise ValueError('Reference preparation must be a boolean')
-    clamp_float(options.get('cfg',1.),1,12,'CFG');clamp_float(options.get('lora_strength',1.),0,2,'LoRA strength');clamp_float(options.get('upscale_denoise',.5),.1,1,'refine denoise')
-    if not isinstance(options.get('latent_upscale',True),bool):raise ValueError('Latent upscale must be a boolean')
-    if not isinstance(options.get('sharpen_first',False),bool):raise ValueError('Sharpen first must be a boolean')
+    clamp_float(options.get('cfg',1.),1,12,'CFG');clamp_float(options.get('lora_strength',1.),0,2,'LoRA strength');clamp_float(options.get('upscale_denoise',.15),0,1,'refine denoise');clamp_float(options.get('upscale_steps',1),1,8,'refine steps')
+    if upscale_method(options) not in UPSCALE_METHODS:raise ValueError('Upscale must be h3, nvidia or none')
     if clamp_float(options.get('structure_cfg',1.),1,3,'structure guidance')>1 and options.get('conditioning_mode','guide')!='tara':raise ValueError('Structure guidance is a TARA option')
     clamp_float(options.get('causal_chunk',5),1,32,'causal chunk');clamp_float(options.get('causal_window',6),1,16,'causal window')
     if r.get('processing',{}).get('mode')=='causal':
@@ -215,22 +212,15 @@ def fibo_available(info=None):
     except Exception:return False
     return 'TextEncodeFibo2' in info and FIBO_UNET in comfy_choices(info,'UNETLoader','unet_name')
 
-def sampler_label(graph,node):
-    """Name the pass a sampler runs: LTX Sharpness above 720p samples at the output size after the latent upscaler
-    (node '39'), optionally after an 8-step half-size pass (node '18')."""
-    if '39' not in graph or graph['39']['class_type']!='SamplerCustomAdvanced':return 'Sampling video'
-    if '18' not in graph:return 'Upscaling and sharpening'
-    return 'Pass 2/2 · refining the upscaled video' if str(node)=='39' else 'Pass 1/2 · sharpening at half size'
-
 def execute_serverless(job,graph,stage):
     (job_path(job['id'])/(stage+'.api.json')).write_text(json.dumps(graph,indent=2))
-    labels={'SamplerCustomAdvanced':'Sampling video','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit','RemoveBackground':'Removing the reference background'}
+    labels={'SamplerCustomAdvanced':'Sampling video','DaSiWaH3TiledUpscale':'Upscaling and refining with H3','DaSiWa_RTX_UpscalerRefiner':'Upscaling with NVIDIA RTX Video Super Resolution','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit','RemoveBackground':'Removing the reference background'}
     def on_status(rid,progress):
         if progress is None:save(job,prompt_id=rid,stage=stage,status='running',step=None,step_total=None,eta_seconds=None,seconds_per_step=None);return
         if progress.get('queued'):save(job,message='Waiting for a serverless worker (a cold start loads the models and can take minutes)');return
         if progress.get('message'):save(job,message=progress['message']);return
         patch={}
-        label=sampler_label(graph,progress.get('node')) if progress.get('class_type')=='SamplerCustomAdvanced' else labels.get(progress.get('class_type'))
+        label=labels.get(progress.get('class_type'))
         if label:patch['message']=label
         if progress.get('value') is not None and progress.get('max'):
             patch.update(step=int(progress['value']),step_total=int(progress['max']))
@@ -247,7 +237,7 @@ def execute_graph(job,graph,stage):
         sent=await asyncio.to_thread(FILES.upload_graph_inputs,graph)
         folder=job_path(job['id']);(folder/(stage+'.api.json')).write_text(json.dumps(sent,indent=2))
         client='henge-'+job['id'];pid=None;pace={}
-        labels={'SamplerCustomAdvanced':'Loading the video model into the GPU (the first run after a restart can take minutes)','KSampler':'Preparing appearance image','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
+        labels={'SamplerCustomAdvanced':'Loading the video model into the GPU (the first run after a restart can take minutes)','DaSiWaH3TiledUpscale':'Upscaling and refining with H3','DaSiWa_RTX_UpscalerRefiner':'Upscaling with NVIDIA RTX Video Super Resolution','KSampler':'Preparing appearance image','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(URL.replace('http://','ws://').replace('https://','wss://')+'/ws?clientId='+client,heartbeat=30) as ws:
                 async with session.post(URL+'/prompt',json={'prompt':sent,'client_id':client,'extra_data':{'henge_job':job['id'],'stage':stage}}) as res:
@@ -266,12 +256,12 @@ def execute_graph(job,graph,stage):
                                 if data.get('prompt_id',pid)==pid:
                                     if event.get('type')=='executing' and str(data.get('node')) in graph:
                                         kind=graph[str(data['node'])]['class_type']
-                                        label=sampler_label(graph,data['node']) if kind=='SamplerCustomAdvanced' else labels.get(kind)
+                                        label=labels.get(kind)
                                         if label:save(job,message=label,step=None,step_total=None)
                                     elif event.get('type')=='progress':
                                         maximum=max(1,int(data.get('max',1)));value=int(data.get('value',0));patch={'step':value,'step_total':maximum}
                                         if graph.get(str(data.get('node')),{}).get('class_type') in ('SamplerCustomAdvanced','HengeCausalSampler'):
-                                            patch['message']=sampler_label(graph,data.get('node'))
+                                            patch['message']=labels.get(graph[str(data.get('node'))]['class_type'],'Sampling video')
                                             # Measured pace after the first step (model loading excluded) -> remaining time, per sampler.
                                             now=time.monotonic();pace.setdefault(str(data.get('node')),(value,now))
                                             first_value,first_time=pace[str(data.get('node'))]
@@ -369,8 +359,8 @@ def mask_preview(job):
 
 def planning(job):
     if job['request']['mode']=='sharpness':
-        # LTX Little More Sharpness uses one fixed caption and no references: nothing to review, render directly.
-        plan=fixed_plan('sharpness',LTX_SHARPNESS_PROMPT,'Sharpen the selected interval with LTX-2.5 Little More Sharpness; motion, framing and timing come from the source video.')
+        # Little More Sharpness uses one fixed caption and no references: nothing to review, render directly.
+        plan=fixed_plan('sharpness',LMS_CAPTION,'Sharpen the selected interval with the LMS LoRA; motion, framing and timing come from the source video.')
         save(job,plan=plan,status='queued_render',stage='queued',progress=0,message='Queued for sharpening',step=None,step_total=None);return
     pictures,guide,metadata=prepare_evidence(job);r=job['request'];slots=[slot for slot,_ in pictures]
     work=job_path(job['id'])
@@ -486,6 +476,10 @@ def fibo_state(job):
     job=load(job['id'])
     return {'enabled':True,'sheet':req['sheet'],'instruction':req['instruction'],'default_instruction':req['default_instruction'],'ready':cached,'preview_url':job.get('fibo_preview_url') if cached else None}
 
+def upscale_method(options):
+    """Sharpness above 720p: h3 | nvidia | none (older jobs only carry latent_upscale)."""
+    return options.get('upscale_method') or ('h3' if options.get('latent_upscale',True) else 'none')
+
 CUT_MODES=('fit','every','off')
 
 def cut_mode(job):
@@ -511,9 +505,6 @@ def plan_shots(job):
     in 24 fps frames from the selected start, plus the context length carried between continuing shots."""
     r=job['request'];processing=r['processing']
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24))
-    if r['mode']=='sharpness':
-        # LTX shots: 8n+1 frames, no context overlap (the source guide keeps consecutive shots aligned).
-        return [{**shot,'length':ltx_frames(shot['frames'])} for shot in split_frames(total,LTX_SHOT_FRAMES,0)],0
     per=max(22,min(362,5+17*math.floor((round(processing['requested_seconds_per_shot']*24)-5)/17)))
     if processing.get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
     context=min(processing.get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17))
@@ -547,10 +538,16 @@ def generate(job):
     def size(short):scale=short/min(width,height);return max(32,round(width*scale/32)*32),max(32,round(height*scale/32)*32)
     short=QUALITY[r['quality']];W,H=size(short);upscale=None
     causal=r['processing'].get('mode')=='causal'
-    if r['mode']=='sharpness' and options.get('latent_upscale',True) and short>UPSCALE_ABOVE:
-        # LTX two-pass: sharpen at half the output size, then the x2 spatial latent upscaler and a short refine pass
-        # guided by the source at the output size. The upscaler doubles exactly, so the output size is 2x the first.
-        w,h=size(short//2);W,H=w*2,h*2;upscale={'denoise':options.get('upscale_denoise',.9),'sharpen_first':options.get('sharpen_first',False)}
+    method=upscale_method(options)
+    if r['mode']=='sharpness' and method!='none' and short>UPSCALE_ABOVE:
+        # Sharpen at half the output size, then double it (h3: learned latent upscaler + short tiled H3 refine;
+        # nvidia: RTX Video Super Resolution on the frames). Both double exactly, so the output is 2x the render.
+        w,h=size(short//2);W,H=w*2,h*2;upscale={'method':method,'steps':options.get('upscale_steps',1),'denoise':options.get('upscale_denoise',.15)}
+        if method=='h3':
+            choices=comfy_choices(comfy_info(),'DaSiWaH3TiledUpscale','upscale_model')
+            upscale['model']=next((m for m in H3_UPSCALERS if m in choices),None)
+            if not upscale['model']:raise ValueError('H3 upscale needs DaSiWa nodes and a latent upscaler in models/latent_upscale_models (h3_upscaler_lms_v0.1); choose NVIDIA or no upscale')
+        elif 'DaSiWa_RTX_UpscalerRefiner' not in comfy_info():raise ValueError('NVIDIA upscale needs the DaSiWa nodes with nvidia-vfx; choose H3 or no upscale')
     else:w,h=W,H
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];shots,context=plan_shots(job)
     # Sparse bindings cannot be silently attached to a different actor after a temporal cut.
@@ -576,13 +573,10 @@ def generate(job):
         name=f'shot_{i:03d}.mp4';path=inp/name;t=start+shot['start']/24;duration=shot['frames']/24
         args=['ffmpeg','-v','error','-ss',str(t),'-i',str(INPUT/assets['video']),'-t',str(duration),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-c:v','libx264','-threads','2','-crf','18','-pix_fmt','yuv420p','-c:a','aac','-y',str(path)];run(args)
         relative=str(path.relative_to(INPUT));context_rel=None
-        if previous is not None and r['mode']!='sharpness':
+        if previous is not None:
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
-        if r['mode']=='sharpness':
-            graph=ltx_sharpness_graph(relative,w,h,shot['length'],shot['frames'],seed+i,int(options.get('steps',8)),options.get('lora_strength',.8),upscale);result_node,guide_node='22',None
-        else:
-            graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None);result_node,guide_node='17','18'
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale);result_node,guide_node='17','18'
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
         results=output_files(outputs,result_node,'videos');guides=output_files(outputs,guide_node,'videos') if guide_node else []
         if not results:raise ValueError('ComfyUI finished without the expected video')
@@ -659,7 +653,9 @@ def health():
     models={key:{**value,'available':unknown or value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed) and (not value.get('unet') or value['unet'] in unets) and mode_ready[key]} for key,value in MODELS.items()}
     turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
-    return {'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
+    # Sharpness 2K/4K upscalers (DaSiWa nodes): the H3 one also needs a learned latent upscaler checkpoint.
+    upscalers={'h3':unknown or any(m in comfy_choices(info,'DaSiWaH3TiledUpscale','upscale_model') for m in H3_UPSCALERS),'nvidia':unknown or 'DaSiWa_RTX_UpscalerRefiner' in info}
+    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -904,11 +900,10 @@ def job_settings(job):
     o=job.get('options') or {};model=MODELS.get(o.get('profile',''),{});plan=job.get('plan') or {}
     job={**(job.get('request') or {}),**job}
     parts=[(job.get('mode') or '').replace('_',' ').title(),'LoRA '+model.get('label',o.get('profile',''))]
-    if model.get('engine')=='ltx':
-        upscaled=o.get('latent_upscale',True) and QUALITY.get(job.get('quality'),0)>UPSCALE_ABOVE
-        parts+=[f"strength {o.get('lora_strength',.8)}",'latent upscale'+(' + sharpen first' if o.get('sharpen_first') else '')+f" (denoise {o.get('upscale_denoise',.9)})" if upscaled else 'no upscale']
-        if upscaled and not o.get('sharpen_first'):o={**o,'steps':len(LTX_REFINE_SIGMAS)-1}
-    else:
+    if job.get('mode')=='sharpness' and QUALITY.get(job.get('quality'),0)>UPSCALE_ABOVE:
+        method=upscale_method(o)
+        parts.append({'h3':f"H3 upscale x2 ({o.get('upscale_steps',1)} steps, denoise {o.get('upscale_denoise',.15)})",'nvidia':'NVIDIA RTX VSR x2'}.get(method,'no upscale'))
+    if job.get('mode')!='sharpness':
         parts+=[f"guidance {o.get('conditioning_mode','guide').upper()}",f"turbo {TURBOS.get(o.get('turbo','dmd8'),{}).get('label',o.get('turbo'))}",f"CFG {o.get('cfg',1)}"]
         if o.get('base','h3')!='h3':parts.append(BASES.get(o['base'],{}).get('label',o['base']))
         if plan.get('representation','original')!='original':parts.append(f"guide {plan['representation']}")

@@ -32,3 +32,5 @@ SOFTWARE.
 Bricolage Grotesque, Geist and Geist Mono are bundled locally from Google Fonts under the SIL Open Font License 1.1. The full copyright and license notices are in `public/fonts/*-OFL.txt`.
 
 The Studio + History visual reference and its supplied artwork were provided by the project owner in the Claude Design export.
+
+- [ComfyUI-DaSiWa-Nodes](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes) (GPLv3; latent-upscaler architecture MIT): installed as a separate ComfyUI custom-node pack in the Docker image for the Sharpness 2K/4K upscalers. Not bundled in this repository.

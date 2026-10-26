@@ -73,8 +73,9 @@ python main.py --listen 127.0.0.1 --port 8189 --lowvram --preview-method taesd
 
 The H3 sampling preview needs `models/vae_approx/taeh3.safetensors`. The UI does
 not need ComfyUI to be publicly exposed. If you use a custom-node whitelist,
-include `henge` and `bfsnodes`. Sharpness runs on LTX-2.5 with ComfyUI's native LTX nodes (no
-custom node); its files come with the `sharpness` model profile.
+include `henge`, `bfsnodes` and `ComfyUI-DaSiWa-Nodes` (the Sharpness 2K/4K upscalers:
+[ComfyUI-DaSiWa-Nodes](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes); the NVIDIA one also needs
+`pip install nvidia-vfx` and an RTX GPU). Its files come with the `sharpness` model profile.
 
 ## 4. Start the job bridge
 

@@ -25,6 +25,8 @@ ENTRYPOINT ["python", "/app/docker/entrypoint.py"]
 FROM ${PYTORCH_IMAGE} AS runtime
 ARG COMFY_REF=f5ea88af1c46c50a39792d00af80e5af941f99f6
 ARG BFS_REF=1360d01fbfb57fe69cd7c54bc0789c4847826b5b
+# DaSiWa nodes (GPLv3, separate pack): MiniMaxH3 Enhanced Upscale and RTX Upscaler & Refiner for Sharpness 2K/4K.
+ARG DASIWA_REF=c0fa32554530c98f8cf6f01445c5891be6456d2d
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
     COMFY_ROOT=/opt/ComfyUI COMFY_BASE_URL=http://127.0.0.1:8189 \
     HENGE_BACKEND_URL=http://127.0.0.1:8766 HENGE_DATA_DIR=/state/jobs \
@@ -35,12 +37,14 @@ ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
 RUN apt-get update && apt-get install -y --no-install-recommends git ffmpeg ca-certificates openssh-server curl libgl1 libglib2.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git /opt/ComfyUI && git -C /opt/ComfyUI checkout "$COMFY_REF" \
  && git clone https://github.com/alisson-anjos/ComfyUI-BFSNodes.git /opt/ComfyUI/custom_nodes/bfsnodes \
- && git -C /opt/ComfyUI/custom_nodes/bfsnodes checkout "$BFS_REF"
+ && git -C /opt/ComfyUI/custom_nodes/bfsnodes checkout "$BFS_REF" \
+ && git clone https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes.git /opt/ComfyUI/custom_nodes/ComfyUI-DaSiWa-Nodes \
+ && git -C /opt/ComfyUI/custom_nodes/ComfyUI-DaSiWa-Nodes checkout "$DASIWA_REF"
 COPY --from=web /usr/local/bin/node /usr/local/bin/node
 COPY --from=web /app /app
 # Pin the base image's torch stack so custom-node requirements cannot swap the CUDA build.
 RUN python -m pip freeze | grep -iE '^(torch|torchvision|torchaudio)==' > /tmp/torch-constraints.txt || true; cat /tmp/torch-constraints.txt \
- && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt runpod==1.12.0 \
+ && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt runpod==1.12.0 psutil nvidia-vfx \
  && ln -s /app/backend/comfy_nodes/henge /opt/ComfyUI/custom_nodes/henge \
  && python -c "import torch;print('torch',torch.__version__,'cuda',torch.version.cuda)"
 # Optional TARA one-pass Kitchen kernel: source pinned here, the per-GPU binary is installed at boot.

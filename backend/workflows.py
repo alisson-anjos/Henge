@@ -19,14 +19,7 @@ MODELS={
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
  'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/head_swap_v1_0_r32.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False,'scheduler':'beta'},
- # Sharpness runs on LTX-2.5, not H3: the Little More Sharpness IC-LoRA with the source as an aligned guide.
- 'sharpness':{'task':'sharpness','engine':'ltx','label':'Little More Sharpness · LTX-2.5','lora':'henge/ltx25_little_more_sharpness_r16_v1.safetensors','adapter':None,'clip_context':False,
-              'unet':'ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors',
-              'files':[('ltx','LTX-2.5 22B distilled','diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors'),
-                       ('ltx_text','LTX-2.5 text encoder (Gemma 4 12B)','text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors'),
-                       ('ltx_vae','LTX-2.5 video VAE','vae/ltx-2.5-video-vae-bf16.safetensors'),
-                       ('ltx_audio_vae','LTX-2.5 audio VAE','vae/ltx-2.5-audio-vae-bf16.safetensors'),
-                       ('ltx_upscaler','LTX-2.5 spatial upscaler x2','latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors')]},
+ 'sharpness':{'task':'sharpness','label':'LMS Sharpness v1 · fro dyn95','lora':'henge/lms_v1_fro_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
 }
 # Swappable speed LoRAs. Swap modes load it in place of an adapter; Motion stacks it on training
 # adapter V2 (what the motion LoRAs were trained on).
@@ -45,6 +38,13 @@ BASES={
  'h3':{'label':'MiniMax H3 ref2va','unet':'minimax_h3_ref2va_pruned_int8_convrot.safetensors'},
  'omniref':{'label':'FastH3 OmniRef 8-step (FastVideo)','unet':'fasth3_omniref_8step_pruned_int8_convrot.safetensors'},
 }
+# Sharpness above 720p renders at half the output size, then doubles it with one of two upscalers:
+# h3: DaSiWa MiniMaxH3 Enhanced Upscale (learned H3 latent upscaler, then a short tiled refine by the same H3 model);
+# nvidia: DaSiWa RTX Upscaler & Refiner (NVIDIA RTX Video Super Resolution on the decoded frames, no diffusion).
+UPSCALE_METHODS=('h3','nvidia','none')
+# Learned H3 latent upscalers, preferred first (LBH-123-AI 3D upscaler, MIT; ours is fine-tuned on the LMS data).
+H3_UPSCALERS=('h3_upscaler_lms_v0.1.safetensors','minimax_h3_latent_upscaler_3d_bf16.safetensors')
+
 def node(kind,**inputs):return {'class_type':kind,'inputs':inputs}
 def grid_frames(n):return max(5,math.ceil((n-5)/17)*17+5)
 def split_frames(total,per_shot,context):
@@ -58,7 +58,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
@@ -111,9 +111,23 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         g['9']['inputs'].update(context_images=['20',0],context_count=context_count)
         if conditioning_mode=='tara' and context_prompt:
             g['9']['inputs']['prompt']+=f' <Picture {len(refs)+1}> is the preceding generated final frame, used only for scene/identity continuity. Follow the current Video 1 performance and timing; do not freeze its pose or override the assigned reference identities.'
+    if upscale:
+        # Output at twice the rendered size (`width`/`height` are the render size); see UPSCALE_METHODS.
+        W,H=width*2,height*2
+        if upscale['method']=='h3':
+            g['30']=node('DaSiWaH3TiledUpscale',model=g['10']['inputs']['model'],conditioning=['9',0],latent=['14',0],scale=2.,upscale_model=upscale['model'],
+                         steps=int(upscale.get('steps',1)),denoise=float(upscale.get('denoise',.15)),seed=seed+1000,cfg=1.,sampler_name='euler',scheduler='simple',spike_guard=True)
+            g['15']['inputs']['av_latent']=['30',0]
+            # 2K/4K frames: decode in tiles so the VAE fits beside the model.
+            g['16']=node('VAEDecodeTiled',samples=['15',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
+        elif upscale['method']=='nvidia':
+            g['30']=node('DaSiWa_RTX_UpscalerRefiner',images=['16',0],denoise=False,denoise_quality='Ultra',deblur=False,deblur_quality='Ultra',upscale='VSR',upscale_quality='Ultra',
+                         resize_type='Manual',scale=2.,megapixels=2.,width=W,height=H,divisible_by='8',ratio_preset='16:9',resize_method='Center Crop (Fill)',device_id=0,chunking=True)
+            g['17']['inputs']['images']=['30',0]
+        else:raise ValueError('Unknown upscale method')
     if causal:
         # One render for the whole interval, chunk by chunk against a key/value cache (no shot seams).
-        if conditioning_mode!='guide' or representation=='mask':raise ValueError('Causal rendering needs Guide Latents and no latent mask')
+        if conditioning_mode!='guide' or representation=='mask' or upscale:raise ValueError('Causal rendering needs Guide Latents, no latent mask and no upscale')
         g['14']=node('HengeCausalSampler',model=g['10']['inputs']['model'],positive=['9',0],latent=['9',1],seed=seed,steps=steps,
                      chunk=int(causal.get('chunk',5)),window=int(causal.get('window',6)),sampler='euler',cache='auto')
         for k in ('10','11','12','13','24'):g.pop(k,None)
@@ -184,76 +198,3 @@ def split_on_cuts(total,per_shot,context,cuts,min_gap=24):
     return output
 
 
-LTX={'unet':MODELS['sharpness']['unet'],'clip':'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors','vae':'ltx-2.5-video-vae-bf16.safetensors',
-     'audio_vae':'ltx-2.5-audio-vae-bf16.safetensors','upscaler':'ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors'}
-LTX_SHARPNESS_PROMPT='Enhance this video with sharp, crisp details while preserving a natural photorealistic appearance.'
-# Second pass after the x2 latent upscale: the LTX distilled refine schedule, scaled by the requested denoise.
-LTX_REFINE_SIGMAS=(0.909375,0.725,0.421875,0.)
-
-
-def ltx_frames(n):return max(9,math.ceil((n-1)/8)*8+1)
-
-
-def bong_tangent(steps,start=1.,middle=.5,end=0.,pivot_1=.6,pivot_2=.6,slope_1=.2,slope_2=.2):
-    """RES4LYF's bong_tangent scheduler (the published Little More Sharpness workflow), computed here so the
-    graph needs only ComfyUI's ManualSigmas instead of the RES4LYF custom nodes."""
-    def tangent(n,slope,pivot,a,b):
-        f=lambda x:((2/math.pi)*math.atan(-slope*(x-pivot))+1)/2
-        hi,lo=f(0),f(n-1)
-        return [(f(x)-lo)/(hi-lo)*(a-b)+b for x in range(n)]
-    steps+=2;midpoint=int((steps*pivot_1+steps*pivot_2)/2);p1,p2=int(steps*pivot_1),int(steps*pivot_2)
-    slope_1,slope_2=slope_1/(steps/40),slope_2/(steps/40);second=steps-midpoint;first=steps-second
-    return tangent(first,slope_1,p1,start,middle)[:-1]+tangent(second,slope_2,p2-first,middle,end)
-
-
-def ltx_sharpness_graph(video,width,height,length,trim_frames,seed,steps=8,lora_strength=.8,upscale=None):
-    """Little More Sharpness on LTX-2.5: the source video is both the encoded latent and an aligned IC-LoRA guide.
-    With upscale={'denoise'}, a second pass refines at twice the size after LTX's x2 spatial latent upscaler, guided
-    by the same video loaded at that size; `width`/`height` are the first-pass size. upscale['sharpen_first'] False
-    skips the 8-step half-size pass: the source latent goes straight to the upscaler and the short LoRA pass at the
-    output size does all the sharpening."""
-    sigmas=lambda values:','.join(f'{v:.6f}' for v in values)
-    g={
-      '1':node('UNETLoader',unet_name=LTX['unet'],weight_dtype='default'),
-      '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=MODELS['sharpness']['lora'],strength_model=float(lora_strength)),
-      '3':node('CLIPLoader',clip_name=LTX['clip'],type='ltxv',device='default'),
-      '4':node('VAELoader',vae_name=LTX['vae']),
-      '5':node('VAELoader',vae_name=LTX['audio_vae']),
-      '6':node('CLIPTextEncode',clip=['3',0],text=LTX_SHARPNESS_PROMPT),
-      '7':node('LTXVConditioning',positive=['6',0],negative=['6',0],frame_rate=24.),
-      '8':node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length),
-      '9':node('LTXVPreprocess',image=['8',0],img_compression=0),
-      '10':node('VAEEncode',pixels=['9',0],vae=['4',0]),
-      '11':node('LTXVAddGuide',positive=['7',0],negative=['7',1],vae=['4',0],latent=['10',0],image=['9',0],frame_idx=0,strength=1.),
-      '12':node('LTXVEmptyLatentAudio',frames_number=length,frame_rate=24.,batch_size=1,audio_vae=['5',0]),
-      '13':node('LTXVConcatAVLatent',video_latent=['11',2],audio_latent=['12',0]),
-      '14':node('CFGGuider',model=['2',0],positive=['11',0],negative=['11',1],cfg=1.),
-      '15':node('RandomNoise',noise_seed=seed),
-      '16':node('KSamplerSelect',sampler_name='euler_ancestral_cfg_pp'),
-      '17':node('ManualSigmas',sigmas=sigmas(bong_tangent(steps))),
-      '18':node('SamplerCustomAdvanced',noise=['15',0],guider=['14',0],sampler=['16',0],sigmas=['17',0],latent_image=['13',0]),
-      '19':node('LTXVSeparateAVLatent',av_latent=['18',0]),
-      '20':node('LTXVCropGuides',positive=['11',0],negative=['11',1],latent=['19',0]),
-      '21':node('VAEDecode',samples=['20',2],vae=['4',0]),
-      '22':node('HengeSaveVideo',images=['21',0],filename=video.replace('.mp4','_result.mp4'),trim_frames=trim_frames,fps=24.),
-    }
-    if upscale:
-        scale=float(upscale['denoise'])/LTX_REFINE_SIGMAS[0]
-        g['30']=node('LatentUpscaleModelLoader',model_name=LTX['upscaler'])
-        first=upscale.get('sharpen_first',False)
-        g['31']=node('LTXVLatentUpsampler',samples=['20',2] if first else ['10',0],upscale_model=['30',0],vae=['4',0])
-        g['32']=node('HengeLoadShot',video=video,pictures='[]',width=width*2,height=height*2,length=length)
-        g['33']=node('LTXVPreprocess',image=['32',0],img_compression=0)
-        g['34']=node('LTXVAddGuide',positive=['20',0] if first else ['7',0],negative=['20',1] if first else ['7',1],vae=['4',0],latent=['31',0],image=['33',0],frame_idx=0,strength=1.)
-        g['35']=node('LTXVConcatAVLatent',video_latent=['34',2],audio_latent=['12',0])
-        g['36']=node('CFGGuider',model=['2',0],positive=['34',0],negative=['34',1],cfg=1.)
-        g['37']=node('RandomNoise',noise_seed=seed+1000)
-        g['38']=node('ManualSigmas',sigmas=sigmas([min(1.,v*scale) for v in LTX_REFINE_SIGMAS]))
-        g['39']=node('SamplerCustomAdvanced',noise=['37',0],guider=['36',0],sampler=['16',0],sigmas=['38',0],latent_image=['35',0])
-        g['40']=node('LTXVSeparateAVLatent',av_latent=['39',0])
-        g['41']=node('LTXVCropGuides',positive=['34',0],negative=['34',1],latent=['40',0])
-        # Two-pass sizes reach 2K/4K: decode in tiles so the VAE fits beside the model.
-        g['21']=node('VAEDecodeTiled',samples=['41',2],vae=['4',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
-        if not first:
-            for k in ('11','13','14','15','17','18','19','20'):del g[k]
-    return g

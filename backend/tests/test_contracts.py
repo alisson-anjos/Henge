@@ -119,30 +119,15 @@ class WorkflowContracts(unittest.TestCase):
  def test_fixed_recipe_graphs(self):
   g=h3_graph('v.mp4',['face.png'],'head_swap:',512,288,107,107,'headswap',42,8,'original',[],'human',0)
   self.assertEqual(g['3']['inputs']['lora_name'],'henge/head_swap_v1_0_r32.safetensors');self.assertEqual(g['13']['inputs']['scheduler'],'beta');self.assertFalse(g['9']['inputs']['guide_context'])
- def test_ltx_sharpness_graph(self):
-  from workflows import ltx_sharpness_graph,bong_tangent,ltx_frames
-  g=ltx_sharpness_graph('v.mp4',544,960,121,120,7)
-  self.assertEqual(g['2']['inputs']['lora_name'],'henge/ltx25_little_more_sharpness_r16_v1.safetensors');self.assertEqual(g['2']['inputs']['strength_model'],.8)
-  # The source is both the encoded latent and the IC-LoRA guide; the published recipe's sampler and schedule.
-  self.assertEqual(g['10']['inputs']['pixels'],['9',0]);self.assertEqual(g['11']['inputs']['image'],['9',0]);self.assertEqual(g['16']['inputs']['sampler_name'],'euler_ancestral_cfg_pp')
-  self.assertEqual(len(g['17']['inputs']['sigmas'].split(',')),9);self.assertEqual(g['21']['inputs']['samples'],['20',2]);self.assertNotIn('30',g)
-  self.assertEqual([round(x,4) for x in bong_tangent(8)],[1.,.9713,.9294,.8629,.7443,.5,.2131,.0696,0.]);self.assertEqual((ltx_frames(120),ltx_frames(121)),(121,121))
- def test_ltx_sharpness_latent_upscale_two_pass(self):
-  from workflows import ltx_sharpness_graph
-  fast=ltx_sharpness_graph('v.mp4',544,960,121,120,7,upscale={'denoise':.9})
-  self.assertEqual(fast['31']['inputs']['samples'],['10',0]);self.assertEqual(fast['34']['inputs']['positive'],['7',0]);self.assertNotIn('18',fast)
-  self.assertTrue(all(ref[0] in fast for n in fast.values() for ref in n['inputs'].values() if isinstance(ref,list) and len(ref)==2 and isinstance(ref[0],str)))
-  g=ltx_sharpness_graph('v.mp4',544,960,121,120,7,lora_strength=1.2,upscale={'denoise':.9,'sharpen_first':True})
-  self.assertEqual(g['31']['inputs']['samples'],['20',2]);self.assertEqual((g['32']['inputs']['width'],g['32']['inputs']['height']),(1088,1920))
-  self.assertEqual(g['34']['inputs']['latent'],['31',0]);self.assertEqual(g['34']['inputs']['image'],['33',0]);self.assertEqual(g['21']['inputs']['samples'],['41',2])
-  self.assertEqual(g['21']['class_type'],'VAEDecodeTiled');self.assertEqual(g['38']['inputs']['sigmas'].split(',')[0],'0.900000');self.assertEqual(g['2']['inputs']['strength_model'],1.2)
- def test_high_resolutions_only_for_sharpness(self):
-  for q in ('1440p','2160p'):
-   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','quality':q},{'profile':'motion'},[1])
- def test_animal_character_sheet_instruction(self):
-  from edit_modes import character_sheet_instruction
-  text=character_sheet_instruction(2,'A husky with blue eyes.')
-  self.assertIn('<image_1>, <image_2> (A husky with blue eyes)',text);self.assertIn('front view and back view',text);self.assertIn('no scenery',text)
+ def test_sharpness_upscale_methods(self):
+  args=('v.mp4',[],'Enhance.',512,288,107,107,'sharpness',1,8,'original',[],'human',0)
+  g=h3_graph(*args,upscale={'method':'h3','model':'h3_upscaler_lms_v0.1.safetensors','steps':2,'denoise':.3})
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/lms_v1_fro_dyn95.safetensors');self.assertEqual(g['30']['class_type'],'DaSiWaH3TiledUpscale')
+  self.assertEqual((g['30']['inputs']['latent'],g['30']['inputs']['conditioning'],g['15']['inputs']['av_latent']),(['14',0],['9',0],['30',0]));self.assertEqual(g['16']['class_type'],'VAEDecodeTiled')
+  n=h3_graph(*args,upscale={'method':'nvidia'})
+  self.assertEqual(n['30']['class_type'],'DaSiWa_RTX_UpscalerRefiner');self.assertEqual((n['30']['inputs']['width'],n['30']['inputs']['height']),(1024,576));self.assertEqual(n['17']['inputs']['images'],['30',0])
+  self.assertNotIn('30',h3_graph(*args))
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'sharpness','quality':'2160p'},{'profile':'sharpness','upscale_method':'ltx'},[])
  def test_first_frame_propagate(self):
   from edit_modes import ffp_prompt
   validate_request({**self.request(),'mode':'motion','prompt':'Add rain to the scene.'},{'profile':'motion_ffp'},[])

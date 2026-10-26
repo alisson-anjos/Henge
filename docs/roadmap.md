@@ -13,5 +13,5 @@ Export the validated H3 API workflow and map guide video, ordered reference slot
 - Finalize and evaluate both VLM prompt templates against the training prompt contract.
 - Persist projects and media, job history, output comparison and reproducible retries.
 - Add explicit in/out clip selection and then optional per-shot planning.
-- Sharpness runs on LTX-2.5 (Little More Sharpness IC-LoRA, x2 latent upscale); evaluate its quality per output size.
+- Sharpness 2K/4K: compare the H3 upscaler (refine denoise invents fine detail) with NVIDIA RTX VSR on real footage.
 - Prepare reproducible deployment instructions, original demo assets and competition submission.

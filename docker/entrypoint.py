@@ -64,7 +64,7 @@ def supervise(commands):
             except subprocess.TimeoutExpired:p.kill()
 
 def comfy_command(host,args):
-    return ([sys.executable,'main.py','--listen',host,'--port','8189','--preview-method','taesd',*args,'--disable-all-custom-nodes','--whitelist-custom-nodes','henge','bfsnodes'],COMFY)
+    return ([sys.executable,'main.py','--listen',host,'--port','8189','--preview-method','taesd',*args,'--disable-all-custom-nodes','--whitelist-custom-nodes','henge','bfsnodes','ComfyUI-DaSiWa-Nodes'],COMFY)
 
 def install_tara_kernel():
     # TARA's one-pass Kitchen kernel depends on the GPU (SM80...SM120), so it is installed at boot.
