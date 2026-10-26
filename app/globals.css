@@ -545,3 +545,7 @@ img{display:block;max-width:100%}
 .likeness-warning{margin:6px 0;padding:9px 11px;border:1px solid #f0b42966;border-radius:8px;background:#f0b4290f;color:#f0c35a;font-size:12px}
 .backend-banner{position:sticky;top:0;z-index:70;display:flex;align-items:center;gap:10px;padding:9px 16px;background:#2a1f0c;border-bottom:1px solid #f0b42966;color:#f0c35a;font-size:13px}
 .backend-banner .setup-dot{width:8px;height:8px;border-radius:50%;background:#f0b429;flex-shrink:0}
+.generation-card{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.generation-open{display:flex;flex-direction:column;text-align:left;width:100%;background:none;border:0;padding:0;color:inherit;cursor:pointer}
+.generation-downloads{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}
+.generation-downloads a{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;font-size:11px}
