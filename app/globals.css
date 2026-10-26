@@ -558,3 +558,8 @@ img{display:block;max-width:100%}
 .history-model{padding:9px 12px;border:1px solid var(--line);border-radius:999px;background:#0c0c11;color:inherit;font:inherit;font-size:13px}
 .history-caption .job-model{font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .history-caption .job-time{font-size:10px}
+.bring-reference{border:1.5px dashed var(--accent)!important;color:var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center}
+.bring-reference small{font-size:9px;line-height:1.2;color:var(--muted);padding:0 4px}
+.missing-pictures button{margin-left:6px;padding:4px 10px;font-size:12px}
+.ref-header-end{display:flex;align-items:center;gap:10px}.remove-all-refs{font-size:12px;color:var(--muted)}.remove-all-refs:hover{color:#ef5a50}
+.ref-header-end .mono{white-space:nowrap}
