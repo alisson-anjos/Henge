@@ -6,11 +6,11 @@ Você está recebendo uma tarefa de implementação, não apenas de planejamento
 
 Entregar um workflow funcional e revisável conectado ao Henge UI: guia em vídeo, N referências, prompt manual ou aprimorado, troca de personagens/objetos/cenário/estilo preservando performance, bindings por cor, processamento por shots, geração, progresso, cancelamento, histórico, download e comparação sincronizada.
 
-O nome público é **Henge**. O repositório ainda se chama OpenJutsu. Preserve IDs legados, chaves localStorage, nomes de classes e variáveis HENGE_* para compatibilidade. **Guide Latents é o padrão.** Ofereça separadamente **TARA - Native Temporal Alignment (experimental)**. Não ative TARA silenciosamente e não faça fallback silencioso entre contratos.
+O nome público e o repositório são **Henge** (antes OpenJutsu). Preserve IDs legados, chaves localStorage, nomes de classes e variáveis HENGE_* para compatibilidade. **Guide Latents é o padrão.** Ofereça separadamente **TARA - Native Temporal Alignment (experimental)**. Não ative TARA silenciosamente e não faça fallback silencioso entre contratos.
 
 ## Fontes e ponto de partida
 
-- UI/bridge: https://github.com/alisson-anjos/OpenJutsu, branch main. Commit de política/branding: 5fc6e9a; use main atual e inspecione diferenças locais antes de atualizar.
+- UI/bridge: https://github.com/alisson-anjos/Henge, branch main. Commit de política/branding: 5fc6e9a; use main atual e inspecione diferenças locais antes de atualizar.
 - BFS: https://github.com/alisson-anjos/ComfyUI-BFSNodes, branch main. Release TARA experimental: 1.115.19, commit 3c00387. Não precisa trocar para a branch experimental antiga.
 - A instalação local conhecida do usuário é ~/tools/ComfyUI, com custom_nodes/bfsnodes (algumas instalações antigas usavam bfsnode). Descubra caminhos reais; evite duas cópias do mesmo plugin.
 - Máquina de desenvolvimento remota usava /data/OpenJutsu e /data/henge-comfy-backend. Esses caminhos NÃO são requisitos locais.

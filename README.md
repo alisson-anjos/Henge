@@ -11,34 +11,152 @@ An open studio for **motion transfer** and **video swaps**, designed around Mini
 | Head Swap | Replace only the head with a face picture | Head Swap v1.0 r32 + turbo; published `head_swap:` template |
 | Sharpness | Sharpen an upload or one of your generations, optionally up to 2K/4K | MiniMax H3 + Little More Sharpness LoRA; for 2K/4K it sharpens at half size and doubles it with the H3 latent upscaler + a short H3 refine (tiled at 4K) or NVIDIA RTX Video Super Resolution; source video only |
 
-Options: turbo LoRA (DMD 8-step, DMAD 4-step, lightx2v 8/4-step or none), base model (MiniMax H3 ref2va or
-FastH3 OmniRef 8-step), CFG, Comfy Kitchen attention, auto-approve, and segmented processing with
-continuity frames for long clips. **Latent mask** (Character Swap): mark the person in the video; SAM 3.1
-tracks them and only a box (or outline) around them is regenerated, the rest stays pixel-identical. The
-plan shows a mask preview to adjust before generating. Each job can be downloaded as the exact ComfyUI
+Options: turbo LoRA (DMD 8-step, DMAD 4-step, pDMD 4/2-step, lightx2v 8/4-step or none), base model (MiniMax H3
+ref2va or FastH3 OmniRef 8-step), CFG, Comfy Kitchen attention, auto-approve, and shots for long clips (cut at
+camera cuts or at a fixed length, each shot playable before rendering and downloadable when done). **Subject
+guidance**: mark people in the video and bind each to its pictures. *2D* paints each one with its color (solid
+or translucent, with a live preview on the approval screen), *3D* draws a colored body with face, and *Mask*
+regenerates only the area around them so the rest of the video stays pixel-identical. **FIBO** can redraw an
+animal reference as an upright humanoid for a human performer. Each job can be downloaded as the exact ComfyUI
 API graph it ran.
 
-## Setup guides
+## How to run Henge
 
-- [Run locally: UI, bridge, ComfyUI and connection settings](docs/RUN_LOCAL.md)
-- [Build/run with Docker and configure automatic downloads](docker/README.md)
-- [Run on RunPod: template, GPU choice and private models](docs/RUNPOD.md)
-- [Run on RunPod Serverless: UI on your PC, GPU only while a job runs](docs/SERVERLESS.md)
-- [Models and download links](docs/models-and-downloads.md)
+Henge has three parts: the **web UI** (port 8188), the **bridge** (port 8766, plans jobs, cuts and joins
+video with ffmpeg) and **ComfyUI** (runs the MiniMax H3 graphs on a GPU). Pick where each one runs:
 
-## Run locally
+| | A. Local, your ComfyUI | B. RunPod, all in one pod | C. Local UI + RunPod Serverless |
+|---|---|---|---|
+| UI and bridge | your PC | the pod | your PC (no GPU needed) |
+| ComfyUI / GPU | your PC (NVIDIA, 32 GB VRAM, 64 GB RAM) | the pod | RunPod workers, started per job |
+| You pay | nothing extra | while the pod is on | per second while a job runs (+15 s idle) and the volume's storage |
+| First result | immediate | after the first boot download | cold start of 1–3 min after idle |
+| Live sampling preview | yes | yes | progress only |
+| Best for | you have an RTX 5090 or similar | long sessions | occasional use, no local GPU |
 
-Node.js 22.6 or newer:
+All three need the models: about 125 GB with every profile (H3 base, text encoder, VAE, planner VLM and the
+task LoRAs). [Models and download links](docs/models-and-downloads.md). The motion LoRAs are private for now:
+their downloads need a Hugging Face token with read access (`HF_TOKEN`).
 
-```sh
-npm ci
-cp .env.example .env.local
-npm run dev
-```
+### A. Local, with your own ComfyUI
 
-Open http://127.0.0.1:3000. No API key is required for manual prompting, local media previews or direction export.
+You need a working ComfyUI (PyTorch with CUDA 13, NVIDIA driver 580+), Node.js 22.6+, Python 3.10+ and
+`ffmpeg`/`ffprobe` on the PATH.
 
-See [models, download links and backend setup](docs/models-and-downloads.md).
+1. Get Henge and the nodes:
+
+   ```sh
+   git clone https://github.com/alisson-anjos/Henge.git && cd Henge
+   npm ci && npm run build
+   ln -s "$PWD/backend/comfy_nodes/henge" /path/to/ComfyUI/custom_nodes/henge
+   git clone https://github.com/alisson-anjos/ComfyUI-BFSNodes.git /path/to/ComfyUI/custom_nodes/bfsnodes
+   /path/to/comfy/python -m pip install -r /path/to/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r backend/requirements.txt
+   ```
+
+   On Windows, copy the `backend/comfy_nodes/henge` folder into `custom_nodes` instead of the link.
+2. Download the models into ComfyUI (choose profiles; see the table in [SERVERLESS.md](docs/SERVERLESS.md#what-goes-on-it)):
+
+   ```sh
+   HF_TOKEN=<token> /path/to/comfy/python scripts/download_models.py \
+     --manifest config/model-repos.example.json --models-dir /path/to/ComfyUI/models \
+     --profiles character,headswap,sharpness,motion10500,fibo
+   ```
+
+3. Start ComfyUI on port 8189 (keep it on localhost):
+
+   ```sh
+   python main.py --listen 127.0.0.1 --port 8189 --preview-method taesd --fast-disk
+   ```
+
+4. Create `.env.local` in the Henge folder:
+
+   ```dotenv
+   COMFY_BASE_URL=http://127.0.0.1:8189
+   COMFY_ROOT=/path/to/ComfyUI          # optional: enables the model checklist
+   HENGE_DATA_DIR=/path/to/henge-data   # jobs, uploads and results
+   ```
+
+5. Start the bridge and the UI, then open http://127.0.0.1:8188:
+
+   ```sh
+   PYTHON=/path/to/comfy/python scripts/local_stack.sh start   # also: status, stop
+   ```
+
+   On Windows, run the two commands from [RUN_LOCAL.md](docs/RUN_LOCAL.md#4-start-the-job-bridge) in two
+   terminals. The ComfyUI address can also be changed in the UI (**Connection settings**).
+
+Details and troubleshooting: [docs/RUN_LOCAL.md](docs/RUN_LOCAL.md).
+
+### B. RunPod, everything in one pod
+
+One container runs the UI, the bridge and ComfyUI; models download on the first boot into the pod volume.
+
+1. RunPod → **My Templates → New Template** (Pod): image `ghcr.io/alisson-anjos/henge:runpod-template`,
+   container disk 30 GB, volume 180 GB at `/workspace`, HTTP port `8188`.
+2. Environment: `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}` (store the token as the secret `hf_token`), and
+   optionally `HENGE_MODEL_PROFILES` to download fewer models and `HENGE_PASSWORD` to protect the UI.
+3. Deploy on a GPU with a CUDA 13 driver (set the CUDA filter to 13.0+). An RTX 5090 works; 48–96 GB GPUs
+   reload models less often.
+4. Watch the logs; the first boot downloads the models (the setup screen on port 8188 shows progress).
+   Then open **Connect → HTTP 8188**.
+
+Stop the pod when you are done: the volume keeps the models and your job history for the next one.
+Details: [docs/RUNPOD.md](docs/RUNPOD.md).
+
+### C. UI on your PC, GPU on RunPod Serverless
+
+The UI and bridge run on your computer; each job stage (plan, FIBO, every shot) is one request to a
+serverless endpoint, whose workers start on demand and stop 15 s after the last request.
+
+1. Install [`runpodctl`](https://github.com/runpod/runpodctl) with your API key, and store your Hugging Face
+   token as the RunPod secret `hf_token`.
+2. Put the models on a network volume (once; a temporary pod downloads them and is deleted):
+
+   ```sh
+   VOLUME_GB=180 scripts/runpod_volume.sh            # prints the volume id
+   ```
+
+3. Create the endpoint (RTX 5090 first; RTX PRO 6000 only when no 5090 is free):
+
+   ```sh
+   VOLUME_ID=<volume id> scripts/runpod_serverless.sh   # prints the endpoint id
+   ```
+
+4. Run the UI on your computer and open http://localhost:8188:
+
+   ```sh
+   docker run -p 8188:8188 -v henge-state:/state -e HENGE_BACKEND=runpod \
+     -e RUNPOD_ENDPOINT_ID=<endpoint id> -e RUNPOD_API_KEY=<api key> \
+     ghcr.io/alisson-anjos/henge-ui:runpod-template
+   ```
+
+   Without Docker: clone Henge, `npm ci && npm run build`, install `backend/requirements.txt`, put
+   `HENGE_BACKEND=runpod`, `RUNPOD_ENDPOINT_ID`, `RUNPOD_API_KEY` and `HENGE_DATA_DIR` in `.env.local`, then
+   `scripts/local_stack.sh start`.
+
+Media of any size go through the endpoint's volume; nothing uses S3 or another storage service.
+Details, costs and troubleshooting: [docs/SERVERLESS.md](docs/SERVERLESS.md).
+
+### Updating
+
+- **A**: `git pull && npm ci && npm run build`, then `scripts/local_stack.sh start` and restart ComfyUI (the
+  henge nodes changed).
+- **B**: deploy a new pod from the template (the volume keeps the models).
+- **C**: pull the new `henge-ui` image; for the workers, `ENDPOINT_ID=<id> TEMPLATE_ID=<id>
+  IMAGE=ghcr.io/alisson-anjos/henge:sha-<commit> scripts/runpod_serverless.sh` switches the image and drains
+  the old workers.
+
+Images are built by GitHub Actions and published to GitHub Container Registry:
+`ghcr.io/alisson-anjos/henge` (everything; the serverless worker uses it with `HENGE_ROLE=worker`) and
+`ghcr.io/alisson-anjos/henge-ui` (UI and bridge only), tagged by branch and `sha-<commit>`.
+
+### More guides
+
+- [Instructions for an AI agent to deploy everything on RunPod](docs/AGENT_DEPLOY.md)
+- [Run locally: ports, connection settings, Windows](docs/RUN_LOCAL.md)
+- [Docker Compose on your own GPU machine](docker/README.md)
+- [RunPod pod template](docs/RUNPOD.md) · [RunPod Serverless](docs/SERVERLESS.md)
+- [Models and download links](docs/models-and-downloads.md) · [Guide conditioning](docs/conditioning.md)
 
 ## Password (optional)
 
@@ -67,8 +185,6 @@ The endpoint must support vision chat messages with `image_url` data URLs and re
 
 Automatic prompting in the editor and the backend planner shares `lib/h3-prompt-policy.json`. Enhanced outputs use the H3 six-section reference format, with `motion_transfer:` for motion mode and `body_swap:` for swap mode. References retain their exact indices and separate identity, outfit, object, style and environment roles. Requested scene replacements cover the entire environment while retaining the source performance and specified interaction props. Raw-prompt mode remains verbatim. See [prompt format and examples](docs/prompt-format.md).
 
-Henge was previously developed as OpenJutsu, Kagemane and Kawarimi. ComfyUI nodes (`Henge*`), environment variables (`HENGE_*`), model folders (`loras/henge`) and browser storage keys now all use the Henge name.
-
 ## Reference contract
 
 - Guide Latents is the default method. TARA (experimental) uses the native video-reference channel with temporal alignment instead. Both motion LoRAs can select either method. How each path feeds the guide to H3: [docs/conditioning.md](docs/conditioning.md).
@@ -91,7 +207,7 @@ MIT for this application code. Model weights, LoRAs, datasets and third-party se
 
 Audio conditioning can be enabled independently of the visual guide. Direction exports record whether guide-video audio should condition generation; the prompt VLM receives sampled visual frames only, not audio.
 
-Selected intervals longer than 15 seconds automatically reveal Context Window controls and record short-segment processing settings: 4.5 seconds requested per shot by default, a configurable timeline FPS (24 by default), and H3's 17n+5 frame grid. The displayed shot count is an estimate from the source duration; the generation panel optionally detects camera cuts. The backend generates short segments, trims padding and joins the results in order. Context Window has no configured segment-count cap; GPU memory and upload size still have limits. The single guide upload is limited to 500 MB.
+Selected intervals longer than 15 seconds automatically reveal Context Window controls and record short-segment processing settings: 4.5 seconds requested per shot by default, a configurable timeline FPS (24 by default), and H3's 17n+5 frame grid. The Auto cut card chooses how camera cuts split the shots (shot length ending at cuts, a new shot at every cut, or fixed length), and the approval screen shows every shot before rendering. The backend generates short segments, trims padding and joins the results in order. Context Window has no configured segment-count cap; GPU memory and upload size still have limits. The single guide upload is limited to 500 MB.
 
 The interface applies the supplied Studio + History design: a dark canvas, green Swap and purple Motion accents, locally hosted fonts, responsive layouts and English, Portuguese and Spanish copy. An animated seal indicates actual automatic-prompt processing. Animations respect reduced-motion preferences. Remote development through the configured server IP is supported by `allowedDevOrigins`.
 
@@ -109,20 +225,7 @@ The Keep source audio setting is independent of audio conditioning and is record
 
 Enhance prompt in the generation panel adapts the direction to H3 when enabled. When disabled, the editor text is sent verbatim, including whitespace, without binding text or FIBO annotations appended. The VLM still analyzes routing and reference roles; review the exact H3 prompt in the execution plan before generating.
 
-## Local ComfyUI backend
-
-Run the bridge inside a Python environment compatible with the selected ComfyUI installation. FFmpeg and ffprobe must be on PATH.
-
-```sh
-python -m pip install -r backend/requirements.txt
-export HENGE_PYTHON=/path/to/comfy/python
-export COMFY_ROOT=/path/to/isolated/ComfyUI
-python scripts/start_backend.py
-```
-
-The startup helper uses loopback ports 8189 for ComfyUI and 8766 for the bridge. The Next.js server proxies `/api/backend/`; credentials remain on the server. Configure `.env.local`, `backend/extra_model_paths.yaml`, and model paths in `backend/workflows.py` for your installation. The checked-in paths describe the development machine, not bundled model files. Install the `backend/comfy_nodes/henge` directory as a ComfyUI custom-node package. Optional SAM, SAM 3D and MoGe dependencies/assets must be available for their selected branches. The original guide branch does not require those packages.
-
-Model-download helpers and exported API graphs are in `scripts/` and `workflows/`. Local model weights, job uploads, generated videos and service logs are excluded from Git. The development launcher is not a production deployment configuration.
+## Development checks
 
 ```sh
 python -m unittest discover -s backend/tests -q

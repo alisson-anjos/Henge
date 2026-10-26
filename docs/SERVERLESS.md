@@ -68,12 +68,12 @@ The default, every profile above, needs roughly 125–135 GB: create the volume 
 ### Option A: script
 
 ```sh
-scripts/runpod_volume.sh                                       # new 150 GB volume, every profile
+scripts/runpod_volume.sh                                       # new 180 GB volume, every profile
 PROFILES=character,solar scripts/runpod_volume.sh              # only some profiles
 VOLUME_ID=<id> scripts/runpod_volume.sh                        # top up an existing volume
 ```
 
-- Creates the network volume (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 150), unless
+- Creates the network volume (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 180), unless
   `VOLUME_ID` is given.
 - Starts the fill pod from `ghcr.io/alisson-anjos/henge:runpod-template` on the first GPU in stock
   (`FILL_GPUS`), with `HENGE_MODEL_PROFILES=$PROFILES` and `HF_TOKEN` from your RunPod secret `hf_token`.
@@ -85,7 +85,7 @@ open its setup screen; delete it with `runpodctl pod delete <pod id>` when done.
 
 ### Option B: RunPod console
 
-1. *Storage* → *New Network Volume*: pick the datacenter (see below) and 150 GB.
+1. *Storage* → *New Network Volume*: pick the datacenter (see below) and 180 GB.
 2. *Pods* → *Deploy*, in the same datacenter, any GPU with CUDA 13 (it only downloads). Under the network
    volume, select the new volume. Use the image `ghcr.io/alisson-anjos/henge:runpod-template`, mount path
    `/workspace`, HTTP port `8188`, and the environment variables
@@ -98,8 +98,9 @@ open its setup screen; delete it with `runpodctl pod delete <pod id>` when done.
 
 The volume and the endpoint must be in the same datacenter, so choose it by the GPU you want for the
 endpoint: `runpodctl datacenter list` shows which GPUs each one has in stock. Henge needs a CUDA 13
-driver. 80 GB or more of VRAM (RTX PRO 6000 96 GB, A100 80 GB, H100) runs comfortably; a 32 GB RTX 5090 is
-cheaper per second but reloads models more often.
+driver. The RTX 5090 (32 GB) is the default and costs about half of an RTX PRO 6000 (96 GB) per second; the
+endpoint lists the 5090 first and falls back to the RTX PRO 6000 only when no 5090 is free. Workers run
+ComfyUI with `--fast-disk`, so the ~56 GB of RAM of a 5090 worker is enough.
 
 ## 2. Create the endpoint
 
@@ -111,9 +112,13 @@ This creates:
 
 - a **serverless template**: the full Henge image (`ghcr.io/alisson-anjos/henge:runpod-template`)
   with `HENGE_ROLE=worker`;
-- an **endpoint**: `GPU` (default RTX PRO 6000), 0 to `WORKERS_MAX` workers (default 2),
-  `IDLE_TIMEOUT` seconds kept warm after a request (default 120), execution timeout 1 h, with the
+- an **endpoint**: `GPU` (default RTX 5090), 0 to `WORKERS_MAX` workers (default 2),
+  `IDLE_TIMEOUT` seconds kept warm after a request (default 15), execution timeout 1 h, with the
   volume attached.
+
+`runpodctl` sets one GPU type. To add the RTX PRO 6000 as a fallback behind the 5090, edit the endpoint in the
+RunPod console (*Serverless → endpoint → Edit*, GPU list in priority order). Idle workers are billed: keep the
+idle timeout short.
 
 It prints the endpoint id. To change settings later (new image, more workers):
 `ENDPOINT_ID=<id> TEMPLATE_ID=<id> scripts/runpod_serverless.sh`.
@@ -233,7 +238,7 @@ Measured on an RTX PRO 6000 (480p, 3 s Character Swap, 8 steps):
 
 ## Costs
 
-- **Network volume**: billed per GB per month while it exists (150 GB volume).
+- **Network volume**: billed per GB per month while it exists (180 GB volume).
 - **Workers**: billed per second while running, including the idle timeout after each request.
 - **Fill pod**: a few minutes of GPU time, once.
 
@@ -282,7 +287,7 @@ HENGE_BACKEND=runpod RUNPOD_ENDPOINT_ID=local RUNPOD_API_BASE=http://127.0.0.1:8
 | `HENGE_PASSWORD` | UI image | optional UI password (user `HENGE_USER`, default `henge`); unset means open |
 | `HENGE_ROLE` | image | `all` (default), `worker` or `ui` |
 | `HENGE_WORKSPACE` | worker | volume mount, default `/runpod-volume` |
-| `HENGE_COMFY_ARGS` | worker | extra ComfyUI flags; leave unset |
+| `HENGE_COMFY_ARGS` | worker | extra ComfyUI flags; the endpoint script sets `--fast-disk` (keeps weights out of pinned RAM) |
 
 Code: `docker/worker_handler.py` (worker), `backend/runpod_backend.py` (bridge side),
 `docker/entrypoint.py` (roles), `scripts/runpod_volume.sh` and `scripts/runpod_serverless.sh`.

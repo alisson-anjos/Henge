@@ -114,13 +114,13 @@ Instead of a pod that stays on, the UI can drive a RunPod Serverless endpoint: e
 reference prep, every shot) becomes one request, a worker starts when needed and scales back to zero.
 
 1. **Models on a network volume** (once): `scripts/runpod_volume.sh` creates a volume
-   (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 150) and fills it with a temporary pod from the
+   (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 180) and fills it with a temporary pod from the
    Henge template, deleted when every model is installed. Workers read it at `/runpod-volume/henge/models`.
 2. **Endpoint**: `VOLUME_ID=<id> scripts/runpod_serverless.sh` creates the worker template (the full image
-   with `HENGE_ROLE=worker`) and the endpoint (0 to 2 workers, 80-96 GB GPUs, idle timeout 120 s).
+   with `HENGE_ROLE=worker`) and the endpoint (0 to 2 workers, RTX 5090, idle timeout 15 s).
 3. **UI**: `docker run -p 8188:8188 -v henge-state:/state -e HENGE_BACKEND=runpod -e RUNPOD_ENDPOINT_ID=<id>
    -e RUNPOD_API_KEY=<key> ghcr.io/alisson-anjos/henge-ui:runpod-template`, then open http://localhost:8188.
 
 The first request after an idle period waits for a cold start (ComfyUI start + model load from the volume).
-Media travels inside the requests, which RunPod caps at about 10 MB: keep clips short / low resolution for
-now. Model availability is learned from the first finished request; until then every mode shows as available.
+Media of any size travel through the endpoint's volume in chunks. Model availability is learned from the first
+finished request; until then every mode shows as available.
