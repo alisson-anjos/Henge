@@ -13,6 +13,7 @@ type Message =
   | {role: 'assistant'; text: string; tool_calls?: StudioCall[]; native?: unknown; native_provider?: string}
   | {role: 'tool'; results: Result[]};
 type Config = {provider: 'anthropic' | 'openai'; model: string; base_url: string; effort: string; has_key: boolean; key_hint: string};
+type JobMention = {id: string; project?: string; mode?: string; status: string; created: number};
 
 const PRESETS: Record<string, {provider: Config['provider']; model: string; base_url: string}> = {
   claude: {provider: 'anthropic', model: 'claude-opus-5-5', base_url: ''},
@@ -49,6 +50,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   const [draft, setDraft] = useState<Partial<Config> & {api_key?: string}>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [recentJobs, setRecentJobs] = useState<JobMention[]>([]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const stop = useRef(false);
@@ -84,6 +86,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {if (open && !config) fetch('/api/backend/assistant/config').then(r => r.json()).then((c: Config) => {setConfig(c); setDraft(c); if (!c.has_key && c.provider === 'anthropic') setSettings(true);}).catch(() => setError(tr('The bridge is offline.', 'O bridge está offline.', 'El bridge está desconectado.')));}, [open]);
+  useEffect(() => {if (open) fetch('/api/backend/jobs').then(r => r.ok ? r.json() : []).then((rows: JobMention[]) => setRecentJobs(rows.slice(0, 12))).catch(() => {});}, [open]);
   useEffect(() => {list.current?.scrollTo({top: list.current.scrollHeight, behavior: 'smooth'});}, [messages, busy]);
 
   async function saveSettings() {
@@ -140,11 +143,14 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   }
 
   const presetOf = (c: Partial<Config>) => Object.entries(PRESETS).find(([, p]) => p.provider === c.provider && (p.provider === 'anthropic' || p.base_url === c.base_url))?.[0] || 'custom';
+  const mention = input.match(/#([a-f0-9]*)$/i);
+  const mentionJobs = mention ? recentJobs.filter(j => !mention[1] || j.id.startsWith(mention[1].toLowerCase())).slice(0, 8) : [];
+  const insertJob = (id: string) => setInput(value => value.replace(/#[a-f0-9]*$/i, `#${id.slice(0, 8)} `));
   return <>
     <button type="button" className="assistant-fab" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? '×' : '✦'}<span>{tr('Assistant', 'Assistente', 'Asistente')}</span></button>
     {open && <aside className={'assistant-panel surface' + (expanded ? ' expanded' : '')} aria-label={tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')}>
       <header><strong>{tr('Studio assistant', 'Assistente do estúdio', 'Asistente del estudio')}</strong>
-        <small className="muted mono">{config ? `${config.model}` : ''}</small>
+        <small className="muted mono">{jobId ? `#${jobId.slice(0, 8)}${config ? ` · ${config.model}` : ''}` : config ? `${config.model}` : ''}</small>
         <span><button type="button" className="quiet-button" onClick={newChat} disabled={!!busy}>{tr('New chat', 'Nova conversa', 'Nueva conversación')}</button>
           <button type="button" className="quiet-button" aria-pressed={expanded} title={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} aria-label={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} onClick={toggleExpanded}>{expanded ? '⤡' : '⤢'}</button>
           <button type="button" className="quiet-button" aria-pressed={settings} onClick={() => setSettings(s => !s)}>⚙</button></span></header>
@@ -167,8 +173,9 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         {busy && <small className="assistant-busy mono">{busy}</small>}
         {error && <p className="validation" role="alert">{error}</p>}
       </div>
-      <form className="assistant-input" onSubmit={e => {e.preventDefault(); void send();}}>
-        <textarea value={input} rows={2} placeholder={tr('What do you want to make?', 'O que você quer fazer?', '¿Qué quieres hacer?')} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Enter' && !e.shiftKey) {e.preventDefault(); void send();}}}/>
+      <form className="assistant-input" onSubmit={e => {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}>
+        {mentionJobs.length > 0 && <div className="assistant-job-mentions" role="listbox" aria-label={tr('Recent generations', 'Gerações recentes', 'Generaciones recientes')}>{mentionJobs.map(j => <button key={j.id} type="button" role="option" onClick={() => insertJob(j.id)}><span className="mono">#{j.id.slice(0, 8)}</span><strong>{j.project || 'Henge'}</strong><small>{j.mode || ''} · {j.status}</small></button>)}</div>}
+        <textarea value={input} rows={2} placeholder={tr('What do you want to make?', 'O que você quer fazer?', '¿Qué quieres hacer?')} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Escape' && mention) {e.preventDefault(); setInput(input.slice(0, mention.index));} else if (e.key === 'Enter' && !e.shiftKey) {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}}/>
         {busy ? <button type="button" className="quiet-button" onClick={() => {stop.current = true;}}>{tr('Stop', 'Parar', 'Detener')}</button> : <button type="submit" className="primary" disabled={!input.trim()}>{tr('Send', 'Enviar', 'Enviar')}</button>}
       </form>
     </aside>}
