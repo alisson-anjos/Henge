@@ -45,6 +45,14 @@ function Icon({name, size = 20}: {name: string; size?: number}) {
 
 type GuideVideo = {file: File; url: string; duration?: number; range?: ClipRange};
 const MODES: Mode[] = ['swap', 'motion', 'headswap', 'sharpness'];
+const QUALITY_SHORT: Record<string, number> = {'480p': 480, '720p': 720, '1080p': 1080, '1440p': 1440, '2160p': 2160};
+/** Output frame size, as the backend computes it: short side scaled to the target, both sides multiples of 32; above
+ * 720p Sharpness renders at half size and doubles it (so the sides are multiples of 64). */
+function outputSize(width: number, height: number, short: number, upscaled: boolean) {
+  const fit = (s: number) => {const k = s / Math.min(width, height); return [Math.max(32, Math.round(width * k / 32) * 32), Math.max(32, Math.round(height * k / 32) * 32)];};
+  if (!upscaled) return fit(short);
+  const [w, h] = fit(Math.floor(short / 2)); return [w * 2, h * 2];
+}
 const MODE_STYLE: Record<Mode, {accent: string; rgb: string}> = {
   swap: {accent: '#D6FF4B', rgb: '214,255,75'}, motion: {accent: '#AA8BFF', rgb: '170,139,255'},
   headswap: {accent: '#FF9F6B', rgb: '255,159,107'}, sharpness: {accent: '#6BE4FF', rgb: '107,228,255'},
@@ -278,6 +286,21 @@ export default function Studio() {
   }
   /** The direction's settings (mode, prompt, quality, shots, audio, subject guidance); media are left as they are. */
   useEffect(() => {if (mode !== 'sharpness') setQuality(q => ['1440p', '2160p'].includes(q) ? '1080p' : q);}, [mode]);
+  // The guide's own size: Sharpness should go above it, so it picks the next size up and warns otherwise.
+  const [guideSize, setGuideSize] = useState<{width: number; height: number} | null>(null);
+  useEffect(() => {
+    setGuideSize(null); if (!video?.url) return;
+    const probe = document.createElement('video'); probe.preload = 'metadata';
+    probe.onloadedmetadata = () => {if (probe.videoWidth && probe.videoHeight) setGuideSize({width: probe.videoWidth, height: probe.videoHeight});};
+    probe.src = video.url;
+    return () => {probe.onloadedmetadata = null; probe.removeAttribute('src');};
+  }, [video?.url]);
+  useEffect(() => {
+    if (mode !== 'sharpness' || !guideSize) return;
+    const short = Math.min(guideSize.width, guideSize.height);
+    setQuality(q => QUALITY_SHORT[q] > short ? q : Object.keys(QUALITY_SHORT).find(k => QUALITY_SHORT[k] > short) ?? q);
+  }, [mode, guideSize]);
+  const qualityRow = <div className="setting-row"><span>{t.quality}</span><div className="quality-options">{['480p', '720p', '1080p', ...(mode === 'sharpness' ? ['1440p', '2160p'] : [])].map(q => <button key={q} className={'mono nc ' + (quality === q ? 'chosen' : '')} aria-pressed={quality === q} onClick={() => setQuality(q)}>{q === '1440p' ? '2K' : q === '2160p' ? '4K' : q}</button>)}</div></div>;
   // The same guide is back (reload, re-upload or a restored job): bring back its FIBO-edited first frame.
   useEffect(() => {
     if (!video || !guideSignature) return;
@@ -396,6 +419,10 @@ export default function Studio() {
           <div className="create-heading rise"><span className="eyebrow accent">{t.create}</span><h1>{t[`h1a_${mode}`]}<br/><span>{t[`h1b_${mode}`]}</span></h1></div>
           <div className="mode-switch" role="group" aria-label={t.mode}>{MODES.map(m => <button key={m} disabled={!ready || busy} className={mode === m ? 'selected' : ''} onClick={() => setMode(m)} aria-pressed={mode === m}><Icon name={m} size={16}/>{modeName(m)}</button>)}</div>
           <p className="mode-description">{modeDescription}</p>
+          {mode === 'sharpness' && <section className="input-card surface output-settings target-resolution"><div className="label-row"><h2>{tr('Target resolution', 'Resolução final', 'Resolución final')}</h2></div>{qualityRow}
+            {guideSize && (() => {const [w, h] = outputSize(guideSize.width, guideSize.height, QUALITY_SHORT[quality], QUALITY_SHORT[quality] > 720); return <div className="resolution-summary mono nc"><div><span className="eyebrow muted">{tr('Source', 'Origem', 'Origen')}</span><strong>{guideSize.width}×{guideSize.height}</strong></div><span className="muted">→</span><div><span className="eyebrow muted">{tr('Target', 'Alvo', 'Destino')}</span><strong className="accent">{w}×{h}</strong></div>{QUALITY_SHORT[quality] > 720 && <small className="muted">{tr(`render ${w / 2}×${h / 2} → ×2`, `render ${w / 2}×${h / 2} → ×2`, `render ${w / 2}×${h / 2} → ×2`)}</small>}</div>;})()}
+            {guideSize && QUALITY_SHORT[quality] <= Math.min(guideSize.width, guideSize.height) && <p className="validation" role="alert">{tr(`Your video is already ${Math.min(guideSize.width, guideSize.height)}p. Choose a larger size, or the result will not gain resolution.`, `Seu vídeo já está em ${Math.min(guideSize.width, guideSize.height)}p. Escolha um tamanho maior, senão o resultado não ganha resolução.`, `Tu vídeo ya está en ${Math.min(guideSize.width, guideSize.height)}p. Elige un tamaño mayor o el resultado no ganará resolución.`)}</p>}
+            {['1080p', '1440p', '2160p'].includes(quality) && <small className="muted">{tr('Sharpened at half size, then doubled to this size by the H3 or NVIDIA upscaler (Advanced → Sharpness).', 'Nitidez em meia resolução, depois dobrada até este tamanho pelo upscaler H3 ou NVIDIA (Avançado → Nitidez).', 'Nitidez a media resolución, luego duplicada a este tamaño por el escalador H3 o NVIDIA (Avanzado → Nitidez).')}</small>}</section>}
           {chosenTemplate && <div className="active-template surface"><Icon name="spark"/><div><span className="eyebrow accent">{t.tplActive}</span><strong>{chosenTemplate.title[lang]}</strong></div><button className="icon-btn" aria-label={t.exitTpl} onClick={() => setActiveTemplate(null)}><Icon name="close" size={15}/></button></div>}
           <section className="input-card surface">
             <div className="label-row"><h2><span className="step-number">01</span>{t.guide}</h2><span className="mono muted">{video ? '01' : '00'} / 01</span></div>
@@ -416,7 +443,7 @@ export default function Studio() {
             <p className="micro-copy">{draggingPictures ? tr('Drop to add references', 'Solte para adicionar referências', 'Suelta para añadir referencias') : mode === 'headswap' ? tr('One clear photo of the new face. The head is placed on the person in the video.', 'Uma foto nítida do novo rosto. A cabeça é aplicada na pessoa do vídeo.', 'Una foto nítida del nuevo rostro. La cabeza se aplica a la persona del vídeo.') : tr('JPG, PNG, WebP · 25 MB each. Slots keep their numbers.', 'JPG, PNG, WebP · 25 MB cada. Os slots mantêm seus números.', 'JPG, PNG, WebP · 25 MB cada. Los slots conservan sus números.')}</p>
           </section>}
           <section className="input-card surface generation-settings-card" id="generation-settings"/>
-          <section className="input-card surface output-settings"><div className="label-row"><h2><span className="step-number">03</span>{t.output}</h2></div><div className="setting-row"><span>{t.quality}</span><div className="quality-options">{['480p', '720p', '1080p', ...(mode === 'sharpness' ? ['1440p', '2160p'] : [])].map(q => <button key={q} className={'mono nc ' + (quality === q ? 'chosen' : '')} aria-pressed={quality === q} onClick={() => setQuality(q)}>{q === '1440p' ? '2K' : q === '2160p' ? '4K' : q}</button>)}</div></div>{mode === 'sharpness' && ['1080p', '1440p', '2160p'].includes(quality) && <small className="muted">{tr('Sharpened at half size, then doubled to this size by the H3 or NVIDIA upscaler (Advanced → Sharpness).', 'Nitidez em meia resolução, depois dobrada até este tamanho pelo upscaler H3 ou NVIDIA (Avançado → Nitidez).', 'Nitidez a media resolución, luego duplicada a este tamaño por el escalador H3 o NVIDIA (Avanzado → Nitidez).')}</small>}
+          <section className="input-card surface output-settings"><div className="label-row"><h2><span className="step-number">03</span>{t.output}</h2></div>{mode !== 'sharpness' && qualityRow}
             <div className="setting-row"><label htmlFor="keep-audio">{t.audio}</label><button id="keep-audio" className="toggle" role="switch" aria-label={t.audio} aria-checked={keepAudio} onClick={() => setKeepAudio(v => !v)}><span/></button></div>
             <div className="setting-row"><label htmlFor="audio-conditioning">{tr('Audio conditioning', 'Condicionamento de áudio', 'Condicionamiento de audio')}</label><button id="audio-conditioning" className="toggle" role="switch" aria-label={tr('Audio conditioning', 'Condicionamento de áudio', 'Condicionamiento de audio')} aria-checked={audioConditioning} onClick={() => setAudioConditioning(v => !v)}><span/></button></div>
             <div className="model-badge"><span className="model-symbol"><Icon name="spark" size={19}/></span><div><strong>MiniMax H3</strong><small>{mode === 'sharpness' ? 'Little More Sharpness' : t.model}</small></div><span className="mono nc muted">{quality}</span></div>
