@@ -7,7 +7,7 @@ import requests
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageOps
-from workflows import MODELS,TURBOS,BASES,LTX_SHARPNESS_PROMPT,ltx_frames,ltx_sharpness_graph,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import MODELS,TURBOS,BASES,LTX_SHARPNESS_PROMPT,LTX_REFINE_SIGMAS,ltx_frames,ltx_sharpness_graph,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_sheet_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
@@ -772,6 +772,22 @@ def source(jid:str,name:str):
     if not rel or not (INPUT/rel).is_file():raise HTTPException(404,'Source media not available')
     return FileResponse(INPUT/rel,media_type='video/mp4' if name=='video' else 'image/png')
 
+def job_settings(job):
+    """One line naming what produced a result: model, guidance, turbo, steps, size, seed."""
+    o=job.get('options') or {};model=MODELS.get(o.get('profile',''),{});plan=job.get('plan') or {}
+    parts=[(job.get('mode') or '').replace('_',' ').title(),'LoRA '+model.get('label',o.get('profile',''))]
+    if model.get('engine')=='ltx':
+        upscaled=o.get('latent_upscale',True) and QUALITY.get(job.get('quality'),0)>UPSCALE_ABOVE
+        parts+=[f"strength {o.get('lora_strength',.8)}",'latent upscale'+(' + sharpen first' if o.get('sharpen_first') else '')+f" (denoise {o.get('upscale_denoise',.9)})" if upscaled else 'no upscale']
+        if upscaled and not o.get('sharpen_first'):o={**o,'steps':len(LTX_REFINE_SIGMAS)-1}
+    else:
+        parts+=[f"guidance {o.get('conditioning_mode','guide').upper()}",f"turbo {TURBOS.get(o.get('turbo','dmd8'),{}).get('label',o.get('turbo'))}",f"CFG {o.get('cfg',1)}"]
+        if o.get('base','h3')!='h3':parts.append(BASES.get(o['base'],{}).get('label',o['base']))
+        if plan.get('representation','original')!='original':parts.append(f"guide {plan['representation']}")
+        if plan.get('use_fibo'):parts.append('FIBO reference')
+    parts+=[f"{o.get('steps',8)} steps",job.get('quality',''),f"seed {o.get('seed',42)}"]
+    return ' · '.join(str(p) for p in parts if p)
+
 @app.get('/jobs/{jid}/comparison-with-refs')
 def comparison_with_refs(jid:str):
     job=load(jid);work=job_path(jid)
@@ -783,7 +799,7 @@ def comparison_with_refs(jid:str):
     # The job lock prevents two browser/download requests from encoding the same file simultaneously.
     with LOCK:preview_lock=COMPARISON_LOCKS.setdefault(jid,threading.Lock())
     with preview_lock:
-        result=create_comparison_with_refs(work/'comparison.mp4',work/'result.mp4',refs,work/'comparison_with_refs.mp4')
+        result=create_comparison_with_refs(work/'comparison.mp4',work/'result.mp4',refs,work/'comparison_with_refs_v2.mp4',job_settings(job),(job.get('plan') or {}).get('prompt',''))
     return FileResponse(result,filename='henge-guide-result-references.mp4',media_type='video/mp4')
 
 @app.get('/jobs/{jid}/workflow')
