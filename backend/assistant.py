@@ -179,6 +179,45 @@ def _split_data_url(url: str) -> tuple[str, str]:
     return m.group(1), m.group(2)
 
 
+def repair_tool_history(messages: list) -> list:
+    """Make interrupted browser tool turns valid for both model APIs.
+
+    A reload, cancellation, or closed approval can persist an assistant tool call
+    before the browser has appended its result. OpenAI rejects the whole history
+    in that state, so close missing calls explicitly and discard orphan results.
+    """
+    repaired, pending = [], {}
+    for message in messages:
+        if not isinstance(message, dict) or message.get('role') not in {'user', 'assistant', 'tool'}:
+            continue
+        role = message['role']
+        if pending and role != 'tool':
+            repaired.append({'role': 'tool', 'results': [
+                {'id': call_id, 'name': name, 'text': 'Tool execution was interrupted before a result was returned.', 'images': [], 'is_error': True}
+                for call_id, name in pending.items()]})
+            pending = {}
+        if role == 'assistant':
+            calls = [c for c in message.get('tool_calls') or [] if isinstance(c, dict) and c.get('id') and c.get('name')]
+            clean = {**message, 'tool_calls': calls}
+            repaired.append(clean)
+            pending = {str(c['id']): str(c['name']) for c in calls}
+        elif role == 'tool':
+            if not pending:
+                continue
+            supplied = {str(r.get('id')): r for r in message.get('results') or [] if isinstance(r, dict) and str(r.get('id')) in pending}
+            results = [supplied.get(call_id) or {'id': call_id, 'name': name, 'text': 'Tool execution was interrupted before a result was returned.', 'images': [], 'is_error': True}
+                       for call_id, name in pending.items()]
+            repaired.append({'role': 'tool', 'results': results})
+            pending = {}
+        else:
+            repaired.append(message)
+    if pending:
+        repaired.append({'role': 'tool', 'results': [
+            {'id': call_id, 'name': name, 'text': 'Tool execution was interrupted before a result was returned.', 'images': [], 'is_error': True}
+            for call_id, name in pending.items()]})
+    return repaired
+
+
 # --- Claude (official Anthropic SDK) ---
 
 def _to_anthropic(messages: list) -> list:
@@ -275,6 +314,7 @@ def _call_openai(cfg: dict, messages: list) -> dict:
 
 
 def call_model(cfg: dict, messages: list) -> dict:
+    messages = repair_tool_history(messages)
     if cfg['provider'] == 'anthropic':
         return _call_anthropic(cfg, messages)
     return _call_openai(cfg, messages)
@@ -288,7 +328,7 @@ def step(cfg: dict, messages: list, run_job_tool, max_rounds: int = 8) -> dict:
     """Run the model until it answers or needs studio tools. Job tools run here through run_job_tool(name, input) ->
     (text, images). Returns the appended history and, when needed, the studio calls for the browser plus the job
     results to send back with theirs (all results of one turn go in one message)."""
-    messages = list(messages)
+    messages = repair_tool_history(messages)
     for _ in range(max_rounds):
         reply = call_model(cfg, messages)
         messages.append({'role': 'assistant', **reply})

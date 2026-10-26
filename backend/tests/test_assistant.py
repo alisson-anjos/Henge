@@ -38,6 +38,18 @@ class AssistantTest(unittest.TestCase):
   o=assistant._to_openai(history)
   self.assertEqual(o[0]['role'],'system');self.assertEqual(o[2]['tool_calls'][0]['function']['arguments'],'{"time": 2}')
   self.assertEqual(o[3]['role'],'tool');self.assertEqual(o[4]['role'],'user');self.assertEqual(o[4]['content'][1]['type'],'image_url')
+ def test_repairs_interrupted_tool_turns_and_orphan_results(self):
+  history=[{'role':'user','text':'go'},
+           {'role':'assistant','text':'','tool_calls':[{'id':'a','name':'view_frame','input':{}},{'id':'b','name':'view_pictures','input':{}}]},
+           {'role':'tool','results':[{'id':'a','name':'view_frame','text':'ok'}]},
+           {'role':'tool','results':[{'id':'orphan','name':'get_job','text':'ignore'}]},
+           {'role':'user','text':'continue'}]
+  repaired=assistant.repair_tool_history(history)
+  self.assertEqual([m['role'] for m in repaired],['user','assistant','tool','user'])
+  self.assertEqual([r['id'] for r in repaired[2]['results']],['a','b'])
+  self.assertTrue(repaired[2]['results'][1]['is_error'])
+  converted=assistant._to_openai(repaired)
+  self.assertEqual([m.get('tool_call_id') for m in converted if m['role']=='tool'],['a','b'])
  def test_openai_token_limit_parameter(self):
   class R:
    def __init__(self,ok,text,payload=None):self.ok=ok;self.status_code=200 if ok else 400;self.text=text;self._p=payload
