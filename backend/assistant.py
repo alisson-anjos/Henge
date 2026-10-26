@@ -108,6 +108,8 @@ JOB_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'opacity': {'type': 'number'}}, 'required': ['job_id', 'opacity'], 'additionalProperties': False}},
     {'name': 'get_job_shots', 'description': 'How a job splits the video into shots: index, start and end (seconds in the source), and whether each starts after a camera cut (people may have moved or changed there).',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
+    {'name': 'redo_shot', 'description': 'Render one shot (1-based) of a finished job again with a new seed (or the given one) and join the video again; the other shots are kept. Then wait_for_job done.',
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'shot': {'type': 'integer'}, 'seed': {'type': 'integer'}}, 'required': ['job_id', 'shot'], 'additionalProperties': False}},
     {'name': 'retry_job', 'description': 'Run a failed or cancelled job again.',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
     {'name': 'approve_job', 'description': 'Approve a plan waiting for review so the video renders.',

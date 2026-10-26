@@ -2,6 +2,8 @@ import type {Language} from './design-copy';
 const statuses: Record<string, [string,string,string]> = {
   queued_plan: ['Waiting for analysis','Aguardando análise','Esperando análisis'],
   queued_render: ['Waiting to generate','Aguardando geração','Esperando generación'],
+  queued_redo: ['Shot queued to be redone','Trecho na fila para refazer','Tramo en cola para rehacer'],
+  queued_mask: ['Updating the preview','Atualizando a prévia','Actualizando la vista previa'],
   waiting_gpu: ['Waiting for the GPU','Aguardando a GPU','Esperando la GPU'],
   running: ['In progress','Em andamento','En curso'],
   awaiting_approval: ['Ready to review','Pronto para revisar','Listo para revisar'],

@@ -776,6 +776,14 @@ def generate(job):
             else:run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(inp/f'guide_{i:03d}_raw.mp4'),'-an','-c:v','libx264','-threads','2','-crf','20','-y',str(gpiece)])
             guide_pieces.append(gpiece)
             if i==0:shutil.copyfile(gpiece,work/'guide_preview.mp4');save(job,guide_preview_url=f"/api/backend/jobs/{job['id']}/files/guide_preview.mp4")
+    save(job,render_size=[W,H])
+    finalize(job,pieces,guide_pieces,W,H)
+
+def finalize(job,pieces,guide_pieces,W,H):
+    """Join the shot pieces into result.mp4 (with the source audio when kept), the guide video and the comparison.
+    Used at the end of a render and after a shot is redone."""
+    r=job['request'];assets=job['assets'];meta=job['video_info'];plan=job['plan'];work=job_path(job['id'])
+    start,end=r['video']['start_seconds'],r['video']['end_seconds']
     concat=work/'concat.txt';concat.write_text(''.join(f"file '{p.name}'\n" for p in pieces));joined=work/'joined.mp4';run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(concat),'-c','copy','-y',str(joined)])
     output=work/'result.mp4';args=['ffmpeg','-v','error','-i',str(joined)]
     if r.get('output_audio',{}).get('keep_source') and meta['audio']:args+=['-ss',str(start),'-i',str(INPUT/assets['video']),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac']
@@ -805,12 +813,17 @@ def worker():
         for path in sorted(JOBS.glob('*/job.json'),key=lambda p:p.stat().st_mtime):
             try:
                 job=json.loads(path.read_text())
-                if job['status'] not in ['queued_plan','queued_render','queued_mask','waiting_gpu']:continue
+                if job['status'] not in ['queued_plan','queued_render','queued_mask','queued_redo','waiting_gpu']:continue
                 if training_busy():
                     if job['status']!='waiting_gpu':save(job,resume_status=job['status'],status='waiting_gpu',message='Waiting for the active H3 training to release the GPU.')
                     continue
                 status=job.get('resume_status',job['status']) if job['status']=='waiting_gpu' else job['status']
                 save(job,status='running',stage='planning' if status=='queued_plan' else 'preparing',message='Analyzing the guide and references' if status=='queued_plan' else 'Preparing generation')
+                if status=='queued_redo':
+                    # A failed redo leaves the finished job as it was (its result is untouched until the new shot exists).
+                    try:redo_shot(job)
+                    except Exception as e:save(load(job['id']),status='completed',stage='complete',redo=None,message=f'Redoing the shot failed: {str(e)[:300]}')
+                    continue
                 if status=='queued_mask':
                     mask_preview(job);save(job,status='awaiting_approval',stage='plan_ready',message='Mask preview updated. Review it, then generate.')
                     continue
@@ -1196,6 +1209,12 @@ def run_job_tool(name,args):
             if ready or time.time()>deadline:return job_summary(job)+('' if ready else ' (still running after 15 minutes; wait again)'),[]
             time.sleep(3)
     if name=='get_job_shots':return json.dumps(shot_preview(load(args['job_id']))),[]
+    if name=='redo_shot':
+        job=load(args['job_id']);n=int(args['shot'])
+        if job['status'] not in ('completed','failed'):raise ValueError('A shot can be redone once the job has finished')
+        if not (job_path(job['id'])/f'h3_segment_{n-1:03d}.api.json').is_file():raise ValueError(f'Shot {n} was not rendered')
+        save(job,status='queued_redo',stage='queued',redo={'shot':n-1,'seed':args.get('seed')},message=f'Shot {n} queued to be redone')
+        return f'Shot {n} queued to be redone. Use wait_for_job until done.',[]
     if name=='retry_job':
         try:retry(args['job_id']);return job_summary(load(args['job_id'])),[]
         except HTTPException as e:raise ValueError(e.detail)
@@ -1332,3 +1351,43 @@ async def update_subjects(jid:str,request:Request):
         rebuild=plan['representation'] in ('2d','mask')
         save(job,request=r,plan=plan,**({'status':'queued_mask','stage':'queued','message':'Updating the guide preview with the new marks'} if rebuild else {'message':'Marks updated'}))
     return {**public(load(jid)),'request':load(jid)['request']}
+
+
+def redo_shot(job):
+    """Render one shot again with a new seed (job['redo']), from the graph it ran with, then join the video again.
+    The next shot keeps the context it was rendered with, so a seam inside a continuous take can change a little."""
+    i=int(job['redo']['shot']);work=job_path(job['id']);inp=INPUT/'henge'/job['id']
+    path=work/f'h3_segment_{i:03d}.api.json'
+    if not path.is_file():raise ValueError(f'Shot {i+1} has no saved graph to run again')
+    graph=json.loads(path.read_text());graph=graph.get('prompt',graph)
+    seed=int(job['redo'].get('seed') or int(time.time())%2**31)
+    for key in ('11','35'):
+        if key in graph and 'noise_seed' in graph[key]['inputs']:graph[key]['inputs']['noise_seed']=seed+(1000 if key=='35' else 0)
+    shots,_=plan_shots(job);shot=shots[i]
+    save(job,segment=i+1,total_segments=len(shots),progress=0,message=f'Redoing shot {i+1}/{len(shots)}')
+    outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
+    results=output_files(outputs,'17','videos')
+    if not results:raise ValueError('ComfyUI finished without the shot video')
+    relative=graph['17']['inputs']['filename'].replace('_result.mp4','.mp4')
+    rendered=FILES.download(results[0],INPUT/relative.replace('.mp4','_result.mp4'))
+    piece=work/f'piece_{i:03d}.mp4';skip=graph['17']['inputs'].get('skip_frames',0)
+    if skip and frame_count(rendered)==shot['frames']-skip:shutil.copyfile(rendered,piece)
+    else:run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','17','-movflags','+faststart','-y',str(piece)])
+    pieces=sorted(work.glob('piece_*.mp4'));guide_pieces=sorted(work.glob('guide_[0-9][0-9][0-9].mp4'))
+    W,H=job.get('render_size') or (probe(pieces[0])['width'],probe(pieces[0])['height'])
+    finalize(job,pieces,guide_pieces,W,H)
+    redone=dict(job.get('redone_shots') or {});redone[str(i+1)]=seed
+    save(load(job['id']),redone_shots=redone,redo=None,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}?v={int(time.time())}" for p in pieces])
+
+@app.post('/jobs/{jid}/shots/{n}/redo')
+async def request_redo(jid:str,n:int,request:Request):
+    """Redo shot n (1-based) of a finished job with a new seed (or the given one)."""
+    body=await request.json() if (await request.body()) else {}
+    with LOCK:
+        job=load(jid)
+        if job['status'] not in ('completed','failed'):raise HTTPException(409,'A shot can be redone once the job has finished')
+        if not (job_path(jid)/f'h3_segment_{n-1:03d}.api.json').is_file():raise HTTPException(404,f'Shot {n} was not rendered')
+        seed=body.get('seed')
+        if seed is not None and (not isinstance(seed,int) or seed<0):raise HTTPException(400,'Invalid seed')
+        save(job,status='queued_redo',stage='queued',redo={'shot':n-1,'seed':seed},message=f'Shot {n} queued to be redone')
+    return public(load(jid))

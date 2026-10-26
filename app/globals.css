@@ -572,3 +572,4 @@ img{display:block;max-width:100%}
 .assistant-panel.expanded{width:min(760px,calc(100vw - 32px));height:calc(100vh - 100px)}
 .assistant-panel.expanded .assistant-results img{max-width:560px}
 @media(max-width:560px){.assistant-panel.expanded{left:8px;right:8px;width:auto;height:calc(100vh - 90px)}}
+.shot-redo{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0 4px}.shot-redo:hover{color:var(--accent)}
