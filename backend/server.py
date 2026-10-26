@@ -7,7 +7,7 @@ import requests
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageOps
-from workflows import split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,fixed_plan,head_reference,character_reference
@@ -138,6 +138,7 @@ def validate_request(r,options,slots):
     if representation not in ['original','2d','3d','mask']:raise ValueError('Invalid guide representation')
     if representation=='mask' and r['mode']!='swap':raise ValueError('Latent mask is available for Character Swap')
     if representation=='mask' and not guidance.get('bindings'):raise ValueError('Latent mask needs the subject to replace marked in the video')
+    clamp_float(guidance.get('mark_opacity',1.),.1,1,'mark opacity')
     colors=set()
     for s in guidance.get('bindings',[]):
         if s.get('color') not in COLORS or s['color'] in colors:raise ValueError('Each subject needs a distinct color')
@@ -349,13 +350,32 @@ def mask_preview(job):
     frames=min(per,total);clip=inp/'mask_preview_source.mp4'
     run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-t',str(frames/24),'-vf',f'fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2','-an','-c:v','libx264','-threads','2','-crf','20','-pix_fmt','yuv420p','-y',str(clip)])
     bindings=[{**s,'hex':COLORS[s['color']]} for s in r.get('subject_guidance',{}).get('bindings',[])]
-    save(job,message='Building the latent mask preview')
     relative=str(clip.relative_to(INPUT));out=relative.replace('.mp4','_overlay.mp4')
-    outputs=execute_graph(job,mask_preview_graph(relative,w,h,grid_frames(frames),frames,bindings,job['plan'].get('source_kind','human'),start,job['plan'].get('preserve_objects',[]),job['options'].get('mask'),out),'mask_preview')
+    args=(relative,w,h,grid_frames(frames),frames,bindings,job['plan'].get('source_kind','human'),start,job['plan'].get('preserve_objects',[]))
+    if job['plan'].get('representation')=='2d':
+        # 2D color marks: the marks at full opacity plus the same source clip; the UI blends them live.
+        save(job,message='Tracking the marked subjects for the color guide preview')
+        outputs=execute_graph(job,marks_preview_graph(*args,out),'marks_preview')
+        videos=output_files(outputs,'4','videos')
+        if not videos:raise ValueError('ComfyUI finished without the color guide preview')
+        FILES.download(videos[0],work/'marks_preview.mp4');shutil.copyfile(clip,work/'marks_source.mp4')
+        v=time.time_ns();save(job,marks_preview_url=f"/api/backend/jobs/{job['id']}/files/marks_preview.mp4?v={v}",marks_source_url=f"/api/backend/jobs/{job['id']}/files/marks_source.mp4?v={v}");return
+    save(job,message='Building the latent mask preview')
+    outputs=execute_graph(job,mask_preview_graph(*args,job['options'].get('mask'),out),'mask_preview')
     videos=output_files(outputs,'4','videos')
     if not videos:raise ValueError('ComfyUI finished without the mask preview')
     FILES.download(videos[0],work/'mask_preview.mp4')
     save(job,mask_preview_url=f"/api/backend/jobs/{job['id']}/files/mask_preview.mp4?v={time.time_ns()}")
+
+def marks_sentence(r,representation):
+    """With a 2D/3D color guide the prompt must say which color becomes which picture; the planner's rewrite can drop
+    the user's binding text, so this is added to the final prompt."""
+    guidance=r.get('subject_guidance',{});bindings=guidance.get('bindings',[])
+    if representation not in ('2d','3d') or not bindings:return ''
+    parts=[f"the person {'tinted' if representation=='2d' else 'colored'} {s['color']} in <Video 1> becomes the character from "+' and '.join(f'<Picture {n}>' for n in s['picture_slots']) for s in bindings if s.get('picture_slots')]
+    if not parts:return ''
+    return (' Color markers: '+'; '.join(parts)+'. Keep each assignment through position changes, occlusion and cuts. The colors are '
+            'placement markers only, not appearance: never put them on skin, fur, clothing, eyes or objects, and remove them completely.')
 
 def planning(job):
     if job['request']['mode']=='sharpness':
@@ -407,7 +427,8 @@ def planning(job):
             raw=ask('Look at these frames of a video. Which of these objects does the main person hold or play: phone, microphone, guitar, ukulele, cup, bottle, bicycle, torch, piano, keyboard? Answer with a JSON array of the matching words only, for example ["guitar"], or [] if none.',guide,'vlm_guide',64)
             found=re.findall(r'phone|microphone|guitar|ukulele|cup|bottle|bicycle|torch|piano|keyboard',raw.lower())
             plan['preserve_objects']=sorted(set(found))
-        if plan['representation']=='mask' and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
+        plan['prompt']+=marks_sentence(r,plan['representation'])
+        if plan['representation'] in ('mask','2d') and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
         save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the character description before generating.',step=None,step_total=None);return
     if r['mode']=='headswap':
         face=ask(FACE_INSTRUCTION,pictures[0][1],'vlm_picture_1',512)
@@ -431,7 +452,8 @@ def planning(job):
     if (plan['use_fibo'] or plan['preparation_recommended']) and not fibo_available():
         plan['use_fibo']=plan['preparation_recommended']=False
         plan['warnings'].append('Reference adaptation (FIBO) is not installed on this ComfyUI; the original pictures are used.')
-    if plan['representation']=='mask' and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
+    plan['prompt']+=marks_sentence(r,plan['representation'])
+    if plan['representation'] in ('mask','2d') and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
     save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.',step=None,step_total=None)
 
 FIBO_CACHE=ROOT/'fibo_cache'
@@ -599,7 +621,7 @@ def generate(job):
         # The next shot's context is read from the end of this one, so the worker may drop the overlap only when
         # enough frames remain after it.
         skip=shot['overlap'] if shot['frames']-shot['overlap']>=context else 0
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip);result_node,guide_node='17','18'
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.)} if plan['representation']=='2d' else options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip);result_node,guide_node='17','18'
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
         results=output_files(outputs,result_node,'videos');guides=output_files(outputs,guide_node,'videos') if guide_node else []
         if not results:raise ValueError('ComfyUI finished without the expected video')
@@ -776,6 +798,19 @@ async def update_mask_preview(jid:str,request:Request):
         save(job,options=options,status='queued_mask',stage='queued',message='Updating the latent mask preview')
     return public(job)
 
+@app.post('/jobs/{jid}/marks')
+async def update_marks(jid:str,request:Request):
+    """Opacity of the 2D color marks, chosen on the approval screen (the preview blends it live; nothing reruns)."""
+    body=await request.json()
+    try:opacity=clamp_float(body.get('mark_opacity'),.1,1,'mark opacity')
+    except (ValueError,TypeError) as e:raise HTTPException(400,str(e))
+    with LOCK:
+        job=load(jid)
+        if job['status']!='awaiting_approval' or (job.get('plan') or {}).get('representation')!='2d':raise HTTPException(409,'Only a 2D color guide awaiting approval has mark opacity')
+        request_=json.loads(json.dumps(job['request']));request_.setdefault('subject_guidance',{})['mark_opacity']=round(float(opacity),2)
+        save(job,request=request_)
+    return {**public(load(jid)),'request':load(jid)['request']}
+
 @app.post('/jobs/{jid}/approve')
 def approve(jid:str):
     with LOCK:
@@ -866,7 +901,7 @@ def cancel(jid:str):
 @app.get('/jobs/{jid}/files/{name}')
 def file(jid:str,name:str):
     shot=re.fullmatch(r'piece_(\d{3})\.mp4',name)
-    if name not in ['result.mp4','comparison.mp4','guide_preview.mp4','fibo_preview.png','sampling_preview.jpg','mask_preview.mp4'] and not shot and not re.fullmatch(r'reference_(?:[1-9]|1[01])_prepared\.png',name):raise HTTPException(404,'Unknown output')
+    if name not in ['result.mp4','comparison.mp4','guide_preview.mp4','fibo_preview.png','sampling_preview.jpg','mask_preview.mp4','marks_preview.mp4','marks_source.mp4'] and not shot and not re.fullmatch(r'reference_(?:[1-9]|1[01])_prepared\.png',name):raise HTTPException(404,'Unknown output')
     load(jid);p=job_path(jid)/name
     if not p.is_file():raise HTTPException(404,'Output not yet available')
     return FileResponse(p,filename=f'henge-{jid[:8]}-shot_{int(shot[1])+1:02d}.mp4' if shot else name,media_type='image/jpeg' if p.suffix=='.jpg' else 'image/png' if p.suffix=='.png' else 'video/mp4')

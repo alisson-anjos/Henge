@@ -89,7 +89,12 @@ class HengeGuide:
             if bool(object_mask.any()):region=region*(~object_mask).float()
             return (images,region)
         result=images.clone();del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
-        for idx,s,rgb in chosen:result[masks[:,idx]]=torch.tensor(rgb,dtype=result.dtype)/255
+        # 2D marks can be translucent (mark_opacity < 1, the BFS Colored Mark look): the guide person stays visible
+        # under the tint, so the face and expression come through. 3D always paints the body solid.
+        alpha=float(spec.get('mark_opacity',1.)) if representation=='2d' else 1.
+        for idx,s,rgb in chosen:
+            m=masks[:,idx];color=torch.tensor(rgb,dtype=result.dtype)/255
+            result[m]=color if alpha>=1 else images[m]*(1-alpha)+color*alpha
         if representation=='2d':
             result[object_mask]=images[object_mask]
             return (result,selected.float())

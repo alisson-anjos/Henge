@@ -85,6 +85,15 @@ class WorkflowContracts(unittest.TestCase):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0,skip_frames=22)
   self.assertEqual(g['17']['inputs']['skip_frames'],22);self.assertNotIn('skip_frames',g['18']['inputs'])
   self.assertNotIn('skip_frames',h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0)['17']['inputs'])
+ def test_color_marks_reach_the_prompt(self):
+  import server
+  r={'subject_guidance':{'representation':'2d','mark_opacity':.35,'bindings':[{'color':'green','picture_slots':[1]},{'color':'purple','picture_slots':[2,3]}]}}
+  text=server.marks_sentence(r,'2d')
+  self.assertIn('tinted green in <Video 1> becomes the character from <Picture 1>',text);self.assertIn('<Picture 2> and <Picture 3>',text)
+  self.assertEqual(server.marks_sentence(r,'original'),'');self.assertIn('colored green',server.marks_sentence(r,'3d'))
+  from workflows import marks_preview_graph
+  g=marks_preview_graph('c.mp4',384,224,107,107,[],'human',0,[],'out.mp4');self.assertEqual(g['2']['inputs']['representation'],'2d');self.assertIn('"mark_opacity": 1',g['2']['inputs']['mask_settings'])
+  with self.assertRaises(ValueError):validate_request({**self.request(),'subject_guidance':{'representation':'2d','mark_opacity':0,'bindings':[]}},{},[1])
  def test_close_cuts_do_not_create_tiny_shots(self):
   shots=split_on_cuts(233,107,22,[3,40,52,60,140,225]);self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),233)
   self.assertEqual([s['start'] for s in shots if s['reset_context']],[0,40,140]);self.assertTrue(all(s['frames']>=24 for s in shots))

@@ -35,13 +35,44 @@ export function SubjectVideo({url, range, subjects, pickingId, onAnchor, onDurat
   </div>;
 }
 
-export default function SubjectBindings({subjects, onChange, representation, onRepresentation, pictures, lang, pickingId, onPick, onPrompt}: {subjects: SubjectBinding[]; onChange: (value: SubjectBinding[]) => void; representation: GuideRepresentation; onRepresentation: (value: GuideRepresentation) => void; pictures: Picture[]; lang: Language; pickingId: string | null; onPick: (id: string | null) => void; onPrompt: () => void}) {
+/** What each guide representation sends to H3, in plain words. */
+const MODES: Record<GuideRepresentation, Record<Language, string>> = {
+  original: {
+    en: 'Original: the guide video goes in as it is. Your marks only help the planner; the model does not see who is who, so with two or more people it can swap them.',
+    pt: 'Original: o vídeo guia entra como está. As marcações só ajudam o planejamento; o modelo não vê quem é quem, então com duas ou mais pessoas ele pode trocá-las.',
+    es: 'Original: el vídeo guía entra tal cual. Las marcas solo ayudan a planificar; el modelo no ve quién es quién, así que con dos o más personas puede intercambiarlas.'},
+  '2d': {
+    en: '2D: each marked person is tracked (SAM 3.1) and painted with a solid color in the guide; the prompt says which color becomes which reference. Best for keeping people apart; the guide face and expression are covered.',
+    pt: '2D: cada pessoa marcada é rastreada (SAM 3.1) e pintada com uma cor sólida no guia; o prompt diz qual cor vira qual referência. Melhor para não trocar as pessoas; o rosto e a expressão do guia ficam cobertos.',
+    es: '2D: cada persona marcada se sigue (SAM 3.1) y se pinta con un color sólido en la guía; el prompt dice qué color se vuelve qué referencia. Lo mejor para no confundir personas; la cara y la expresión de la guía quedan cubiertas.'},
+  '3d': {
+    en: '3D: each marked person becomes a colored 3D body with face (SAM 3D Body), so pose, hands and expression come through with the color. People only, not animals; slower.',
+    pt: '3D: cada pessoa marcada vira um corpo 3D colorido com rosto (SAM 3D Body), então pose, mãos e expressão passam junto com a cor. Só pessoas, não animais; mais lento.',
+    es: '3D: cada persona marcada se vuelve un cuerpo 3D de color con cara (SAM 3D Body), así que la pose, las manos y la expresión pasan con el color. Solo personas, no animales; más lento.'},
+  mask: {
+    en: 'Mask (Character Swap only): the video keeps its own pixels and only the area around the marked people is generated again. Good for keeping the scene untouched.',
+    pt: 'Mask (só Character Swap): o vídeo mantém os próprios pixels e só a área em volta das pessoas marcadas é gerada de novo. Bom para não mexer no cenário.',
+    es: 'Mask (solo Character Swap): el vídeo conserva sus píxeles y solo se regenera la zona alrededor de las personas marcadas. Bueno para no tocar el escenario.'},
+};
+
+export default function SubjectBindings({subjects, onChange, representation, onRepresentation, pictures, lang, pickingId, onPick, onPrompt, mode, markOpacity = 1, onMarkOpacity}: {subjects: SubjectBinding[]; onChange: (value: SubjectBinding[]) => void; representation: GuideRepresentation; onRepresentation: (value: GuideRepresentation) => void; pictures: Picture[]; lang: Language; pickingId: string | null; onPick: (id: string | null) => void; onPrompt: () => void; mode?: string; markOpacity?: number; onMarkOpacity?: (value: number) => void}) {
   const t = copy[lang];
+  const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
+  const warning = representation === 'original' && subjects.length > 1
+    ? tr('With Original, the colors never reach the model. To keep each person on the right reference, use 2D (or 3D for people).', 'Com Original, as cores não chegam ao modelo. Para manter cada pessoa na referência certa, use 2D (ou 3D para pessoas).', 'Con Original, los colores no llegan al modelo. Para mantener cada persona con su referencia, usa 2D (o 3D para personas).')
+    : representation === 'mask' && mode && mode !== 'swap' ? tr('Mask works only in Character Swap. Choose 2D or 3D here.', 'Mask só funciona no Character Swap. Escolha 2D ou 3D aqui.', 'Mask solo funciona en Character Swap. Elige 2D o 3D aquí.')
+    : representation !== 'original' && !subjects.length ? tr('Add and mark at least one subject: 2D, 3D and Mask need it.', 'Adicione e marque pelo menos um personagem: 2D, 3D e Mask precisam disso.', 'Añade y marca al menos un personaje: 2D, 3D y Mask lo necesitan.')
+    : '';
   function patch(id: string, change: Partial<SubjectBinding>) {onChange(subjects.map(s => s.id === id ? {...s, ...change} : s));}
   function add() {const color = SUBJECT_COLORS.find(c => !subjects.some(s => s.color === c.name)); if (!color) return; const id = crypto.randomUUID(); onChange([...subjects, {id, label: `${lang === 'en' ? 'Subject' : 'Personagem'} ${subjects.length + 1}`, color: color.name, picture_slots: [], anchors: []}]); onPick(id);}
   const complete = subjects.length > 0 && subjects.every(s => s.anchors.length && s.picture_slots.length && s.picture_slots.every(n => pictures.some(p => p.slot === n)));
   return <section className={`${styles.panel} surface`} aria-label={t.title}>
-    <div className={styles.heading}><h2>{t.title}</h2><div className={styles.modes} role="group" aria-label={t.mode}>{(['original', '2d', '3d', 'mask'] as const).map(value => <button type="button" key={value} aria-pressed={representation === value} onClick={() => onRepresentation(value)}>{value === 'original' ? (lang === 'pt' ? 'Original' : lang === 'es' ? 'Original' : 'Original') : value.toUpperCase()}</button>)}</div></div>
+    <div className={styles.heading}><h2>{t.title}</h2><div className={styles.modes} role="group" aria-label={t.mode}>{(['original', '2d', '3d', 'mask'] as const).map(value => <button type="button" key={value} title={MODES[value][lang]} aria-pressed={representation === value} disabled={value === 'mask' && !!mode && mode !== 'swap' && representation !== 'mask'} onClick={() => onRepresentation(value)}>{value === 'original' ? (lang === 'pt' ? 'Original' : lang === 'es' ? 'Original' : 'Original') : value.toUpperCase()}</button>)}</div></div>
+    <p className={styles.modeHelp}>{MODES[representation][lang]}</p>
+    {warning && <p className={styles.warning} role="alert">{warning}</p>}
+    {representation === '2d' && onMarkOpacity && <label className={styles.opacity}><span>{tr('Mark opacity', 'Opacidade da marcação', 'Opacidad de la marca')} <b className="mono">{Math.round(markOpacity * 100)}%</b></span>
+      <input type="range" min="0.1" max="1" step="0.05" value={markOpacity} onChange={e => onMarkOpacity(Number(e.target.value))}/>
+      <small>{tr('Lower: the guide person shows through the tint (face and expression kept, more of their look can leak). 100%: solid color. You can try it on the real guide before approving.', 'Menor: a pessoa do guia aparece sob a tinta (rosto e expressão mantidos, mas parte da aparência dela pode vazar). 100%: cor sólida. Dá para testar no guia real antes de aprovar.', 'Menor: la persona de la guía se ve bajo el tinte (cara y expresión se mantienen, pero parte de su aspecto puede filtrarse). 100%: color sólido. Puedes probarlo en la guía real antes de aprobar.')}</small></label>}
     <p>{pickingId ? t.selecting : subjects.length ? t.hint : t.empty}</p>
     <div className={styles.list}>{subjects.map((s, index) => <article key={s.id} className={styles.subject} style={{borderLeftColor: SUBJECT_COLORS.find(c => c.name === s.color)?.hex}}>
       <div className={styles.subjectHeading}><strong>{index + 1}</strong><input aria-label={`${t.name} ${index + 1}`} value={s.label} maxLength={80} onChange={e => patch(s.id, {label: e.target.value})}/><button type="button" aria-label={`${t.remove} ${index + 1}`} onClick={() => {onChange(subjects.filter(x => x.id !== s.id)); if (pickingId === s.id) onPick(null);}}>×</button></div>

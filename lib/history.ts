@@ -23,7 +23,7 @@ export type DirectionRequest = {
   output_audio: {keep_source: boolean};
   prompt: string;
   editor_prompt: string;
-  subject_guidance?: {representation: GuideRepresentation; bindings: SubjectBinding[]; status: 'selection_only'; marker_colors_are_output_appearance: false};
+  subject_guidance?: {representation: GuideRepresentation; bindings: SubjectBinding[]; status: 'selection_only'; marker_colors_are_output_appearance: false; mark_opacity?: number};
   video: {name: string; source_signature?: string; conditioning: string; source_duration?: number; start_seconds: number; end_seconds: number; duration: number};
   pictures: {slot: number; token: string; name: string}[];
   /** Motion Transfer · first-frame propagate: the picture that is the edited first frame. */

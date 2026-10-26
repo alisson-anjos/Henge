@@ -502,3 +502,10 @@ img{display:block;max-width:100%}
 .shot-clip video{display:block;width:100%;aspect-ratio:9/16;object-fit:contain;border:0;border-radius:0}
 .shot-clip-icon{position:absolute;inset:0;margin:auto;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:12px;box-shadow:0 0 0 1px rgba(255,255,255,.35);transition:opacity .15s}
 .shot-clip[aria-pressed=true] .shot-clip-icon{opacity:0}.shot-clip[aria-pressed=true]:hover .shot-clip-icon{opacity:1}
+
+.marks-stack{position:relative;display:grid}
+.marks-stack video{grid-area:1/1;width:100%;border-radius:8px}
+.marks-stack video[aria-hidden]{pointer-events:none}
+.marks-opacity{display:grid;gap:6px;font-size:12px}
+.marks-opacity span{display:flex;justify-content:space-between}
+.marks-opacity input{width:100%;accent-color:var(--accent)}

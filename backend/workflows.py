@@ -152,6 +152,14 @@ def fibo_graph(image,refs,instruction,seed):
     for i,p in enumerate(refs,2):g[str(20+i)]=node('LoadImage',image=p);g['5']['inputs'][f'images.image_{i}']=[str(20+i),0]
     return g
 
+def marks_preview_graph(video,width,height,length,trim_frames,bindings,source_kind,segment_start,preserve_objects,filename):
+    # The 2D color guide at full opacity: the UI lays it over the source with the chosen opacity, which is exactly the
+    # blend HengeGuide makes, so the opacity can be tried live without running SAM again.
+    return {'1':node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length),
+            '2':node('HengeGuide',images=['1',0],representation='2d',bindings=json.dumps(bindings),source_kind=source_kind,segment_start=segment_start,
+                     sam_checkpoint='sam3.1_multiplex_fp16.safetensors',body_model='sam_3d_body_dinov3_bf16.safetensors',preserve_objects=json.dumps(preserve_objects or []),mask_settings='{"mark_opacity": 1}'),
+            '4':node('HengeSaveVideo',images=['2',0],filename=filename,trim_frames=trim_frames,fps=24.)}
+
 def mask_preview_graph(video,width,height,length,trim_frames,bindings,source_kind,segment_start,preserve_objects,mask,filename):
     # Same HengeGuide pass the render uses, drawn over the source so the user can check the region first.
     return {'1':node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length),
