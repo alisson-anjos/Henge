@@ -250,13 +250,15 @@ class HengeMaskPreview:
 
 class HengeSaveVideo:
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'filename':('STRING',),'trim_frames':('INT',{'default':107,'min':1}),'fps':('FLOAT',{'default':24})}}
+    def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'filename':('STRING',),'trim_frames':('INT',{'default':107,'min':1}),'fps':('FLOAT',{'default':24})},
+                                 'optional':{'skip_frames':('INT',{'default':0,'min':0})}}
     RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Henge'
-    def save(self,images,filename,trim_frames,fps):
+    def save(self,images,filename,trim_frames,fps,skip_frames=0):
+        # skip_frames drops a shot's context overlap here, so this is the shot's only encode (CRF 17, visually lossless).
         root=Path(folder_paths.get_output_directory()).resolve();p=(root/filename).resolve()
         if not p.is_relative_to(root) or p.suffix!='.mp4':raise ValueError('Invalid output name')
-        p.parent.mkdir(parents=True,exist_ok=True);frames=(images[:trim_frames,...,:3].clamp(0,1)*255).round().byte().cpu().numpy();h,w=frames.shape[1:3]
-        proc=subprocess.Popen(['ffmpeg','-v','error','-y','-f','rawvideo','-pix_fmt','rgb24','-s',f'{w}x{h}','-r',str(fps),'-i','pipe:0','-an','-c:v','libx264','-threads','2','-crf','18','-pix_fmt','yuv420p','-movflags','+faststart',str(p)],stdin=subprocess.PIPE,stderr=subprocess.PIPE)
+        p.parent.mkdir(parents=True,exist_ok=True);frames=(images[skip_frames:trim_frames,...,:3].clamp(0,1)*255).round().byte().cpu().numpy();h,w=frames.shape[1:3]
+        proc=subprocess.Popen(['ffmpeg','-v','error','-y','-f','rawvideo','-pix_fmt','rgb24','-s',f'{w}x{h}','-r',str(fps),'-i','pipe:0','-an','-c:v','libx264','-threads','2','-crf','17','-pix_fmt','yuv420p','-movflags','+faststart',str(p)],stdin=subprocess.PIPE,stderr=subprocess.PIPE)
         _,err=proc.communicate(frames.tobytes())
         if proc.returncode:raise RuntimeError(err.decode(errors='replace')[-1000:])
         return {'ui':{'videos':[{'filename':p.name,'subfolder':str(p.parent.relative_to(root)),'type':'output'}]}}

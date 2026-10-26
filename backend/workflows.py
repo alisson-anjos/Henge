@@ -58,7 +58,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
@@ -82,6 +82,8 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
       '18':node('HengeSaveVideo',images=['8',0],filename=video.replace('.mp4','_guide.mp4'),trim_frames=trim_frames,fps=24.),
     }
     g['9']['inputs'].update(conditioning_mode=conditioning_mode,reference_scale=reference_scale)
+    # The worker drops the context overlap itself, so the bridge only copies the shot (no second encode).
+    if skip_frames:g['17']['inputs']['skip_frames']=skip_frames
     if representation=='mask':
         # Only the marked subject is regenerated; everything else starts from (and keeps) the source latent.
         g['23']=node('HengeLatentMask',latent=['9',1],vae=['6',0],images=['7',0],mask=['8',1],grow=1,strength=float((mask or {}).get('strength',1.)))

@@ -529,6 +529,11 @@ def shot_preview(job):
     start=job['request']['video']['start_seconds'];shots,_=plan_shots(job)
     return {'cut_mode':cut_mode(job),'shots':[{'index':i+1,'start':round(start+s['start']/24,3),'end':round(start+(s['start']+s['frames'])/24,3),'context_seconds':round(s['overlap']/24,3),'after_cut':bool(s.get('reset_context')) and i>0} for i,s in enumerate(shots)]}
 
+def frame_count(path):
+    out=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-count_packets','-show_entries','stream=nb_read_packets','-of','csv=p=0',str(path)],capture_output=True,text=True)
+    try:return int(out.stdout.strip())
+    except ValueError:return -1
+
 def generate(job):
     r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'henge'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
     if r['mode']=='headswap':refs=[str(head_reference(INPUT/refs[0],inp/'head_reference.png').relative_to(INPUT))]
@@ -591,12 +596,20 @@ def generate(job):
         if previous is not None:
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale);result_node,guide_node='17','18'
+        # The next shot's context is read from the end of this one, so the worker may drop the overlap only when
+        # enough frames remain after it.
+        skip=shot['overlap'] if shot['frames']-shot['overlap']>=context else 0
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask=options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip);result_node,guide_node='17','18'
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
         results=output_files(outputs,result_node,'videos');guides=output_files(outputs,guide_node,'videos') if guide_node else []
         if not results:raise ValueError('ComfyUI finished without the expected video')
         rendered=FILES.download(results[0],INPUT/relative.replace('.mp4','_result.mp4'))
-        piece=work/f'piece_{i:03d}.mp4';run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','18','-movflags','+faststart','-y',str(piece)]);pieces.append(piece);previous=rendered
+        piece=work/f'piece_{i:03d}.mp4'
+        if skip and frame_count(rendered)==shot['frames']-skip:shutil.copyfile(rendered,piece)
+        else:
+            # Overlap still in the file (no overlap to drop, or an older worker that ignores skip_frames).
+            run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','17','-movflags','+faststart','-y',str(piece)])
+        pieces.append(piece);previous=rendered
         # Each finished shot is viewable and downloadable while the next ones render.
         save(job,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
         if i==0 and guides:FILES.download(guides[0],work/'guide_preview.mp4');save(job,guide_preview_url=f"/api/backend/jobs/{job['id']}/files/guide_preview.mp4")
