@@ -8,7 +8,8 @@ import {TEMPLATES, type StudioTemplate} from '../lib/templates';
 import {downloadJSON, FEEDBACK, HISTORY_KEY, HISTORY_LIMIT, readHistory, type DirectionRequest, type SavedDirection} from '../lib/history';
 import VideoTrimModal, {type ClipRange} from './video-trim-modal';
 import {COMMUNITY, type CommunityPreset} from '../lib/community';
-import FirstFrameModal from './first-frame-modal';
+import FirstFrameModal, {coverFit} from './first-frame-modal';
+const FIRST_FRAME_KEY = 'henge-first-frame';
 import GenerationPanel, {type GenerationJob} from './generation-panel';
 import JobProgress from './job-progress';
 import {readJson} from '../lib/http';
@@ -228,7 +229,7 @@ export default function Studio() {
     const item = pictures.find(p => p.slot === slot);
     if (item) URL.revokeObjectURL(item.url);
     setPictures(pictures.filter(p => p.slot !== slot));
-    if (slot === firstFrameSlot) setFirstFrameSlot(null);
+    if (slot === firstFrameSlot) {setFirstFrameSlot(null); try {localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}}
     setSubjects(current => current.map(s => ({...s, picture_slots: s.picture_slots.filter(n => n !== slot)})));
   }
   async function autoPrompt() {
@@ -274,6 +275,19 @@ export default function Studio() {
   }
   /** The direction's settings (mode, prompt, quality, shots, audio, subject guidance); media are left as they are. */
   useEffect(() => {if (mode !== 'sharpness') setQuality(q => q === '2160p' ? '1440p' : q);}, [mode]);
+  // The same guide is back (reload, re-upload or a restored job): bring back its FIBO-edited first frame.
+  useEffect(() => {
+    if (!video || !guideSignature) return;
+    let saved: {id: string; width: number; height: number; slot: number; guide: string} | null = null;
+    try {saved = JSON.parse(localStorage.getItem(FIRST_FRAME_KEY) || 'null');} catch {/* private mode */}
+    if (!saved || saved.guide !== guideSignature || pictures.some(p => p.slot === saved!.slot)) return;
+    const {id, width, height, slot} = saved;
+    coverFit(`/api/backend/frame-edits/${id}`, width, height).then(file => {
+      setPictures(current => current.some(p => p.slot === slot) ? current : [...current, {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
+      setFirstFrameSlot(slot); setRequestedProfile('motion_ffp');
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.url, guideSignature]);
   function applyDirection(r: DirectionRequest) {
     if (MODES.includes(r.mode)) setMode(r.mode);
     if (['480p', '720p', '1080p', '1440p', '2160p'].includes(r.quality)) setQuality(r.quality);
@@ -352,11 +366,13 @@ export default function Studio() {
 
   return <div className={`app-shell mode-${mode}`} style={style}>
     <SetupScreen lang={lang}/>
-    {frameModal && video?.range && <FirstFrameModal videoUrl={video.url} start={video.range.start} pictures={pictures.filter(p => p.slot !== firstFrameSlot)} lang={lang} onClose={() => setFrameModal(false)} onUse={file => {
+    {frameModal && video?.range && <FirstFrameModal videoUrl={video.url} start={video.range.start} pictures={pictures.filter(p => p.slot !== firstFrameSlot)} lang={lang} onClose={() => setFrameModal(false)} onUse={(file, edit) => {
       const slot = firstFrameSlot ?? Array.from({length: maxPictures}, (_, i) => i + 1).find(i => !pictures.some(p => p.slot === i));
       if (!slot) {setNotice(tr('Remove a picture to make room for the first frame.', 'Remova uma Picture para abrir espaço para o primeiro quadro.', 'Quita una imagen para dejar espacio al primer fotograma.')); return;}
       setPictures(current => [...current.filter(p => {if (p.slot === slot) URL.revokeObjectURL(p.url); return p.slot !== slot;}), {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
       setFirstFrameSlot(slot); setRequestedProfile('motion_ffp'); setFrameModal(false);
+      // A FIBO edit lives on the bridge: remember it with this guide so a reload can bring it back.
+      try {if (edit) localStorage.setItem(FIRST_FRAME_KEY, JSON.stringify({...edit, slot, guide: guideSignature})); else localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}
       setNotice(tr(`Picture ${slot} is the edited first frame. The First-frame propagate model is selected; describe the edit in the prompt.`, `A Imagem ${slot} é o primeiro quadro editado. O modelo First-frame propagate foi selecionado; descreva a edição no prompt.`, `La Imagen ${slot} es el primer fotograma editado. Se seleccionó el modelo First-frame propagate; describe la edición en el prompt.`));
     }}/>}
     {editingVideo && video && <VideoTrimModal file={video.file} url={video.url} initial={video.range} onConfirm={(range, duration) => {setVideo(v => v ? {...v, range, duration} : v); setEditingVideo(false);}} onCancel={() => {if (!video.range) removeVideo(); setEditingVideo(false);}}/>}

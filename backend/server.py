@@ -692,7 +692,7 @@ async def frame_edit(request:Request):
             with Image.open(io.BytesIO(await upload.read())) as im:dest=inp/f'{name}.png';im.convert('RGB').save(dest)
         except OSError:raise HTTPException(400,f'{name} is not an image')
         staged.append(str(dest.relative_to(INPUT)))
-    job={'id':jid,'created':time.time(),'status':'running','stage':'fibo_edit','progress':0,'request':{'mode':'frame_edit'},'options':{},'message':'Editing the frame'};save(job)
+    job={'id':jid,'created':time.time(),'status':'running','stage':'fibo_edit','progress':0,'request':{'mode':'frame_edit','instruction':instruction},'options':{},'message':'Editing the frame'};save(job)
     try:
         # FIBO otherwise re-poses the picture (seen with a person swap): pin <image_1>'s composition and poses.
         refs=''.join(f' <image_{i}> is a reference.' for i in range(2,len(staged)+1))
@@ -702,7 +702,20 @@ async def frame_edit(request:Request):
         save(job,status='completed',stage='complete',progress=1)
     except Exception as e:
         save(job,status='failed',error=str(e)[:1800]);raise HTTPException(500,f'Frame edit failed: {str(e)[:600]}')
-    return FileResponse(result,media_type='image/png')
+    return FileResponse(result,media_type='image/png',headers={'X-Henge-Edit':jid})
+
+@app.get('/frame-edits')
+def frame_edits():
+    """Recent FIBO frame edits, so an edit survives a page reload and can be reused without running FIBO again."""
+    jobs=[json.loads(p.read_text()) for p in JOBS.glob('*/job.json')]
+    edits=[j for j in jobs if (j.get('request') or {}).get('mode')=='frame_edit' and j.get('status')=='completed' and (INPUT/'henge'/j['id']/'edited.png').is_file()]
+    return [{'id':j['id'],'created':j['created'],'instruction':j['request'].get('instruction',''),'url':f"/api/backend/frame-edits/{j['id']}"} for j in sorted(edits,key=lambda j:j['created'],reverse=True)[:24]]
+
+@app.get('/frame-edits/{jid}')
+def frame_edit_image(jid:str):
+    job=load(jid);path=INPUT/'henge'/jid/'edited.png'
+    if (job.get('request') or {}).get('mode')!='frame_edit' or not path.is_file():raise HTTPException(404,'Unknown frame edit')
+    return FileResponse(path,media_type='image/png')
 
 @app.post('/jobs/{jid}/retry')
 def retry(jid:str):

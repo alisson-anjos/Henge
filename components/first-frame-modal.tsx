@@ -5,14 +5,26 @@ import type {Picture} from '../lib/media';
 
 type Image = {blob: Blob; url: string};
 const load = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {const image = new window.Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = src;});
+type Edit = {id: string; created: number; instruction: string; url: string};
+
+/** Cover-crop an image to exactly width x height: a propagated first frame must line up with frame 0 of the guide. */
+export async function coverFit(src: string, width: number, height: number): Promise<File> {
+  const image = await load(src);
+  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const w = image.naturalWidth * scale, h = image.naturalHeight * scale;
+  canvas.getContext('2d')?.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(new File([blob], 'first_frame.png', {type: 'image/png'})) : reject(Error('Could not encode the frame')), 'image/png'));
+}
 
 /** The guide's first selected frame, edited with FIBO 2 or replaced by an uploaded image, then cropped and resized to
  * the frame's exact size so it can be propagated (Motion Transfer · first-frame propagate). */
-export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse, onClose}: {videoUrl: string; start: number; pictures: Picture[]; lang: Language; onUse: (file: File) => void; onClose: () => void}) {
+export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse, onClose}: {videoUrl: string; start: number; pictures: Picture[]; lang: Language; onUse: (file: File, edit: {id: string; width: number; height: number} | null) => void; onClose: () => void}) {
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const dialog = useRef<HTMLDialogElement>(null), upload = useRef<HTMLInputElement>(null);
   const [frame, setFrame] = useState<Image & {width: number; height: number} | null>(null);
-  const [result, setResult] = useState<Image | null>(null);
+  const [result, setResult] = useState<Image & {edit?: string} | null>(null);
+  const [edits, setEdits] = useState<Edit[]>([]);
   const [fiboReady, setFiboReady] = useState(false);
   const [instruction, setInstruction] = useState('');
   const [useRefs, setUseRefs] = useState(false);
@@ -22,6 +34,7 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
   useEffect(() => {
     dialog.current?.showModal();
     fetch('/api/backend/health').then(r => r.json()).then(h => setFiboReady(!!h.fibo_ready)).catch(() => {});
+    fetch('/api/backend/frame-edits').then(r => r.json()).then(rows => {if (Array.isArray(rows)) setEdits(rows);}).catch(() => {});
     const video = document.createElement('video');
     video.muted = true; video.preload = 'auto'; video.src = videoUrl;
     video.onloadedmetadata = () => {video.currentTime = Math.min(start + .001, Math.max(0, video.duration - .05));};
@@ -47,19 +60,18 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
       if (useRefs) pictures.forEach(p => body.append(`picture_${String(p.slot).padStart(2, '0')}`, p.file, p.file.name));
       const response = await fetch('/api/backend/frame-edit', {method: 'POST', body});
       if (!response.ok) {const reply = await response.json().catch(() => ({})); throw Error(reply.detail || reply.error || `HTTP ${response.status}`);}
-      const blob = await response.blob();
-      setResult({blob, url: URL.createObjectURL(blob)});
+      const blob = await response.blob(), edit = response.headers.get('x-henge-edit') || undefined;
+      setResult({blob, url: URL.createObjectURL(blob), edit});
+      if (edit) setEdits(current => [{id: edit, created: Date.now() / 1000, instruction: instruction.trim(), url: `/api/backend/frame-edits/${edit}`}, ...current]);
     } catch (e) {setError(e instanceof Error ? e.message : String(e));} finally {setBusy(false);}
+  }
+  async function pick(edit: Edit) {
+    try {const blob = await (await fetch(edit.url)).blob(); setResult({blob, url: URL.createObjectURL(blob), edit: edit.id}); setInstruction(edit.instruction);}
+    catch {setError(tr('Could not load that edit.', 'Não foi possível carregar essa edição.', 'No se pudo cargar esa edición.'));}
   }
   async function use() {
     if (!frame || !result) return;
-    // Cover-crop to the frame's aspect and size: the propagated frame must line up with frame 0 of the guide.
-    const image = await load(result.url);
-    const canvas = document.createElement('canvas'); canvas.width = frame.width; canvas.height = frame.height;
-    const scale = Math.max(frame.width / image.naturalWidth, frame.height / image.naturalHeight);
-    const w = image.naturalWidth * scale, h = image.naturalHeight * scale;
-    canvas.getContext('2d')?.drawImage(image, (frame.width - w) / 2, (frame.height - h) / 2, w, h);
-    canvas.toBlob(blob => {if (blob) onUse(new File([blob], 'first_frame.png', {type: 'image/png'}));}, 'image/png');
+    onUse(await coverFit(result.url, frame.width, frame.height), result.edit ? {id: result.edit, width: frame.width, height: frame.height} : null);
   }
 
   return <dialog ref={dialog} className="trim-modal first-frame-modal" aria-labelledby="first-frame-heading" onCancel={e => {e.preventDefault(); onClose();}}>
@@ -75,6 +87,7 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
         <label>{tr('What should change in this frame?', 'O que deve mudar neste quadro?', '¿Qué debe cambiar en este fotograma?')}<textarea value={instruction} onChange={e => setInstruction(e.target.value)} placeholder={tr('Set his hands on fire', 'Coloque fogo nas mãos dele', 'Pon fuego en sus manos')}/></label>
         {pictures.length > 0 && <label className="prompt-assist-row"><input type="checkbox" checked={useRefs} onChange={e => setUseRefs(e.target.checked)}/><span><strong>{tr('Send my pictures to FIBO as references', 'Enviar minhas Pictures ao FIBO como referência', 'Enviar mis imágenes a FIBO como referencia')}</strong></span></label>}
       </> : <small className="muted">{tr('FIBO is not installed on this ComfyUI; upload an edited frame instead.', 'O FIBO não está instalado neste ComfyUI; envie um quadro já editado.', 'FIBO no está instalado en este ComfyUI; sube un fotograma editado.')}</small>}
+      {edits.length > 0 && <div className="recent-edits"><span className="eyebrow muted">{tr('Recent FIBO edits', 'Edições FIBO recentes', 'Ediciones FIBO recientes')}</span><div>{edits.map(e => <button key={e.id} title={e.instruction} aria-pressed={result?.edit === e.id} onClick={() => pick(e)}><img src={e.url} alt={e.instruction} loading="lazy"/></button>)}</div></div>}
       {error && <p className="validation" role="alert">{error}</p>}
       <input hidden ref={upload} type="file" accept="image/jpeg,image/png,image/webp" onChange={e => {const file = e.target.files?.[0]; if (file) setResult({blob: file, url: URL.createObjectURL(file)}); e.target.value = '';}}/>
       <div className="modal-actions">
