@@ -449,10 +449,12 @@ img{display:block;max-width:100%}
 .job-mode.swap{color:#D6FF4B;border-color:#D6FF4B55}.job-mode.motion{color:#AA8BFF;border-color:#AA8BFF55}.job-mode.headswap{color:#FF9F6B;border-color:#FF9F6B55}.job-mode.sharpness{color:#6BE4FF;border-color:#6BE4FF55}
 /* "Models used": what runs for the current mode and options. */
 .engines{display:grid;gap:8px;margin:14px 0 4px}
-.engines ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
-.engines li{display:grid;gap:1px;padding:6px 10px;border:1px solid var(--line,#2a2a36);border-radius:10px;background:#13131b;min-width:0}
-.engines strong{font-size:11px;font-weight:600}
-.engines small{font-size:9.5px;color:var(--muted)}
+.engines ol{list-style:none;margin:0;padding:0;border:1px solid var(--line,#2a2a36);border-radius:10px;background:#13131b;overflow:hidden}
+.engines li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 12px;min-height:32px}
+.engines li+li{border-top:1px solid var(--line,#2a2a36)}
+.engines li>span{font-size:9px;color:var(--muted);text-align:center;border:1px solid var(--line,#2a2a36);border-radius:50%;width:18px;height:18px;line-height:16px}
+.engines small{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.engines strong{font-size:11.5px;font-weight:600;text-align:right;white-space:nowrap}
 .community-card .template-art>img{object-fit:cover}
 .template-slots span.bring{border-style:dashed;color:var(--accent)}
 .community-card{display:flex;flex-direction:column}
@@ -471,7 +473,7 @@ img{display:block;max-width:100%}
 .first-frame-controls{display:grid;gap:10px}
 .first-frame-controls label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
 .first-frame-controls textarea{min-height:70px;padding:10px;background:#13131b;color:var(--text);border:1px solid #2a2a36;border-radius:10px;font:inherit}
-@media(max-width:600px){.first-frame-panes{grid-template-columns:1fr}}
+@media(max-width:600px){.first-frame-panes{gap:8px;margin:12px 0}.first-frame-panes img,.first-frame-empty{max-height:36vh}.first-frame-modal{padding:16px}.first-frame-modal .modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.first-frame-modal .modal-actions>*{width:100%}.first-frame-modal .modal-actions .primary{grid-column:1/-1}}
 .recent-edits{display:grid;gap:6px}
 .recent-edits>div{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
 .recent-edits button{flex:none;width:64px;height:64px;padding:0;border:1px solid #2a2a36;border-radius:8px;overflow:hidden;background:#13131b}
