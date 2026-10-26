@@ -5,17 +5,14 @@ import json,math
 from pathlib import Path
 MODELS={
  'motion':{'label':'Original · 10500','task':'motion','lora':'henge/motion_10500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
- 'motion_tara4500':{'label':'TARA-trained · 4500','task':'motion','lora':'henge/motion_tara_4500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
- # SolarRenderer control LoRA (0.5) merged by rank concatenation (lossless). The 10500 merge already holds adapter V2.
- 'motion_tara4500_solar':{'label':'TARA-trained · 4500 + Solar 0.5','task':'motion','lora':'henge/motion_tara_4500_solar05.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
- # SolarRenderer control LoRA on its own (no motion LoRA, no adapter), for TARA comparisons.
- 'motion_solar_control':{'label':'Solar control only (no Henge LoRA)','task':'motion','lora':'henge/solar_control.safetensors','adapter':None,'clip_context':True},
- 'motion_solar':{'label':'Original · 10500 + Solar 0.5 (adapter merged)','task':'motion','lora':'henge/motion10500_plus_adapter_v2_solar05.safetensors','adapter':None,'clip_context':True},
+ # Test merges: 10500 x1.0 + TARA 4500 x0.3, rank concat then per-module SVD keeping 95% / 99% of the Frobenius
+ # energy (tools/henge_session_20261025/merge_fro.py); for both Guide Latents and TARA.
+ 'motion_mix_dyn95':{'label':'10500 + TARA 0.3 · fro dyn95 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn95.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
+ 'motion_mix_dyn99':{'label':'10500 + TARA 0.3 · fro dyn99 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn99.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
  # First-frame propagate: Alissonerdx VFX Edit FFP (r128) merged with SolarRenderer control at 0.5, Frobenius dyn99.
  # The whole source is the guide; an optional edited first frame enters as a native image reference (prompt: vfx_edit:).
  'motion_ffp':{'label':'First-frame propagate · VFX FFP + Solar (dyn99)','task':'motion','lora':'henge/vfx_ffp_solar05_fro_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
  'character':{'task':'swap','label':'Character Swap v1.1 · published','lora':'henge/character_v1_1.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
- 'mix50':{'label':'Character Swap v1.0 + v1.1 · 50/50 Dyn95','lora':'henge/character_mix50_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
  'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/head_swap_v1_0_r32.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False,'scheduler':'beta'},

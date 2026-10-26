@@ -155,6 +155,22 @@
       ]
     },
     {
+      "id": "motion_mix_dyn99",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_merge/motion_10500_tara03_fro_dyn99.safetensors",
+      "destination": "loras/henge/motion_10500_tara03_fro_dyn99.safetensors",
+      "profiles": [
+        "motion10500"
+      ]
+    },
+    {
+      "id": "motion_mix_dyn95",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_merge/motion_10500_tara03_fro_dyn95.safetensors",
+      "destination": "loras/henge/motion_10500_tara03_fro_dyn95.safetensors",
+      "profiles": [
+        "motion10500"
+      ]
+    },
+    {
       "id": "motion4500",
       "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/tara_h3_motion_r64_multiscale_v2_000004500.safetensors",
       "destination": "loras/henge/motion_tara_4500.safetensors",

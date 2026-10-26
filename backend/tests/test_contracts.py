@@ -172,25 +172,13 @@ class WorkflowContracts(unittest.TestCase):
   self.assertNotIn('VAELoader',[v['class_type'] for k,v in g.items() if k=='19']);self.assertNotIn('20',g)
   self.assertFalse(any(v['class_type']=='TextEncodeFibo2' for v in g.values()))
  def test_motion_profiles_load_adapter_v2_before_lora(self):
-  for profile in ['motion','motion_tara4500']:
+  for profile in ['motion','motion_mix_dyn95']:
    g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0)
    # adapter V2 -> turbo (default dmd8) -> motion LoRA
    self.assertEqual(g['2']['inputs']['lora_name'],'henge/training_adapter_v2.safetensors')
    self.assertEqual(g['25']['inputs'],{'model':['2',0],'lora_name':'henge/dmd_ref2va_8step.safetensors','strength_model':1.})
    self.assertEqual(g['3']['inputs']['model'],['25',0])
    self.assertEqual(h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0,turbo='none')['3']['inputs']['model'],['2',0])
- def test_adapterless_motion_profiles_skip_adapter_v2(self):
-  for profile in ['motion_solar','motion_solar_control']:
-   # turbo straight on the base, then the LoRA (which already holds the adapter, or needs none)
-   g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0,conditioning_mode='tara')
-   self.assertEqual(g['2']['inputs'],{'model':['1',0],'lora_name':'henge/dmd_ref2va_8step.safetensors','strength_model':1.})
-   self.assertNotIn('25',g);self.assertEqual(g['3']['inputs']['model'],['2',0]);self.assertEqual(g['10']['inputs']['model'],['21',0])
-   g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,4,'original',[],'human',0,turbo='solar4')
-   self.assertEqual(g['2']['inputs']['lora_name'],'henge/turbo_solar_4step.safetensors')
-   g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0,turbo='none')
-   self.assertNotIn('2',g);self.assertEqual(g['3']['inputs']['model'],['1',0])
-  g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,'motion_tara4500_solar',42,8,'original',[],'human',0)
-  self.assertEqual(g['2']['inputs']['lora_name'],'henge/training_adapter_v2.safetensors');self.assertEqual(g['3']['inputs']['model'],['25',0])
  def test_fixed_recipe_modes_pick_profile_and_picture_count(self):
   for mode,slots,profile in [('headswap',[1],'headswap'),('sharpness',[],'sharpness')]:
    r={**self.request(),'mode':mode,'prompt':''};options={'profile':'motion','conditioning_mode':'tara'}
@@ -223,7 +211,7 @@ class WorkflowContracts(unittest.TestCase):
   g=h3_graph('v.mp4',['f.png'],'vfx_edit: Add rain.',512,288,107,107,'motion_ffp',1,8,'original',[],'human',0)
   self.assertEqual(g['3']['inputs']['lora_name'],'henge/vfx_ffp_solar05_fro_dyn99.safetensors');self.assertEqual(g['2']['inputs']['lora_name'],'henge/dmd_ref2va_8step.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
  def test_tara_structure_guidance(self):
-  g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion_tara4500',1,8,'original',[],'human',0,conditioning_mode='tara',structure_cfg=1.5)
+  g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion',1,8,'original',[],'human',0,conditioning_mode='tara',structure_cfg=1.5)
   self.assertEqual((g['21']['inputs']['structure_guidance'],g['21']['inputs']['structure_sigma_min']),(1.5,0.))
   self.assertEqual(g['10']['inputs']['cfg'],1.);self.assertNotIn('21',h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion',1,8,'original',[],'human',0))
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion'},{'structure_cfg':1.5},[1])
