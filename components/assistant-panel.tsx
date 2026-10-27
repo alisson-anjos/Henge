@@ -31,7 +31,7 @@ const label = (name: string, input: Record<string, unknown>) => {
   switch (name) {
     case 'find_people': return `find_people · ${v('time')}s`;
     case 'view_frame': return `view_frame · ${v('time')}s`;
-    case 'mark_subject': return `mark_subject · #${v('person')} → Picture ${(input.picture_slots as number[] || []).join(', ')}`;
+    case 'mark_subject': {const slots = input.picture_slots; const list = Array.isArray(slots) ? slots.join(', ') : slots ?? (input.subject ? `subject ${input.subject}` : ''); return `mark_subject · ${input.person !== undefined ? '#' + v('person') : `(${v('x')}, ${v('y')})`} @ ${v('time')}s → ${Array.isArray(slots) || slots != null ? 'Picture ' : ''}${list}`;}
     case 'set_mode': return `set_mode · ${v('mode')}`;
     case 'set_guide': return `set_guide · ${v('representation')}${input.mark_opacity !== undefined ? ` ${v('mark_opacity')}` : ''}`;
     case 'set_quality': return `set_quality · ${v('quality')}`;

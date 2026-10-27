@@ -299,7 +299,7 @@ export default function Studio() {
           point = {x: Math.min(1, Math.max(0, num('x'))), y: Math.min(1, Math.max(0, num('y')))}; who = `the point (${point.x.toFixed(2)}, ${point.y.toFixed(2)})`;
         } else throw Error('Give person (a number from find_people) or x and y (0-1) on the person');
         const anchor = {...point, time_seconds: t, frame_width: hit.width, frame_height: hit.height};
-        const slots = (input.picture_slots as number[] || []).map(Number);
+        const raw = input.picture_slots, slots = (Array.isArray(raw) ? raw : raw == null ? [] : [raw]).map(Number).filter(Number.isFinite);
         // One subject per performer: marking again someone bound to the same pictures adds a mark to that subject.
         const index = input.subject !== undefined ? num('subject') - 1
           : slots.length ? c.subjects.findIndex(s => s.picture_slots.length === slots.length && s.picture_slots.every(n => slots.includes(n))) : -1;
