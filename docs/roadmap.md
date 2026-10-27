@@ -17,4 +17,6 @@
 - Publish the Henge nodes on the Comfy Registry (`ComfyUI-Henge`) so Comfy Cloud can run them.
 - Several positive and negative points per person when marking, for people standing close together.
 - Moving plate controls per shot (parallax, push-in, particles) in the studio.
+- Community: a unified system (accounts, uploads, moderation) so people can share their own examples; today the tab
+  ships a fixed set.
 - Login with credits for a hosted version; mobile-friendly studio.

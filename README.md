@@ -333,6 +333,12 @@ use the whole video. The scissors button reopens it. Only the selected interval 
 **History** lists every generation on this Henge (result, plan, settings, run again). **Export** saves the request and
 settings as JSON (no media) and **Import settings** restores them; reattach your own video and pictures.
 
+## Community (work in progress)
+
+The **Community** tab is a preview: it ships a fixed set of examples (guide video, reference pictures and prompt) that
+open in Character Swap or Motion Transfer so you can swap in your own pictures. Sharing your own generations there is
+not available yet: it needs a unified system (accounts, uploads and moderation) that is still being connected.
+
 ## Development checks
 
 ```sh
