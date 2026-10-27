@@ -19,4 +19,4 @@
 - Moving plate controls per shot (parallax, push-in, particles) in the studio.
 - Community: a unified system (accounts, uploads, moderation) so people can share their own examples; today the tab
   ships a fixed set.
-- Login with credits for a hosted version; mobile-friendly studio.
+- Mobile-friendly studio.
