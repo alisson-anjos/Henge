@@ -112,8 +112,10 @@ VOLUME_ID=<volume id> scripts/runpod_serverless.sh
 
 This creates:
 
-- a **serverless template**: the full Henge image (`ghcr.io/alisson-anjos/henge:latest`)
-  with `HENGE_ROLE=worker`;
+- a **serverless template** in your account: the full Henge image (`ghcr.io/alisson-anjos/henge:latest`)
+  with `HENGE_ROLE=worker` and `HENGE_COMFY_ARGS=--fast-disk`. RunPod does not allow public serverless templates,
+  so there is no shared one to pick; in the console, *Serverless → New Endpoint → Import from Docker Registry*
+  with that image and those variables is the same;
 - an **endpoint**: `GPU` (default RTX 5090), 0 to `WORKERS_MAX` workers (default 2),
   `IDLE_TIMEOUT` seconds kept warm after a request (default 15), execution timeout 1 h, with the
   volume attached.

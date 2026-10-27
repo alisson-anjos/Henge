@@ -174,7 +174,8 @@ serverless endpoint, whose workers start on demand and stop 15 s after the last 
    VOLUME_GB=180 scripts/runpod_volume.sh            # prints the volume id
    ```
 
-3. Create the endpoint from the Henge serverless template (RTX 5090 first; RTX PRO 6000 only when no 5090 is free):
+3. Create the endpoint; the script makes the worker template in your account from the public Henge image (RunPod
+   does not allow public serverless templates). RTX 5090 first; RTX PRO 6000 only when no 5090 is free:
 
    ```sh
    VOLUME_ID=<volume id> scripts/runpod_serverless.sh   # prints the endpoint id
