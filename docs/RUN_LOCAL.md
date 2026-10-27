@@ -57,8 +57,7 @@ python scripts/download_models.py --manifest config/model-repos.example.json \
 ```
 
 Models you already have are reused, even under an older name or in another subfolder (for example
-`vae/minimax/…`): they are skipped and never renamed. Everything is public except the experimental `ffp` profile, which
-needs a Hugging Face token (`HF_TOKEN`). Add `--dry-run` to only list the files. The downloader never uploads models.
+`vae/minimax/…`): they are skipped and never renamed. Every model is public: no Hugging Face token. Add `--dry-run` to only list the files. The downloader never uploads models.
 
 ## 3. Start ComfyUI
 

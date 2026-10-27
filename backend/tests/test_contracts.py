@@ -238,7 +238,7 @@ class WorkflowContracts(unittest.TestCase):
   validate_request({**self.request(),'mode':'motion','first_frame_slot':1},{'profile':'motion_ffp'},[1])
   self.assertEqual(ffp_prompt('Add rain.'),'vfx_edit: Add rain.');self.assertIn('<Picture 3> is the edited first frame',ffp_prompt('vfx_edit: Add rain.',3))
   g=h3_graph('v.mp4',['f.png'],'vfx_edit: Add rain.',512,288,107,107,'motion_ffp',1,8,'original',[],'human',0)
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/vfx_ffp_solar05_fro_dyn99.safetensors');self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors');self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
  def test_tara_structure_guidance(self):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion',1,8,'original',[],'human',0,conditioning_mode='tara',structure_cfg=1.5)
   self.assertEqual((g['21']['inputs']['structure_guidance'],g['21']['inputs']['structure_sigma_min']),(1.5,0.))

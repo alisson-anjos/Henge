@@ -56,7 +56,8 @@ adapter (for example an exact Motion Transfer v1.0 + V2 merge) together with the
 Models already in your ComfyUI are reused as they are: under an older short name (for example `character_v1_1`,
 `training_adapter_v2`) or in another subfolder (for example `vae/minimax/…`). The bridge finds them by name and
 `download_models.py` skips them without renaming, so your other workflows keep working.
-The experimental FFP model (`ffp`) and the `solar` profile are third-party merges and stay private.
+The FFP (`ffp`, part of `motion`) and the `solar` merges include SolarRenderer (Enderfga, MiniMax H3 Community License)
+and are public on the same Hugging Face repository.
 
 ## Prompt writer / media analysis
 

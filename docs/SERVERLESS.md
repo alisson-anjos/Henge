@@ -37,8 +37,6 @@ The default setup is unchanged: one pod running UI, bridge and ComfyUI together
 - A RunPod account with credit and an API key (*Settings → API Keys*). New to RunPod? [Create your account with our link](https://runpod.io?ref=8t518hht).
 - For the scripts only: [`runpodctl`](https://github.com/runpod/runpodctl) configured (`runpodctl doctor`).
   Everything can also be done in the RunPod console (option B of each step).
-- Only for the experimental `ffp` profile: a Hugging Face token with read access, stored as the RunPod
-  secret `hf_token` (*Settings → Secrets*); the volume fill pod reads it.
 - For the UI: Docker, or Node + Python (step 3).
 
 ## 1. Put the models on a network volume (once)
@@ -60,8 +58,8 @@ Choose the model profiles (comma list), as on a normal pod:
 |---|---|---|
 | `character` | Character Swap | base H3, text encoder, VAE, VLM planner; always needed |
 | `motion` (or `motion_transfer`, `motion_transfer_tara`) | Motion Transfer | public, BFS Motion Transfer license |
-| `solar` | Motion Transfer (Solar merges, experimental) | ~25 GB, private: needs the `hf_token` secret |
-| `ffp` | Motion Transfer FFP: propagate an edited first frame (VFX Edit FFP + SolarRenderer 0.5, fro dyn99) | 220 MB, private: needs the `hf_token` secret |
+| `solar` | Motion Transfer (Solar merges, experimental) | ~25 GB |
+| `ffp` | Motion Transfer FFP: propagate an edited first frame (VFX Edit FFP + SolarRenderer 0.5; dyn99 and the lighter dyn95). Part of `motion` | 0.3 GB |
 | `headswap` | Head Swap | |
 | `sharpness` | Sharpness (H3 + Little More Sharpness LoRA; 2K/4K with the H3 or NVIDIA RTX upscaler) | ~1 GB (LoRA + H3 latent upscaler) |
 | `audio` | Generated audio and audio conditioning (H3 audio VAE) | ~0.3 GB |
@@ -83,12 +81,11 @@ VOLUME_ID=<id> scripts/runpod_volume.sh                        # top up an exist
 - Creates the network volume (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 180), unless
   `VOLUME_ID` is given.
 - Starts the fill pod from `ghcr.io/alisson-anjos/henge:latest` on the first GPU in stock
-  (`FILL_GPUS`), with `HENGE_MODEL_PROFILES=$PROFILES` (and `HF_TOKEN` from your RunPod secret `hf_token` only when
-  `ffp` or `solar` is asked for).
+  (`FILL_GPUS`), with `HENGE_MODEL_PROFILES=$PROFILES` .
 - Prints the download progress every minute and deletes the pod when every model is installed.
 
 A top-up skips the files that are already there: use it after an interrupted download or to add profiles.
-If a download fails (usually the private LoRAs without a valid `hf_token`), the pod is kept so you can
+If a download fails, the pod is kept so you can
 open its setup screen; delete it with `runpodctl pod delete <pod id>` when done.
 
 ### Option B: RunPod console

@@ -56,8 +56,8 @@ Environment variables (all optional):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,fibo,klein,sam2d,sam3d,audio` | Comma list: `character`, `omniref` (+22 GB base), `fibo`, `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0, Combined), `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with Motion Transfer v1.0 and TARA v1.0, and the Solar 4-step turbo; private) |
-| `HF_TOKEN` | — | Only for the experimental `ffp` profile (the Motion Transfer LoRAs are public). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
+| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,fibo,klein,sam2d,sam3d,audio` | Comma list: `character`, `omniref` (+22 GB base), `fibo`, `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0, Combined), `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with Motion Transfer v1.0 and TARA v1.0, and the Solar 4-step turbo), `klein` (FLUX.2 Klein 4B first-frame editor) |
+| `HF_TOKEN` | — | Not needed: every model is public. Only for an override that points at your own private repository |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that replaces a model URL or destination from the bundled manifest |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |
@@ -66,11 +66,10 @@ Environment variables (all optional):
 | `HENGE_EXPOSE_COMFY` | — | `1` makes ComfyUI listen on `0.0.0.0:8189` for debugging. ComfyUI has **no login**: anyone with the URL can run graphs on your GPU, so leave it off on shared pods |
 | `PUBLIC_KEY` | — | RunPod injects your SSH key; enables `sshd` |
 
-The Character Swap, Motion Transfer, TARA, Combined and Head Swap LoRAs are public. `HF_TOKEN` is only needed when a
-selected optional model is gated or private (currently the experimental `ffp` and `solar` profiles), or when your own
-override points to a private repository. The template does not set it, so no RunPod secret is needed. To add it,
-store the token as a RunPod secret (*Secrets → Create secret*, name `hf_token`) and, in the deploy screen, *Set
-overrides* → `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}`. A reference to a secret your account does not have is ignored.
+Every model Henge downloads is public (the Henge LoRAs, FFP and Solar included), so the template sets no token and
+needs no RunPod secret. `HF_TOKEN` only matters for an override that points at your own private repository; store it
+as a RunPod secret and set `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}` under *Set overrides*. A reference to a secret your
+account does not have is ignored.
 
 To point an entry at another link without rebuilding, set
 `HENGE_MODEL_OVERRIDES`, e.g.
@@ -95,7 +94,7 @@ itself when they are ready (about 10 minutes on RunPod's network). The first boo
 fewer profiles download less. When ComfyUI and the UI are up, open **Connect → HTTP 8188**
 (`https://<pod-id>-8188.proxy.runpod.net`).
 
-A model that cannot be downloaded (e.g. a private LoRA without a token) is
+A model that cannot be downloaded (network error, a renamed file) is
 logged and skipped; the UI marks that mode unavailable instead of the pod
 restarting in a loop.
 

@@ -10,7 +10,7 @@ and check. A human can follow it the same way.
   template or endpoint, scaling workers up, deleting any RunPod resource. Say what it is and its cost
   (volume: per GB per month; pods and workers: per second of GPU).
 - **Never print secrets.** Read the RunPod API key from `RUNPOD_API_KEY` or `~/.runpod/config.toml`
-  (`apikey`), and the Hugging Face token from the RunPod secret `hf_token`. Do not echo them, put them in
+  (`apikey`). Do not echo them, put them in
   command output, commit them or paste them into logs.
 - **Media go only through the endpoint and its network volume.** Do not add S3, R2 or any other storage.
 - Do not change the GPU flags in `HENGE_COMFY_ARGS` to `--highvram` or `--gpu-only`: they run out of memory.
@@ -42,8 +42,6 @@ runpodctl datacenter list        # which GPUs each datacenter has in stock
 Ask the user for:
 
 - which option: **B** (one pod, everything inside) or **C** (UI on their computer, GPU on Serverless);
-- whether the RunPod secret `hf_token` exists (*Settings → Secrets*). Without it only the experimental Motion
-  Transfer FFP model is skipped (every other model is public);
 - the datacenter (default `EU-RO-1`; it must have RTX 5090 in stock) and which model profiles they need
   (default: all of `character,motion,headswap,sharpness,omniref,fibo,klein,sam2d,sam3d,audio`).
 
@@ -52,7 +50,7 @@ Ask the user for:
 1. Use the published Henge pod template `mnxax277c8` (deploy link for the user: https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht; with runpodctl,
    `--template-id mnxax277c8`). Only if the user wants their own: `scripts/runpod_template.sh` (read it first; `TEMPLATE_ID=<id>`
    updates an existing template). Settings: image `ghcr.io/alisson-anjos/henge:latest`, container
-   disk 30 GB, volume 180 GB at `/workspace`, HTTP port 8188 (add `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}` only for the private `ffp` profile).
+   disk 30 GB, volume 180 GB at `/workspace`, HTTP port 8188.
 2. With the user's approval, deploy a pod from it on a GPU with a CUDA 13 driver (RTX 5090 or larger).
 3. Check: the pod log shows `model downloads finished`, then
    `curl -s https://<pod id>-8188.proxy.runpod.net/api/backend/health` returns `"online": true`.
@@ -70,7 +68,7 @@ Ask the user for:
 
    It prints the volume id, starts a temporary fill pod, prints progress every minute and deletes the pod when
    every model is installed. Check the last line says `ready`. If it says `failed <ids>`, the pod is kept:
-   report the ids (usually a missing `hf_token`) and ask before deleting it (`runpodctl pod delete <pod id>`).
+   report the ids and ask before deleting it (`runpodctl pod delete <pod id>`).
    To add profiles later: `VOLUME_ID=<id> PROFILES=<list> scripts/runpod_volume.sh`.
 
 2. **Endpoint** (read `scripts/runpod_serverless.sh` first):

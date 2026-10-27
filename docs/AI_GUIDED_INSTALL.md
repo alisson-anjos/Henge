@@ -59,11 +59,11 @@ Steps and checks:
    ln -s "$PWD/backend/comfy_nodes/henge" <ComfyUI>/custom_nodes/henge        # Windows: copy the folder
    git clone https://github.com/alisson-anjos/ComfyUI-BFSNodes.git <ComfyUI>/custom_nodes/bfsnodes
    $COMFY_PY -m pip install -r <ComfyUI>/custom_nodes/bfsnodes/requirements.txt -r backend/requirements.txt
-   HF_TOKEN=… $COMFY_PY scripts/download_models.py --manifest config/model-repos.example.json \
-     --models-dir <ComfyUI>/models --profiles character,motion,headswap,sharpness,sam2d,audio --dry-run   # list, then without --dry-run
+   $COMFY_PY scripts/download_models.py --manifest config/model-repos.example.json \
+     --models-dir <ComfyUI>/models --profiles character,motion,headswap,sharpness,klein,sam2d,audio --dry-run   # list, then without --dry-run
    ```
    Models the user already has in that ComfyUI are reused (old names, other subfolders), never renamed or
-   downloaded twice. Ask which modes the user wants; profiles: `character` (Character Swap), `motion` (every public Motion Transfer LoRA; `ffp` is private), `headswap`, `sharpness`, `audio`
+   downloaded twice. Ask which modes the user wants; profiles: `character` (Character Swap), `motion` (every Motion Transfer LoRA, FFP included), `klein` (first-frame editor), `headswap`, `sharpness`, `audio`
    (generated audio),
    `fibo`, `sam2d` (color marks and latent masks), `sam3d`, `omniref`.
 3. **Start ComfyUI** on 8189: `$COMFY_PY main.py --listen 127.0.0.1 --port 8189 --preview-method taesd --fast-disk`.

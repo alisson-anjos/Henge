@@ -180,8 +180,8 @@
     },
     {
       "id": "solar_motion_transfer_tara",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/motion_tara_4500_solar05.safetensors",
-      "destination": "loras/henge/motion_tara_4500_solar05.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_solar05.safetensors",
+      "destination": "loras/henge/minimax_h3_motion_transfer_tara_v1.0_solar05.safetensors",
       "profiles": [
         "solar"
       ],
@@ -189,8 +189,8 @@
     },
     {
       "id": "solar_motion_transfer",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/motion10500_plus_adapter_v2_solar05.safetensors",
-      "destination": "loras/henge/motion10500_plus_adapter_v2_solar05.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_adapter_v2_solar05.safetensors",
+      "destination": "loras/henge/minimax_h3_motion_transfer_v1.0_adapter_v2_solar05.safetensors",
       "profiles": [
         "solar"
       ],
@@ -198,8 +198,8 @@
     },
     {
       "id": "solar_control",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/solar_control.safetensors",
-      "destination": "loras/henge/solar_control.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_control_comfy.safetensors",
+      "destination": "loras/henge/solarrenderer_control_comfy.safetensors",
       "profiles": [
         "solar"
       ],
@@ -207,8 +207,8 @@
     },
     {
       "id": "turbo_solar4",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/turbo_solar_4step.safetensors",
-      "destination": "loras/henge/turbo_solar_4step.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_4step_comfy.safetensors",
+      "destination": "loras/henge/solarrenderer_4step_comfy.safetensors",
       "profiles": [
         "solar"
       ],
@@ -300,12 +300,20 @@
     },
     {
       "id": "ffp",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_ffp/vfx_ffp_solar05_fro_dyn99.safetensors",
-      "destination": "loras/henge/vfx_ffp_solar05_fro_dyn99.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
+      "destination": "loras/henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
       "profiles": [
         "ffp"
       ],
-      "note": "First-frame propagate: VFX Edit FFP r128 x1.0 + SolarRenderer control x0.5, Frobenius dyn99 (220 MB). Private dataset: needs HF_TOKEN."
+      "note": "First-frame propagate: VFX Edit FFP r128 x1.0 + SolarRenderer control x0.5, Frobenius dyn99 (220 MB)."
+    },
+    {
+      "id": "ffp_dyn95",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
+      "destination": "loras/henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
+      "profiles": [
+        "ffp"
+      ]
     },
     {
       "id": "sharpness",
@@ -314,7 +322,7 @@
       "profiles": [
         "sharpness"
       ],
-      "note": "LMS sharpness LoRA extracted with Frobenius/SVD (dyn95). Private dataset: needs HF_TOKEN."
+      "note": "LMS sharpness LoRA extracted with Frobenius/SVD (dyn95)."
     },
     {
       "id": "latent_upscaler",

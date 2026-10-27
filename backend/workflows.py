@@ -11,9 +11,11 @@ MODELS={
  # 99% of the Frobenius energy (tools/henge_session_20261025/merge_fro.py); for Guide Latents and TARA.
  'motion_mix_dyn95':{'label':'Motion Transfer Combined · dyn95 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True},
  'motion_mix_dyn99':{'label':'Motion Transfer Combined · dyn99 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True},
- # First-frame propagate: Alissonerdx VFX Edit FFP (r128) merged with SolarRenderer control at 0.5, Frobenius dyn99.
+ # First-frame propagate: Alissonerdx VFX Edit FFP (r128) merged with SolarRenderer control at 0.5 (Frobenius dyn99 / dyn95).
  # The whole source is the guide; an optional edited first frame enters as a native image reference (prompt: vfx_edit:).
- 'motion_ffp':{'label':'Motion Transfer FFP','task':'motion','lora':'henge/vfx_ffp_solar05_fro_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
+ 'motion_ffp':{'label':'Motion Transfer FFP · dyn99','task':'motion','lora':'henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
+ # The same merge kept at 95% of the energy: a lighter LoRA, a little less of SolarRenderer's control.
+ 'motion_ffp_dyn95':{'label':'Motion Transfer FFP · dyn95','task':'motion','lora':'henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors','adapter':None,'clip_context':False,'ffp':True},
  'character':{'task':'swap','label':'Character Swap v1.1','lora':'henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
@@ -30,7 +32,7 @@ TURBOS={
  'pdmd2':{'label':'pDMD 2-step (Kijai, experimental)','lora':'henge/minimax_h3_pdmd_2step_lora_avg_rank_38_bf16.safetensors','steps':2},
  'lightx8':{'label':'lightx2v 8-step v1.1 (768p)','lora':'henge/minimax_h3_ref2v_turbo_8step_v1.1_768p_comfyui_bf16.safetensors','steps':8},
  'lightx4':{'label':'lightx2v 4-step v1.0 (768p)','lora':'henge/minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors','steps':4},
- 'solar4':{'label':'SolarRenderer 4-step (ComfyUI keys)','lora':'henge/turbo_solar_4step.safetensors','steps':4},
+ 'solar4':{'label':'SolarRenderer 4-step (ComfyUI keys)','lora':'henge/solarrenderer_4step_comfy.safetensors','steps':4},
 }
 # LoRA files keep their published filenames under loras/henge/. Installs from before 2026-10-27 used short names;
 # localize_loras() falls back to the old name when only that one is installed, so nothing has to be downloaded again.

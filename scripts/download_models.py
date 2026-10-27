@@ -32,9 +32,8 @@ def download_url(url,dest,token=None):
 import json as _json
 LEGACY={k:v for k,v in _json.loads(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','backend','legacy_loras.json')).read()).items() if '_lms_' not in k}
 
-# Mode names expand to the profiles that hold their LoRAs, so "motion" gets every public Motion Transfer model (the
-# experimental FFP is private: ask for the `ffp` profile with an HF token).
-ALIASES={'motion':['motion_transfer','motion_transfer_tara'],'swap':['character'],'masks':['sam2d'],
+# Mode names expand to the profiles that hold their LoRAs, so "motion" gets every Motion Transfer model, FFP included.
+ALIASES={'motion':['motion_transfer','motion_transfer_tara','ffp'],'swap':['character'],'masks':['sam2d'],
          # names used before 2026-10-27
          'motion10500':['motion_transfer'],'motion4500':['motion_transfer_tara']}
 
