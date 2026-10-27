@@ -210,7 +210,8 @@
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/solarrenderer_control_fro_dyn95.safetensors",
       "destination": "loras/henge/solarrenderer_control_fro_dyn95.safetensors",
       "profiles": [
-        "solar"
+        "solar",
+        "experimental"
       ],
       "note": "Experimental. SolarRenderer control alone, dynamic rank keeping 95% of the Frobenius energy (105 MB); ComfyUI H3 keys."
     },
@@ -219,7 +220,8 @@
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/solarrenderer_control_fro_dyn99.safetensors",
       "destination": "loras/henge/solarrenderer_control_fro_dyn99.safetensors",
       "profiles": [
-        "solar"
+        "solar",
+        "experimental"
       ],
       "note": "Experimental. SolarRenderer control alone, dynamic rank keeping 99% of the Frobenius energy (757 MB); ComfyUI H3 keys."
     },
