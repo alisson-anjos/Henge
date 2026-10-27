@@ -15,7 +15,11 @@ const copy = {
 
 export function SubjectVideo({url, range, subjects, pickingId, onAnchor, onDuration}: {url: string; range?: ClipRange; subjects: SubjectBinding[]; pickingId: string | null; onAnchor: (id: string, anchor: SubjectAnchor) => void; onDuration: (duration: number, width: number, height: number) => void}) {
   const player = useRef<HTMLVideoElement>(null), container = useRef<HTMLDivElement>(null);
-  const [time, setTime] = useState(0), [size, setSize] = useState({width: 0, height: 0});
+  const [time, setTime] = useState(0), [size, setSize] = useState({width: 0, height: 0}), [playing, setPlaying] = useState(false), [duration, setDuration] = useState(0);
+  // With a selected interval shorter than the file, the player shows only that part: its own bar, time from the start
+  // of the part, and it loops inside it (the native bar would show the whole file).
+  const clip = range && duration > 0 && (range.start > .05 || range.end < duration - .05) ? range : null;
+  const clock = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
   useEffect(() => { const node = container.current; if (!node) return; const observer = new ResizeObserver(([entry]) => setSize({width: entry.contentRect.width, height: entry.contentRect.height})); observer.observe(node); return () => observer.disconnect(); }, []);
   // Marking starts from the subject panel, below the player: bring the video into view to click on it.
   useEffect(() => {if (pickingId) {player.current?.pause(); container.current?.scrollIntoView({behavior: 'smooth', block: 'center'});}}, [pickingId]);
@@ -30,7 +34,12 @@ export function SubjectVideo({url, range, subjects, pickingId, onAnchor, onDurat
   const video = player.current;
   const scale = video?.videoWidth ? Math.min(size.width / video.videoWidth, size.height / video.videoHeight) : 0;
   return <div className={styles.player} ref={container}>
-    <video ref={player} key={url} src={url} controls playsInline preload="auto" onLoadedMetadata={e => {const v = e.currentTarget; v.currentTime = range?.start || 0; onDuration(v.duration, v.videoWidth, v.videoHeight);}} onTimeUpdate={e => {const v = e.currentTarget; if (range && (v.currentTime >= range.end || v.currentTime < range.start - .05)) {v.pause(); v.currentTime = range.start;} setTime(v.currentTime);}}/>
+    <video ref={player} key={url} src={url} controls={!clip} playsInline preload="auto" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onLoadedMetadata={e => {const v = e.currentTarget; v.currentTime = range?.start || 0; setDuration(v.duration); onDuration(v.duration, v.videoWidth, v.videoHeight);}} onTimeUpdate={e => {const v = e.currentTarget; if (range && (v.currentTime >= range.end || v.currentTime < range.start - .05)) {if (clip && !v.paused && v.currentTime >= range.end) v.currentTime = range.start; else {v.pause(); v.currentTime = range.start;}} setTime(v.currentTime);}}/>
+    {clip && <div className={styles.clipBar}>
+      <button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={() => {const v = player.current; if (v) {if (v.paused) v.play().catch(() => {}); else v.pause();}}}>{playing ? '❚❚' : '▶'}</button>
+      <input type="range" aria-label="Position in the selected part" min={clip.start} max={clip.end} step={0.01} value={Math.min(clip.end, Math.max(clip.start, time))} onChange={e => {const v = player.current; if (v) {v.currentTime = Number(e.target.value); setTime(v.currentTime);}}}/>
+      <span className="mono">{clock(Math.max(0, time - clip.start))} / {clock(clip.end - clip.start)}</span>
+    </div>}
     {subjects.flatMap((s, i) => s.anchors.filter(a => Math.abs(a.time_seconds - time) < .15).map((a, j) => <span key={`${s.id}-${j}`} className={styles.marker} style={{background: SUBJECT_COLORS.find(c => c.name === s.color)?.hex, left: (size.width - a.frame_width * scale) / 2 + a.x * a.frame_width * scale, top: (size.height - a.frame_height * scale) / 2 + a.y * a.frame_height * scale}}>{i + 1}</span>))}
     {pickingId && <button type="button" className={styles.pickSurface} aria-label="Select subject in video; Enter selects frame center" onClick={e => pick(e.clientX, e.clientY)} onKeyDown={e => {if (e.key === 'Enter' || e.key === ' ') {e.preventDefault(); const rect = container.current?.getBoundingClientRect(); if (rect) pick(rect.left + rect.width / 2, rect.top + rect.height / 2);}}}/>}
   </div>;
