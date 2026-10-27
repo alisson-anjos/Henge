@@ -10,7 +10,9 @@ Plain instructions can still work with H3. This structure is the default for **g
 2. `summary`: requested output, scene/style edits and the role of the guide performance.
 3. `retention_analysis`: the properties retained within each reference role and the performance transferred from the guide.
 4. `detailed_description`: target scene, observable action progression, camera and interactions.
-5. `overall_soundscape`: supported sound description, or `N/A` when unavailable.
+5. `overall_soundscape`: supported sound description, or `N/A` when unavailable. With **Generated audio** on, the
+   writer describes the diegetic sound of the visible action (footsteps, impacts, ambience) and any lines the user wrote
+   as `<d>[language] text</d>`, because H3's own soundtrack is kept.
 6. `non_diegetic_music`: supplied/requested background music, or `N/A`.
 
 The backend and editor automatic-prompt endpoint now use the same staged sequence as the recent BFS native workflows: one isolated image per reference-description call, a guide-only analysis call, then a text-only H3 composition call. The backend runs a separate text-only runtime-routing call afterward; it cannot overwrite the composed execution prompt. Each reference is described separately. Picture count is not character count: several views can define one identity; clothing, environments and objects have their own roles. Supplied indices stay fixed, including when the setting is Picture 1 and the character is Picture 2. Color markers bind tracks and are not output skin or clothing colors.

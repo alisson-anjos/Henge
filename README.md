@@ -69,8 +69,10 @@ camera cuts or at a fixed length, each shot playable before rendering and downlo
 guidance**: mark people in the video and bind each to its pictures. *2D* paints each one with its color (solid
 or translucent, with a live preview on the approval screen), *3D* draws a colored body with face, and *Mask*
 regenerates only the area around them so the rest of the video stays pixel-identical. **FIBO** can redraw an
-animal reference as an upright humanoid for a human performer. Each job can be downloaded as the exact ComfyUI
-API graph it ran.
+animal reference as an upright humanoid for a human performer. **Guide for the text encoder**: Latents + CLIP (the
+default) or latents only. **Audio**: keep the original, or keep the soundtrack H3 generates per shot.
+**New background**: a picture that follows the original camera (moving plate). Each job can be downloaded as the exact
+ComfyUI API graph it ran.
 
 ## How to run Henge
 

@@ -45,7 +45,7 @@ Ask the user for:
 - whether the RunPod secret `hf_token` exists (*Settings → Secrets*). Without it only the experimental Motion
   Transfer FFP model is skipped (every other model is public);
 - the datacenter (default `EU-RO-1`; it must have RTX 5090 in stock) and which model profiles they need
-  (default: all of `character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d`).
+  (default: all of `character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d,audio`).
 
 ## Option B: one pod
 
@@ -76,11 +76,12 @@ Ask the user for:
 2. **Endpoint** (read `scripts/runpod_serverless.sh` first):
 
    ```sh
-   VOLUME_ID=<volume id> IMAGE=ghcr.io/alisson-anjos/henge:sha-<commit> scripts/runpod_serverless.sh
+   VOLUME_ID=<volume id> scripts/runpod_serverless.sh
    ```
 
-   It creates the worker template (`HENGE_ROLE=worker`, `HENGE_COMFY_ARGS=--fast-disk`) and the endpoint:
-   RTX 5090, 0–2 workers, idle timeout 15 s, execution timeout 1 h. It prints both ids. To add the RTX PRO 6000
+   It creates the endpoint from the published Henge worker template `ouo6ep22pd` (`HENGE_ROLE=worker`,
+   `HENGE_COMFY_ARGS=--fast-disk`, kept on the current image); pass `IMAGE=` to build your own template instead:
+   RTX 5090, 0–2 workers, idle timeout 15 s, execution timeout 1 h. It prints the endpoint id. To add the RTX PRO 6000
    as a fallback behind the 5090, edit the endpoint's GPU list in the RunPod console (5090 first).
 
 3. **UI on the user's computer**:
