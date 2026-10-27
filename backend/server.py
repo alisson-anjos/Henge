@@ -704,7 +704,8 @@ def plan_shots(job):
     # A single or causal render follows the guide straight through its cuts.
     if processing.get('mode')=='causal':return [{'start':0,'frames':total,'overlap':0,'length':grid_frames(total),'reset_context':True}],context
     mode=cut_mode(job)
-    if mode=='off' or processing.get('mode')=='single' or (mode=='fit' and total<=per):return split_frames(total,per,context),context
+    # A short interval is one shot, except when a shot at every camera cut is asked for (or implied by marked people).
+    if mode=='off' or (processing.get('mode')=='single' and mode!='every') or (mode=='fit' and total<=per):return split_frames(total,per,context),context
     return (split_on_cuts if mode=='fit' else split_at_every_cut)(total,per,context,camera_cuts(job)),context
 
 def shot_preview(job):
@@ -966,7 +967,8 @@ async def lifespan(app):
     if REMOTE is not None and hasattr(REMOTE,'close'):REMOTE.close()   # stops a managed comfy-api-proxy
 app=FastAPI(lifespan=lifespan)
 
-LAST_INFO={'url':None,'info':{},'at':0.};INFO_REFRESH=threading.Lock();INFO_TTL=60
+LAST_INFO={'url':None,'info':{},'at':0.,'took':0.};INFO_REFRESH=threading.Lock()
+def info_ttl():return max(60,10*LAST_INFO['took'])   # a list that takes a minute to build is refreshed every 10 min
 def comfy_alive(url,timeout=5):
     """ComfyUI answers (fast, unlike /object_info, which can take a minute with a very large models folder)."""
     try:return requests.get(url+'/system_stats',timeout=timeout).ok
@@ -983,7 +985,7 @@ def refresh_info_later():
     """Fetch the full node list in the background with a long timeout; health uses it once it arrives."""
     if not INFO_REFRESH.acquire(blocking=False):return
     def run():
-        try:info=api('GET','/object_info',timeout=300);LAST_INFO.update(url=URL,info=info,at=time.time())
+        try:t=time.time();info=api('GET','/object_info',timeout=300);LAST_INFO.update(url=URL,info=info,at=time.time(),took=time.time()-t)
         except Exception:pass
         finally:INFO_REFRESH.release()
     threading.Thread(target=run,daemon=True).start()
@@ -999,11 +1001,11 @@ def health():
     if REMOTE:online=REMOTE.online();info=REMOTE.object_info()
     else:
         # /object_info is computed on ComfyUI's event loop and can take a minute with a very large models folder, so it
-        # is not asked on every poll: the last list is reused for INFO_TTL seconds and refreshed in the background.
+        # is not asked on every poll: the last list is reused (info_ttl) and refreshed in the background.
         cached=LAST_INFO['url']==URL and LAST_INFO['info']
-        if cached and time.time()-LAST_INFO['at']<INFO_TTL:info=LAST_INFO['info'];online=comfy_port_open()
+        if cached and time.time()-LAST_INFO['at']<info_ttl():info=LAST_INFO['info'];online=comfy_port_open()
         elif not cached:
-            try:info=api('GET','/object_info',timeout=10);online=True;LAST_INFO.update(url=URL,info=info,at=time.time())
+            try:t=time.time();info=api('GET','/object_info',timeout=10);online=True;LAST_INFO.update(url=URL,info=info,at=time.time(),took=time.time()-t)
             except Exception:
                 # Busy with a long node or slow to list its nodes: if its port answers it is online; the list comes later.
                 online=comfy_port_open()
