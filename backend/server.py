@@ -272,7 +272,11 @@ def comfy_choices(info,node,name):
     return spec[1].get('options',[]) if len(spec)>1 and isinstance(spec[1],dict) else []
 
 def comfy_info(path='/object_info',timeout=10):
-    return REMOTE.object_info() if REMOTE else api('GET',path,timeout=timeout)
+    """ComfyUI's node list: the one health keeps (refreshed in the background) when it is for this ComfyUI, so a slow
+    /object_info (very large models folder) does not fail every check."""
+    if REMOTE:return REMOTE.object_info()
+    if path=='/object_info' and LAST_INFO['url']==URL and LAST_INFO['info']:return LAST_INFO['info']
+    return api('GET',path,timeout=timeout)
 
 FIBO_UNET='fibo2_edit_turbo_int8_convrot.safetensors'
 def fibo_available(info=None):
