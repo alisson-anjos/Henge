@@ -16,6 +16,10 @@ MODELS={
  'motion_ffp':{'label':'Motion Transfer FFP · dyn99','task':'motion','lora':'henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
  # The same merge kept at 95% of the energy: a lighter LoRA, a little less of SolarRenderer's control.
  'motion_ffp_dyn95':{'label':'Motion Transfer FFP · dyn95','task':'motion','lora':'henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors','adapter':None,'clip_context':False,'ffp':True},
+ # SolarRenderer control alone (no Henge LoRA, `solar` profile), shrunk to a dynamic rank by Frobenius energy: the
+ # baseline to compare our Motion Transfer against.
+ 'motion_solar_dyn95':{'label':'SolarRenderer control · dyn95 (comparison)','task':'motion','lora':'henge/solarrenderer_control_fro_dyn95.safetensors','adapter':None,'clip_context':True},
+ 'motion_solar_dyn99':{'label':'SolarRenderer control · dyn99 (comparison)','task':'motion','lora':'henge/solarrenderer_control_fro_dyn99.safetensors','adapter':None,'clip_context':True},
  'character':{'task':'swap','label':'Character Swap v1.1','lora':'henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
