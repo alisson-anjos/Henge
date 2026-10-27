@@ -23,6 +23,7 @@ import SetupScreen from './setup-screen';
 import AccessSettings from './access-settings';
 import ThemeSwitcher from './theme-switcher';
 import {DialogHost, confirmDialog} from './dialog';
+import SettingsCenter, {SETUP_KEY} from './settings-center';
 import {cutModeLabel, type CutMode} from './shot-plan';
 import Select from './select';
 
@@ -97,6 +98,13 @@ export default function Studio() {
   // picked again from the history.
   const [freshRevision, setFreshRevision] = useState(0);
   const startFresh = () => {setGenerationJob(null); setFreshRevision(n => n + 1); setBringSlots([]);};
+  // Settings center (gear) and the first-run wizard, also opened by the offline banner and the generation panel.
+  const [settingsOpen, setSettingsOpen] = useState<null | {wizard: boolean; tab: 'connection' | 'assistant' | 'access'}>(null);
+  useEffect(() => {
+    try {if (!localStorage.getItem(SETUP_KEY)) setSettingsOpen({wizard: true, tab: 'connection'});} catch {/* private mode */}
+    const open = (e: Event) => setSettingsOpen({wizard: false, tab: ((e as CustomEvent).detail || 'connection')});
+    addEventListener('henge:open-settings', open); return () => removeEventListener('henge:open-settings', open);
+  }, []);
   // Recent: the latest generations on the bridge (exported directions live in History).
   const [serverJobs, setServerJobs] = useState<GenerationJob[]>([]);
   // History: search by project name (or job id) and an infinite list that grows 24 at a time.
@@ -636,6 +644,7 @@ export default function Studio() {
   return <div className={`app-shell mode-${mode}`} style={style}>
     <SetupScreen lang={lang}/>
     <DialogHost/>
+    {settingsOpen && <SettingsCenter lang={lang} wizard={settingsOpen.wizard} initialTab={settingsOpen.tab} onClose={() => setSettingsOpen(null)}/>}
     {!ready && <div className="boot-splash" role="status" aria-label="Loading Henge"><span className="brandmark"><Icon name="spark" size={28}/></span><strong>Henge</strong><span className="boot-bar"/></div>}
     {frameModal && video?.range && <FirstFrameModal videoUrl={video.url} start={video.range.start} pictures={pictures.filter(p => p.slot !== firstFrameSlot)} lang={lang} onClose={() => setFrameModal(false)} onUse={(file, edit) => {
       const slot = firstFrameSlot ?? Array.from({length: maxPictures}, (_, i) => i + 1).find(i => !pictures.some(p => p.slot === i));
@@ -654,7 +663,7 @@ export default function Studio() {
         {(['studio', 'history', 'community'] as View[]).map(v => <button key={v} className={view === v ? 'active' : ''} onClick={() => setView(v)} aria-current={view === v ? 'page' : undefined}>{t[v]}{v === 'history' && history.length > 0 && <span className="count mono">{history.length}</span>}</button>)}
       </nav>
       <span className="draft-status"><i/>{t.draft}</span>
-      <div className="topbar-end"><ThemeSwitcher lang={lang}/><AccessSettings lang={lang}/><div className="language-switch" role="group" aria-label="Language">{(['en', 'pt', 'es'] as Language[]).map(l => <button key={l} className={'mono ' + (lang === l ? 'active' : '')} aria-pressed={lang === l} onClick={() => setLang(l)}>{l.toUpperCase()}</button>)}</div><a className="source-link ghost" href="https://github.com/alisson-anjos/Henge" target="_blank" rel="noreferrer"><Icon name="github" size={16}/>{t.openSource}</a></div>
+      <div className="topbar-end"><button type="button" className="source-link ghost settings-button" aria-label={tr('Settings', 'Configurações', 'Configuración')} title={tr('Settings: connection, assistant, login', 'Configurações: conexão, assistente, login', 'Configuración: conexión, asistente, acceso')} onClick={() => setSettingsOpen({wizard: false, tab: 'connection'})}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button><ThemeSwitcher lang={lang}/><AccessSettings lang={lang}/><div className="language-switch" role="group" aria-label="Language">{(['en', 'pt', 'es'] as Language[]).map(l => <button key={l} className={'mono ' + (lang === l ? 'active' : '')} aria-pressed={lang === l} onClick={() => setLang(l)}>{l.toUpperCase()}</button>)}</div><a className="source-link ghost" href="https://github.com/alisson-anjos/Henge" target="_blank" rel="noreferrer"><Icon name="github" size={16}/>{t.openSource}</a></div>
     </header>
 
     {/* Kept mounted on other tabs so the generation panel keeps its settings and selected job. */}

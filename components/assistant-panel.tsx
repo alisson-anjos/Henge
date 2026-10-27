@@ -1,6 +1,8 @@
 'use client';
 import {useEffect, useRef, useState} from 'react';
+import Markdown from '../lib/markdown';
 import type {Language} from '../lib/design-copy';
+import Select from './select';
 
 /** One studio action the assistant asked for, run here so the user sees the screen change. */
 export type StudioCall = {id: string; name: string; input: Record<string, unknown>};
@@ -48,6 +50,8 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   useEffect(() => {try {setExpanded(localStorage.getItem('henge-assistant-expanded') === '1');} catch {/* private mode */}}, []);
   const toggleExpanded = () => setExpanded(v => {try {localStorage.setItem('henge-assistant-expanded', v ? '0' : '1');} catch {/* private mode */} return !v;});
   const [settings, setSettings] = useState(false);
+  // The settings center / first-run wizard asks the assistant to show its own settings.
+  useEffect(() => {const show = () => {setOpen(true); setSettings(true);}; addEventListener('henge:assistant-settings', show); return () => removeEventListener('henge:assistant-settings', show);}, []);
   const [config, setConfig] = useState<Config | null>(null);
   const [draft, setDraft] = useState<Partial<Config> & {api_key?: string}>({});
   const [messages, setMessages] = useState<Message[]>([]);
@@ -94,6 +98,23 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   useEffect(() => {if (open && !config) fetch('/api/backend/assistant/config').then(r => r.json()).then((c: Config) => {setConfig(c); setDraft(c); if (!c.has_key && c.provider === 'anthropic') setSettings(true);}).catch(() => setError(tr('The bridge is offline.', 'O bridge está offline.', 'El bridge está desconectado.')));}, [open]);
   useEffect(() => {if (open) fetch('/api/backend/jobs').then(r => r.ok ? r.json() : []).then((rows: JobMention[]) => setRecentJobs(rows.slice(0, 12))).catch(() => {});}, [open]);
   useEffect(() => {list.current?.scrollTo({top: list.current.scrollHeight, behavior: 'smooth'});}, [messages, busy]);
+
+  // The models the chosen provider offers, listed by the bridge with the saved (or just typed) key.
+  const [models, setModels] = useState<{id: string; name: string}[] | null>(null);
+  const [modelsError, setModelsError] = useState('');
+  const [typeModel, setTypeModel] = useState(false);
+  async function loadModels() {
+    setModels(null); setModelsError('');
+    try {
+      const r = await fetch('/api/backend/assistant/models', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({provider: draft.provider, base_url: draft.base_url ?? '', api_key: draft.api_key || ''})});
+      const reply = await r.json(); if (!r.ok) throw Error(reply.detail || `HTTP ${r.status}`);
+      setModels(reply);
+    } catch (e) {setModels([]); setModelsError(e instanceof Error ? e.message : String(e));}
+  }
+  useEffect(() => {
+    if (!settings || !draft.provider) return;
+    const t = setTimeout(loadModels, 400); return () => clearTimeout(t);
+  }, [settings, draft.provider, draft.base_url]);
 
   async function saveSettings() {
     setError('');
@@ -150,18 +171,36 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
     finally {setBusy(''); if (attachmentInput.current) attachmentInput.current.value = '';}
   }
 
+  // Messages typed while the assistant works wait here and are added to the conversation before its next step.
+  type Pending = {text: string; images: string[]; note: string};
+  const pendingRef = useRef<Pending[]>([]);
+  const [pending, setPendingState] = useState<Pending[]>([]);
+  const setPending = (p: Pending[]) => {pendingRef.current = p; setPendingState(p);};
+  const controllerRef = useRef(controller); controllerRef.current = controller;
+  const toMessage = (p: Pending, queued = false): Message => ({role: 'user', images: p.images,
+    text: `${p.text}${p.note}\n\n[studio state] ${JSON.stringify(controllerRef.current.state())}${queued ? '\n[sent while you were still working on the previous request]' : ''}`});
+  const drain = (history: Message[]) => {
+    const queued = pendingRef.current; if (!queued.length) return history;
+    setPending([]); return [...history, ...queued.map(p => toMessage(p, true))];
+  };
+
   async function send() {
-    const text = input.trim(); if ((!text && !attachments.length) || busy) return;
-    const attached = attachments; setInput(''); setAttachments([]); setError(''); stop.current = false;
+    const text = input.trim(); if (!text && !attachments.length) return;
+    const attached = attachments; setInput(''); setAttachments([]); setError('');
     const attachmentNote = attached.length ? `\n\n[attachments already loaded into the studio in this order] ${attached.map((a, i) => `${i + 1}. ${a.kind}: ${a.name} (${a.detail})`).join('; ')}` : '';
-    let history: Message[] = [...messages, {role: 'user', text: `${text || tr('Look at these attachments.', 'Veja estes anexos.', 'Mira estos adjuntos.')}${attachmentNote}\n\n[studio state] ${JSON.stringify(controller.state())}`, images: attached.flatMap(a => a.images)}];
+    const item: Pending = {text: text || tr('Look at these attachments.', 'Veja estes anexos.', 'Mira estos adjuntos.'), images: attached.flatMap(a => a.images), note: attachmentNote};
+    if (busy) {setPending([...pendingRef.current, item]); return;}
+    stop.current = false;
+    let history: Message[] = [...messages, ...pendingRef.current.map(p => toMessage(p)), toMessage(item)]; setPending([]);
     setMessages(history); persist(history);
     try {
       for (let round = 0; round < 40 && !stop.current; round++) {
         setBusy(tr('Thinking…', 'Pensando…', 'Pensando…'));
+        const drained = drain(history); if (drained !== history) {history = drained; setMessages(history); persist(history);}
         const reply = await step(history);
         history = reply.messages; setMessages(history); persist(history);
-        if (reply.done || !reply.studio_calls.length) break;
+        // A message that arrived during the last step still gets an answer.
+        if (reply.done || !reply.studio_calls.length) {if (pendingRef.current.length && !stop.current) continue; break;}
         const results: Result[] = [...reply.job_results];
         for (const call of reply.studio_calls) {
           if (stop.current) {results.push({id: call.id, name: call.name, text: 'Stopped by the user.', is_error: true}); continue;}
@@ -195,23 +234,34 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
           <button type="button" className="quiet-button" aria-pressed={expanded} title={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} aria-label={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} onClick={toggleExpanded}>{expanded ? '⤡' : '⤢'}</button>
           <button type="button" className="quiet-button" aria-pressed={settings} onClick={() => setSettings(s => !s)}>⚙</button></span></header>
       {settings && config && <div className="assistant-settings">
-        <label>{tr('Model provider', 'Provedor do modelo', 'Proveedor del modelo')}<select value={presetOf(draft)} onChange={e => {const p = PRESETS[e.target.value]; if (p) setDraft(d => ({...d, ...p}));}}>
-          <option value="claude">Claude (Anthropic API)</option><option value="openai">OpenAI (GPT)</option><option value="lmstudio">LM Studio ({tr('local', 'local', 'local')})</option><option value="ollama">Ollama ({tr('local', 'local', 'local')})</option><option value="custom">{tr('Other OpenAI-compatible API', 'Outra API compatível com OpenAI', 'Otra API compatible con OpenAI')}</option></select></label>
-        {presetOf(draft) === 'custom' && <label>{tr('Type', 'Tipo', 'Tipo')}<select value={draft.provider} onChange={e => setDraft(d => ({...d, provider: e.target.value as Config['provider']}))}><option value="openai">OpenAI-compatible</option><option value="anthropic">Anthropic</option></select></label>}
-        <label>{tr('Model', 'Modelo', 'Modelo')}<input value={draft.model || ''} onChange={e => setDraft(d => ({...d, model: e.target.value}))}/></label>
+        <label>{tr('Model provider', 'Provedor do modelo', 'Proveedor del modelo')}<Select value={presetOf(draft)} onChange={e => {const p = PRESETS[e.target.value]; if (p) setDraft(d => ({...d, ...p}));}}>
+          <option value="claude">Claude (Anthropic API)</option><option value="openai">OpenAI (GPT)</option><option value="lmstudio">LM Studio ({tr('local', 'local', 'local')})</option><option value="ollama">Ollama ({tr('local', 'local', 'local')})</option><option value="custom">{tr('Other OpenAI-compatible API', 'Outra API compatível com OpenAI', 'Otra API compatible con OpenAI')}</option></Select></label>
+        {presetOf(draft) === 'custom' && <label>{tr('Type', 'Tipo', 'Tipo')}<Select value={draft.provider} onChange={e => setDraft(d => ({...d, provider: e.target.value as Config['provider']}))}><option value="openai">OpenAI-compatible</option><option value="anthropic">Anthropic</option></Select></label>}
+        <label>{tr('Model', 'Modelo', 'Modelo')}
+          {models?.length && !typeModel
+            ? <Select value={draft.model || ''} onChange={e => e.target.value === '__type' ? setTypeModel(true) : setDraft(d => ({...d, model: e.target.value}))}>
+                {draft.model && !models.some(m => m.id === draft.model) && <option value={draft.model}>{draft.model} ({tr('not listed', 'não listado', 'no listado')})</option>}
+                {models.map(m => <option key={m.id} value={m.id}>{m.name !== m.id ? `${m.name} · ${m.id}` : m.id}</option>)}
+                <option value="__type">{tr('Other… (type the id)', 'Outro… (digitar o id)', 'Otro… (escribir el id)')}</option></Select>
+            : <input value={draft.model || ''} onChange={e => setDraft(d => ({...d, model: e.target.value}))}/>}
+          {models === null && <small className="muted">{tr('Loading models…', 'Carregando modelos…', 'Cargando modelos…')}</small>}
+          {modelsError && <small className="muted">{tr('Could not list the models', 'Não deu para listar os modelos', 'No se pudieron listar los modelos')}: {modelsError} <button type="button" className="quiet-button" onClick={loadModels}>↻</button></small>}
+          {typeModel && !!models?.length && <button type="button" className="quiet-button" onClick={() => setTypeModel(false)}>{tr('Pick from the list', 'Escolher da lista', 'Elegir de la lista')}</button>}
+        </label>
         {draft.provider === 'openai' && <label>Base URL<input value={draft.base_url || ''} placeholder="https://api.openai.com/v1" onChange={e => setDraft(d => ({...d, base_url: e.target.value}))}/></label>}
-        <label>{tr('API key', 'Chave da API', 'Clave de la API')}<input type="password" autoComplete="off" value={draft.api_key || ''} placeholder={config.has_key ? `${tr('saved', 'salva', 'guardada')} ${config.key_hint}` : draft.provider === 'openai' ? tr('not needed for local servers', 'não precisa para servidores locais', 'no hace falta en servidores locales') : 'sk-ant-…'} onChange={e => setDraft(d => ({...d, api_key: e.target.value}))}/></label>
-        {draft.provider === 'anthropic' && <label>{tr('Effort', 'Esforço', 'Esfuerzo')}<select value={draft.effort ?? 'medium'} onChange={e => setDraft(d => ({...d, effort: e.target.value}))}>{['low', 'medium', 'high'].map(v => <option key={v} value={v}>{v}</option>)}<option value="">{tr('model default', 'padrão do modelo', 'predeterminado')}</option></select></label>}
+        <label>{tr('API key', 'Chave da API', 'Clave de la API')}<input type="password" autoComplete="off" value={draft.api_key || ''} placeholder={config.has_key ? `${tr('saved', 'salva', 'guardada')} ${config.key_hint}` : draft.provider === 'openai' ? tr('not needed for local servers', 'não precisa para servidores locais', 'no hace falta en servidores locales') : 'sk-ant-…'} onChange={e => setDraft(d => ({...d, api_key: e.target.value}))} onBlur={() => {if (draft.api_key) void loadModels();}}/></label>
+        {draft.provider === 'anthropic' && <label>{tr('Effort', 'Esforço', 'Esfuerzo')}<Select value={draft.effort ?? 'medium'} onChange={e => setDraft(d => ({...d, effort: e.target.value}))}>{['low', 'medium', 'high'].map(v => <option key={v} value={v}>{v}</option>)}<option value="">{tr('model default', 'padrão do modelo', 'predeterminado')}</option></Select></label>}
         <small className="muted">{tr('The key stays on the bridge (assistant.json in its data folder); the browser never receives it. The model needs vision and tool calling.', 'A chave fica no bridge (assistant.json na pasta de dados); o navegador nunca a recebe. O modelo precisa de visão e de chamada de ferramentas.', 'La clave queda en el bridge (assistant.json en su carpeta de datos); el navegador nunca la recibe. El modelo necesita visión y llamadas a herramientas.')}</small>
         <div className="plan-actions"><button type="button" className="primary" onClick={saveSettings}>{tr('Save', 'Salvar', 'Guardar')}</button></div>
       </div>}
       <div className="assistant-messages" ref={list}>
         {!messages.length && <p className="muted">{tr('Attach the video and the pictures, then say what you want, e.g. "the fighter on the left becomes Picture 1 and the other one Picture 2". The assistant marks the people, picks the options, shows you the plan and generates.', 'Anexe o vídeo e as imagens e diga o que quer, por exemplo "o lutador da esquerda vira a Picture 1 e o outro a Picture 2". O assistente marca as pessoas, escolhe as opções, mostra o plano e gera.', 'Adjunta el vídeo y las imágenes y di lo que quieres, por ejemplo "el luchador de la izquierda será la Picture 1 y el otro la Picture 2". El asistente marca a las personas, elige las opciones, te muestra el plan y genera.')}</p>}
         {messages.map((m, i) => m.role === 'user' ? <div key={i} className="assistant-msg user">{m.text.split('\n\n[studio state]')[0]}</div>
-          : m.role === 'assistant' ? <div key={i} className="assistant-msg">{m.text && <p>{m.text}</p>}{m.tool_calls?.map(c => <small key={c.id} className="assistant-tool mono">⚙ {label(c.name, c.input)}</small>)}</div>
+          : m.role === 'assistant' ? <div key={i} className="assistant-msg">{m.text && <Markdown text={m.text}/>}{m.tool_calls?.map(c => <small key={c.id} className="assistant-tool mono">⚙ {label(c.name, c.input)}</small>)}</div>
           : <div key={i} className="assistant-results">{m.results.map(r => <div key={r.id}>{r.is_error && <small className="validation">{r.text}</small>}{r.images?.map((src, j) => <img key={j} src={src} alt={r.name}/>)}</div>)}</div>)}
+        {pending.map((p, i) => <div key={'queued' + i} className="assistant-msg user queued">{p.text}<small className="muted">{tr('waiting · read at the next step', 'na fila · lida no próximo passo', 'en cola · se lee en el siguiente paso')}</small></div>)}
         {approval && <div className="assistant-approval"><p>{approval.question}</p><div><button type="button" className="quiet-button" onClick={() => {approval.resolve(false); setApproval(null);}}>{approval.decline}</button><button type="button" className="primary" onClick={() => {approval.resolve(true); setApproval(null);}}>{approval.approve}</button></div></div>}
-        {busy && <small className="assistant-busy mono">{busy}</small>}
+        {busy && <small className="assistant-busy mono"><span className="spinner" aria-hidden="true"/>{busy}</small>}
         {error && <p className="validation" role="alert">{error}</p>}
       </div>
       <form className="assistant-input" onSubmit={e => {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}>
@@ -220,7 +270,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         <input ref={attachmentInput} type="file" hidden multiple accept="image/*,video/*" onChange={e => {if (e.target.files) void addAttachments(e.target.files);}}/>
         <button type="button" className="assistant-attach quiet-button" aria-label={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} title={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} disabled={!!busy || attachments.length >= 6} onClick={() => attachmentInput.current?.click()}>＋</button>
         <textarea value={input} rows={2} placeholder={tr('What do you want to make?', 'O que você quer fazer?', '¿Qué quieres hacer?')} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Escape' && mention) {e.preventDefault(); setInput(input.slice(0, mention.index));} else if (e.key === 'Enter' && !e.shiftKey) {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}}/>
-        {busy ? <button type="button" className="quiet-button" onClick={() => {stop.current = true; if (approval) {approval.resolve(false); setApproval(null);}}}>{tr('Stop', 'Parar', 'Detener')}</button> : <button type="submit" className="primary" disabled={!input.trim() && !attachments.length}>{tr('Send', 'Enviar', 'Enviar')}</button>}
+        {busy && <button type="button" className="quiet-button" onClick={() => {stop.current = true; if (approval) {approval.resolve(false); setApproval(null);}}}>{tr('Stop', 'Parar', 'Detener')}</button>}<button type="submit" className="primary" disabled={!input.trim() && !attachments.length}>{busy ? tr('Queue', 'Enfileirar', 'Encolar') : tr('Send', 'Enviar', 'Enviar')}</button>
       </form>
     </aside>}
   </>;

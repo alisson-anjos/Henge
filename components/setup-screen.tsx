@@ -42,7 +42,7 @@ export default function SetupScreen({lang}: {lang: Language}) {
       : /balance/i.test(health?.offline_reason || '') ? tr('GPU unavailable: the RunPod account is out of balance. Add credit and this clears by itself.', 'GPU indisponível: a conta do RunPod está sem saldo. Adicione crédito e este aviso some sozinho.', 'GPU no disponible: la cuenta de RunPod no tiene saldo. Añade crédito y este aviso desaparece solo.')
       : health?.comfy_url === 'runpod serverless' ? tr('GPU unavailable: the RunPod endpoint does not answer', 'GPU indisponível: o endpoint do RunPod não responde', 'GPU no disponible: el endpoint de RunPod no responde') + (health?.offline_reason ? ` (${health.offline_reason})` : '') + '.'
       : tr('ComfyUI is offline or starting. Generation resumes when it answers.', 'O ComfyUI está offline ou iniciando. A geração volta quando ele responder.', 'ComfyUI está desconectado o iniciando. La generación vuelve cuando responda.');
-    return <div className="backend-banner" role="status"><span className="setup-dot" aria-hidden="true"/>{reason}</div>;
+    return <div className="backend-banner" role="status"><span className="setup-dot" aria-hidden="true"/>{reason}<button type="button" className="banner-action" onClick={() => dispatchEvent(new CustomEvent('henge:open-settings', {detail: 'connection'}))}>{tr('Set up connection', 'Configurar conexão', 'Configurar conexión')}</button></div>;
   }
   if (dismissed && usable.length) return null;
 

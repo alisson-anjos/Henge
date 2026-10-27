@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import './globals.css';
 import './themes.css';
-export const metadata: Metadata = {title:'Henge — Motion, reimagined.',description:'An open studio for motion transfer and video swaps with MiniMax H3 and ComfyUI.'};
+export const metadata: Metadata = {title:'Henge — Swap · Motion · Transform',description:'Henge (from Henge no Jutsu, the transformation technique): an open studio for character swap, motion transfer, head swap and sharpening on ComfyUI with open-weight models.'};
 // Errors thrown by browser extension scripts are not the studio's: an inline script at the top of <head> runs before
 // any Next.js chunk, so it drops them before the dev overlay's own listeners see them.
 const EXTENSION_ERRORS="(()=>{const x=t=>/(chrome|moz|safari-web)-extension:\\/\\//.test(t||'');window.addEventListener('error',e=>{if(x(e.filename)||x(e.error&&e.error.stack)){e.stopImmediatePropagation();e.preventDefault();}},true);window.addEventListener('unhandledrejection',e=>{if(x(e.reason&&e.reason.stack)){e.stopImmediatePropagation();e.preventDefault();}},true);})();";

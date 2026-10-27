@@ -20,7 +20,8 @@ from pathlib import Path
 
 import requests
 
-DEFAULTS = {'provider': 'anthropic', 'model': 'claude-opus-5-5', 'base_url': '', 'api_key': '', 'effort': 'medium'}
+DEFAULTS = {'provider': 'anthropic', 'model': 'claude-opus-5-5', 'base_url': '', 'api_key': '', 'effort': 'medium',
+            'image_enabled': False, 'image_model': 'gpt-image-2.5-flare', 'image_quality': 'medium', 'image_api_key': ''}
 PROVIDERS = ('anthropic', 'openai')
 
 SYSTEM = """You are the Henge studio assistant. Henge turns a guide video plus reference pictures into a new video with MiniMax H3. You operate the studio for the user: you see its state, look at frames, mark people, set options and start generations. The user watches the screen change as you work.
@@ -49,6 +50,9 @@ The studio state's selected_job is the generation selected on screen. When the u
 11. If the user says an active generation looks wrong or that you made a mistake, inspect its state and call confirm_cancel_job to ask whether they want to cancel it. Criticism is not permission to cancel: only call cancel_job when that approval result is true. If they decline, leave it running and continue the conversation.
 12. A completed generation can feed another mode: call use_generation_as_guide with its reference and the requested next mode, then configure that mode and ask before generating. Do not ask the user to download and upload a Henge result again.
 13. The option fibo='auto' does not mean FIBO was used. Never claim it was used from get_options. Check get_job: plan.fibo.used is the truth. When preview_available is true, call view_job_image before describing the prepared reference.
+14. When the user asks you to create an original reference image, call generate_reference_image. Write a self-contained image prompt optimized for video character reference: a clearly visible subject, coherent identity, clean lighting and an uncluttered background. Prefer portrait for a character. The generated image is only a candidate: never claim it was added to the studio. Tell the user to click the button on the image to use it as the next Picture. Do not generate images unless the user asked for one.
+15. A user message ending with [sent while you were still working on the previous request] arrived while you were working. Read it before your next action: if it changes the request, adapt what you are doing (or stop and ask); if it is unrelated, finish the current step and then answer it.
+16. Default to the cheapest setup: set_quality 480p before generating (fastest and cheapest), keep the turbo LoRA and its step count, one take. Use a higher quality, more steps or no turbo only when the user asks for it ("720p", "best quality", "final version"), and say it costs more time. Sharpness is the exception: there the target resolution is the point, so keep what the user chose.
 
 Be brief. Always answer in the language of the user's latest message, even when it differs from the interface or earlier messages. Write approval questions in that same language. Never invent people, pictures or results you have not seen."""
 
@@ -106,6 +110,8 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
 ]
 JOB_TOOLS = [
+    {'name': 'generate_reference_image', 'description': 'Generate one original candidate reference image with the configured OpenAI image model. The result appears in the chat; the user must explicitly choose to add it as the next Picture.',
+     'input_schema': {'type': 'object', 'properties': {'prompt': {'type': 'string'}, 'aspect_ratio': {'type': 'string', 'enum': ['portrait', 'square', 'landscape']}}, 'required': ['prompt'], 'additionalProperties': False}},
     {'name': 'get_job', 'description': 'Status, stage, message, plan summary, prompt and warnings of a job. job_id accepts the full id or its visible 8-character generation reference, with or without #.',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
     {'name': 'wait_for_job', 'description': "Check whether a background job reached the plan review ('plan') or finished ('done'). Returns immediately; if it is still running, tell the user and let them keep chatting instead of polling.",
@@ -142,26 +148,39 @@ def load_config(path: Path) -> dict:
 
 
 def public_config(cfg: dict) -> dict:
-    """The config for the browser: the key is never sent back, only whether one is saved."""
+    """The config for the browser: keys are never sent back, only whether they are saved."""
     key = cfg.get('api_key') or ''
-    return {**{k: v for k, v in cfg.items() if k != 'api_key'}, 'has_key': bool(key), 'key_hint': f'…{key[-4:]}' if len(key) > 8 else ''}
+    image_key = cfg.get('image_api_key') or ''
+    return {**{k: v for k, v in cfg.items() if k not in ('api_key', 'image_api_key')}, 'has_key': bool(key),
+            'key_hint': f'…{key[-4:]}' if len(key) > 8 else '', 'has_image_key': bool(image_key),
+            'image_key_hint': f'…{image_key[-4:]}' if len(image_key) > 8 else ''}
 
 
 def save_config(path: Path, update: dict) -> dict:
     cfg = load_config(path)
-    for k in ('provider', 'model', 'base_url', 'effort'):
+    for k in ('provider', 'model', 'base_url', 'effort', 'image_model', 'image_quality'):
         if k in update and isinstance(update[k], str):
             cfg[k] = update[k].strip()
+    if isinstance(update.get('image_enabled'), bool):
+        cfg['image_enabled'] = update['image_enabled']
     if isinstance(update.get('api_key'), str) and update['api_key'].strip():
         cfg['api_key'] = update['api_key'].strip()
     if update.get('clear_key'):
         cfg['api_key'] = ''
+    if isinstance(update.get('image_api_key'), str) and update['image_api_key'].strip():
+        cfg['image_api_key'] = update['image_api_key'].strip()
+    if update.get('clear_image_key'):
+        cfg['image_api_key'] = ''
     if cfg['provider'] not in PROVIDERS:
         raise ValueError('Unknown provider')
     if cfg['effort'] not in ('', 'low', 'medium', 'high', 'xhigh', 'max'):   # '' = the model's default
         raise ValueError('Unknown effort')
     if not cfg['model']:
         raise ValueError('Choose a model')
+    if cfg['image_quality'] not in ('low', 'medium', 'high', 'auto'):
+        raise ValueError('Unknown image quality')
+    if not cfg['image_model']:
+        raise ValueError('Choose an image model')
     if cfg['base_url'] and not re.match(r'^https?://', cfg['base_url']):
         raise ValueError('The base URL must start with http:// or https://')
     path.write_text(json.dumps(cfg, indent=2))
@@ -238,7 +257,14 @@ def _to_anthropic(messages: list) -> list:
                 inner = [{'type': 'text', 'text': r.get('text') or 'done'}] + [{'type': 'image', 'source': {'type': 'base64', 'media_type': t, 'data': d}} for t, d in map(_split_data_url, r.get('images') or [])]
                 blocks.append({'type': 'tool_result', 'tool_use_id': r['id'], 'content': inner, **({'is_error': True} if r.get('is_error') else {})})
             out.append({'role': 'user', 'content': blocks})
-    return out
+    # A message the user queued while tools ran follows the tool results: one user turn, results first.
+    merged = []
+    for m in out:
+        if merged and m['role'] == 'user' and merged[-1]['role'] == 'user':
+            merged[-1] = {'role': 'user', 'content': merged[-1]['content'] + m['content']}
+        else:
+            merged.append(m)
+    return merged
 
 
 def _call_anthropic(cfg: dict, messages: list) -> dict:
@@ -286,6 +312,30 @@ def _to_openai(messages: list) -> list:
                 out.append({'role': 'user', 'content': [{'type': 'text', 'text': 'Images returned by the tools above, in order: ' + ', '.join(n for n, _ in images)}]
                             + [{'type': 'image_url', 'image_url': {'url': u}} for _, u in images]})
     return out
+
+
+NOT_CHAT = re.compile(r'embed|tts|whisper|transcribe|dall-e|image|moderation|realtime|audio|search|computer-use|babbage|davinci|sora', re.I)
+
+
+def list_models(saved: dict, draft: dict) -> list:
+    """Model ids the provider in the settings draft offers, newest first. The saved key is used only for the same
+    provider and URL it was saved for, so it is never sent to another server."""
+    provider = draft.get('provider') or saved['provider']
+    base_url = (draft.get('base_url') if isinstance(draft.get('base_url'), str) else saved['base_url']).strip()
+    key = (draft.get('api_key') or '').strip()
+    if not key and provider == saved['provider'] and base_url == saved['base_url']:
+        key = saved['api_key']
+    if provider == 'anthropic':
+        import anthropic
+        client = anthropic.Anthropic(api_key=key or None, **({'base_url': base_url} if base_url else {}))
+        return [{'id': m.id, 'name': m.display_name} for m in client.models.list(limit=100)]
+    base = (base_url or 'https://api.openai.com/v1').rstrip('/')
+    r = requests.get(base + '/models', headers={'Authorization': f'Bearer {key}'} if key else {}, timeout=20)
+    if not r.ok:
+        raise ValueError(f'{base}/models: HTTP {r.status_code}: {r.text[:200]}')
+    rows = sorted(r.json().get('data') or [], key=lambda m: -(m.get('created') or 0))
+    official = 'api.openai.com' in base
+    return [{'id': m['id'], 'name': m['id']} for m in rows if m.get('id') and not (official and NOT_CHAT.search(m['id']))]
 
 
 def _call_openai(cfg: dict, messages: list) -> dict:

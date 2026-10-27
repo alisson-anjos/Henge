@@ -61,9 +61,6 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [comfyUrl, setComfyUrl] = useState('');
-  const [connectionMessage, setConnectionMessage] = useState('');
-  const [connecting, setConnecting] = useState(false);
   const [showReferenceComparison, setShowReferenceComparison] = useState(false);
   const [settingsTarget, setSettingsTarget] = useState<HTMLElement | null>(null);
   const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
@@ -144,7 +141,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
         const [h, list] = await Promise.all([fetch('/api/backend/health', {signal: controller.signal}), fetch('/api/backend/jobs', {signal: controller.signal})]);
         if (!h.ok || !list.ok) throw Error();
         const state: Health = await h.json(), rows: GenerationJob[] = await list.json();
-        if (!disposed) {setHealth(state); setComfyUrl(current => current || state.comfy_url || 'http://127.0.0.1:8189'); rows.sort((a, b) => b.created - a.created); setJobs(rows); if (first) {first = false; let stored: string | null = null; try {stored = localStorage.getItem(SELECTED_KEY);} catch {/* private mode */} const initial = rows.find(r => r.id === stored)?.id; if (initial) selectJob(initial);}}
+        if (!disposed) {setHealth(state); rows.sort((a, b) => b.created - a.created); setJobs(rows); if (first) {first = false; let stored: string | null = null; try {stored = localStorage.getItem(SELECTED_KEY);} catch {/* private mode */} const initial = rows.find(r => r.id === stored)?.id; if (initial) selectJob(initial);}}
       } catch {if (!disposed) setHealth(null);}
       if (!disposed) timer = setTimeout(refresh, 3000);
     }
@@ -172,15 +169,6 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   useEffect(() => {registerControls?.({submit, setAutoApprove, setEnhancePrompt, selectJob: id => void selectJob(id),
     getOptions: () => ({options: {...shareOptions, profile}, models: health?.models, turbos: health?.turbos, bases: health?.bases, upscalers: health?.upscalers, tara_ready: health?.tara_ready}),
     applyOptions: patch => applySettings({...shareOptions, profile, ...patch})});});
-  async function saveConnection() {
-    setConnecting(true); setConnectionMessage('');
-    try {
-      const response = await fetch('/api/backend/settings', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({comfy_url: comfyUrl})});
-      const result = await readJson(response);
-      if (!response.ok) throw Error(result.detail || 'Unable to connect');
-      setConnectionMessage(tr('Connected. Settings saved.', 'Conectado. Configuração salva.', 'Conectado. Configuración guardada.'));
-    } catch (e) {setConnectionMessage(e instanceof Error ? e.message : 'Unable to connect');} finally {setConnecting(false);}
-  }
   async function setPreparation(enabled: boolean) {
     if (!job || submitting) return;
     setSubmitting(true); setError('');
@@ -230,7 +218,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   ];
   const settings = <div className="generation-settings-content">
     <div className="label-row"><h2>{tr('Settings', 'Configurações', 'Configuración')}</h2><span className="mono muted">{health?.online ? health.training_busy ? tr('Waiting for training', 'GPU reservada ao treino', 'GPU reservada al entrenamiento') : 'ComfyUI online' : 'Backend offline'}</span></div>
-    <details className="connection-settings"><summary>{tr('Connection settings', 'Configurar conexão', 'Configurar conexión')}</summary><label>{tr('ComfyUI API address', 'Endereço da API do ComfyUI', 'Dirección de la API de ComfyUI')}<input type="url" value={comfyUrl} placeholder="http://127.0.0.1:8189" onChange={e => setComfyUrl(e.target.value)}/></label><small>{tr('Use the address reachable by the Henge backend. Its configured ComfyUI folder must also be accessible there.', 'Use o endereço acessível pelo backend do Henge. A pasta do ComfyUI configurada no backend também precisa estar acessível.', 'Usa una dirección accesible desde el backend de Henge. Su carpeta de ComfyUI configurada también debe ser accesible.')}</small><button className="quiet-button" disabled={connecting} onClick={saveConnection}>{connecting ? tr('Connecting…', 'Conectando…', 'Conectando…') : tr('Test and save', 'Testar e salvar', 'Probar y guardar')}</button>{connectionMessage && <p role="status">{connectionMessage}</p>}</details>
+    <button type="button" className="quiet-button connection-open" onClick={() => dispatchEvent(new CustomEvent('henge:open-settings', {detail: 'connection'}))}>{tr('Connection settings', 'Configurar conexão', 'Configurar conexión')} →</button>
     <div className="generation-setup">
       {fixedRecipe ? <div className="selected-model"><span className="control-label">{tr('Model', 'Modelo', 'Modelo')}</span><div><strong>{mode === 'headswap' ? 'Head Swap' : 'Little More Sharpness'}</strong><span className="model-version">{mode === 'headswap' ? 'v1.0 · r32' : 'H3 · LMS v1 dyn95'}</span></div>{mode === 'sharpness' ? <small>{tr('The source video guides it frame by frame', 'O vídeo de origem guia quadro a quadro', 'El vídeo de origen lo guía fotograma a fotograma')}</small> : <small>{tr('Turbo LoRA (DMD 8-step) applied', 'Turbo LoRA (DMD 8 passos) aplicado', 'Turbo LoRA (DMD 8 pasos) aplicado')}</small>}</div> : mode === 'swap' ? <div className="selected-model"><span className="control-label">{tr('Model', 'Modelo', 'Modelo')}</span><div><strong>Character Swap</strong><span className="model-version">v1.1</span></div><small>{tr('Selected automatically for this task', 'Selecionado automaticamente para esta tarefa', 'Seleccionado automáticamente para esta tarea')}</small></div> : <label className="motion-model-field"><span className="control-label">{tr('Model', 'Modelo', 'Modelo')}</span><Select aria-label={tr('Motion model', 'Modelo de movimento', 'Modelo de movimiento')} value={motionModel} onChange={e => {const next = e.target.value; const was = health?.models[motionModel]?.method; const method = health?.models[next]?.method; setMotionModel(next); if (method === 'tara' && health?.tara_ready) setConditioningMode('tara'); else if (was === 'tara' && !method) setConditioningMode('guide');}}>{Object.entries(health?.models || {motion: {label: 'Motion Transfer v1.0', task: 'motion'}}).filter(([, m]) => m.task === 'motion').map(([id, m]) => <option key={id} value={id} disabled={'available' in m && m.available === false}>{m.label}{'available' in m && m.available === false ? tr(' · not installed', ' · não instalado', ' · no instalado') : ''}</option>)}</Select><small>{tr('Choose which trained model to use', 'Escolha qual modelo treinado usar', 'Elige qué modelo entrenado usar')}</small></label>}
       {mode !== 'sharpness' && <div className="method-field"><span className="control-label">{tr('Method', 'Método', 'Método')}</span><div className="method-toggle" role="group" aria-label={tr('Generation method', 'Método de geração', 'Método de generación')}><button aria-pressed={conditioningMode === 'guide'} className={conditioningMode === 'guide' ? 'selected' : ''} onClick={() => setConditioningMode('guide')}>Guide Latents</button><button aria-pressed={conditioningMode === 'tara'} className={conditioningMode === 'tara' ? 'selected' : ''} disabled={!health?.tara_ready} onClick={() => setConditioningMode('tara')}>TARA <small>experimental</small></button></div><small>{conditioningMode === 'guide' ? tr('Default · follows the guide video directly', 'Padrão · segue diretamente o vídeo guia', 'Predeterminado · sigue directamente el vídeo guía') : tr('Experimental · temporally aligned native reference', 'Experimental · referência nativa com alinhamento temporal', 'Experimental · referencia nativa con alineación temporal')}</small></div>}

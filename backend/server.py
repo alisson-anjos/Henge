@@ -17,6 +17,7 @@ from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
 from comfy_client import ComfyFiles,output_files
 from runpod_backend import RunPodBackend
+from comfy_sdk_backend import ComfySdkBackend
 
 ROOT=Path(os.environ.get('HENGE_DATA_DIR','/data/henge-data'));JOBS=ROOT/'jobs';JOBS.mkdir(parents=True,exist_ok=True)
 # Bridge-owned staging for uploads and intermediate files. ComfyUI receives what a graph needs through
@@ -30,9 +31,45 @@ try:stored_settings=json.loads(SETTINGS.read_text()) if SETTINGS.is_file() else 
 except (ValueError,OSError):stored_settings={}
 if not isinstance(stored_settings,dict):stored_settings={}
 URL=stored_settings.get('comfy_url',os.environ.get('COMFY_BASE_URL','http://127.0.0.1:8189')).rstrip('/');LOCK=threading.RLock();STOP=threading.Event()
-# HENGE_BACKEND=runpod: graphs run on a RunPod Serverless endpoint instead of a ComfyUI URL.
-RUNPOD=RunPodBackend(INPUT,ROOT) if os.environ.get('HENGE_BACKEND')=='runpod' else None
-FILES=RUNPOD or ComfyFiles(URL,INPUT)
+# Where graphs run: a ComfyUI URL (REMOTE None), RunPod Serverless or the Comfy API v2 through the Comfy SDK.
+# Chosen on the settings screen (connection.json) or by environment variables, which win (pods, scripts).
+CONNECTION=ROOT/'connection.json'
+PROVIDERS=('comfyui','runpod','comfy_sdk')
+# setting -> environment variable that overrides it
+CONNECTION_ENV={'provider':'HENGE_BACKEND','comfy_url':'COMFY_BASE_URL','runpod_endpoint_id':'RUNPOD_ENDPOINT_ID','runpod_api_key':'RUNPOD_API_KEY',
+    'sdk_target':'HENGE_COMFY_SDK_TARGET','sdk_url':'HENGE_COMFY_SDK_URL','sdk_api_key':'COMFY_API_KEY'}
+CONNECTION_SECRETS=('runpod_api_key','sdk_api_key')
+def connection_config():
+    """The screen's choices (connection.json) with environment variables on top. URL already folds in
+    COMFY_BASE_URL and the older settings.json."""
+    try:saved=json.loads(CONNECTION.read_text()) if CONNECTION.is_file() else {}
+    except (ValueError,OSError):saved={}
+    cfg={'provider':'comfyui','comfy_url':URL,'runpod_endpoint_id':'','runpod_api_key':'','sdk_target':'proxy','sdk_url':'','sdk_api_key':'',**saved}
+    for key in connection_locked():cfg[key]=os.environ[CONNECTION_ENV[key]].strip()
+    cfg['provider']={'comfy':'comfyui','local':'comfyui','sdk':'comfy_sdk'}.get(cfg['provider'],cfg['provider'])
+    if cfg['provider'] not in PROVIDERS:cfg['provider']='comfyui'
+    return cfg
+def connection_locked():
+    """Settings an environment variable decides (shown read-only on the screen)."""
+    return [k for k,v in CONNECTION_ENV.items() if k!='comfy_url' and os.environ.get(v,'').strip()]
+def build_backend(cfg):
+    if cfg['provider']=='runpod':
+        if not cfg['runpod_endpoint_id'] or not cfg['runpod_api_key']:raise ValueError('RunPod needs an endpoint ID and an API key')
+        return RunPodBackend(INPUT,ROOT,cfg['runpod_endpoint_id'],cfg['runpod_api_key'])
+    if cfg['provider']=='comfy_sdk':
+        if cfg['sdk_target']=='url' and not cfg['sdk_url']:raise ValueError('Enter the Comfy API URL')
+        if cfg['sdk_target']=='cloud' and not cfg['sdk_api_key']:raise ValueError('Comfy Cloud needs an API key')
+        return ComfySdkBackend(INPUT,ROOT,target=cfg['sdk_target'],comfy_url=cfg['comfy_url'],url=cfg['sdk_url'],api_key=cfg['sdk_api_key'])
+    return None
+def apply_connection(cfg):
+    global REMOTE,FILES,URL
+    old=REMOTE if 'REMOTE' in globals() else None
+    URL=cfg['comfy_url'].rstrip('/');REMOTE=build_backend(cfg)
+    FILES=REMOTE or ComfyFiles(URL,INPUT)
+    if old is not None and old is not REMOTE and hasattr(old,'close'):old.close()
+REMOTE=None
+try:apply_connection(connection_config())
+except Exception as e:print('[henge] connection:',e,'- using ComfyUI at',URL,flush=True);REMOTE=None;FILES=ComfyFiles(URL,INPUT)
 COLORS={'red':'#DC463C','blue':'#2D7DE1','green':'#32B45A','yellow':'#EBCD23','magenta':'#CD37B4','cyan':'#1EC8CD','orange':'#F08223','purple':'#874BD2'}
 TERMINAL={'completed','failed','cancelled'}
 COMPARISON_LOCKS={}
@@ -228,7 +265,7 @@ def comfy_choices(info,node,name):
     return spec[1].get('options',[]) if len(spec)>1 and isinstance(spec[1],dict) else []
 
 def comfy_info(path='/object_info',timeout=10):
-    return RUNPOD.object_info() if RUNPOD else api('GET',path,timeout=timeout)
+    return REMOTE.object_info() if REMOTE else api('GET',path,timeout=timeout)
 
 FIBO_UNET='fibo2_edit_turbo_int8_convrot.safetensors'
 def fibo_available(info=None):
@@ -242,7 +279,7 @@ def execute_serverless(job,graph,stage):
     labels={'SamplerCustomAdvanced':'Sampling video','HengeH3LatentUpscale':'Upscaling the latent (H3 upscaler)','HengeRTXUpscale':'Upscaling with NVIDIA RTX Video Super Resolution','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit','RemoveBackground':'Removing the reference background'}
     def on_status(rid,progress):
         if progress is None:save(job,prompt_id=rid,stage=stage,status='running',step=None,step_total=None,eta_seconds=None,seconds_per_step=None);return
-        if progress.get('queued'):save(job,message='Waiting for a serverless worker (a cold start loads the models and can take minutes)');return
+        if progress.get('queued'):save(job,message=REMOTE.queue_message);return
         if progress.get('message'):save(job,message=progress['message']);return
         patch={}
         label=labels.get(progress.get('class_type'))
@@ -251,10 +288,10 @@ def execute_serverless(job,graph,stage):
             patch.update(step=int(progress['value']),step_total=int(progress['max']))
             if stage.startswith('h3_segment_'):patch['progress']=(job.get('segment',1)-1+min(1,progress['value']/progress['max']))/max(1,job.get('total_segments',1))
         if patch:save(job,**patch)
-    return RUNPOD.run(graph,on_status,lambda:load(job['id'])['status']=='cancelled')
+    return REMOTE.run(graph,on_status,lambda:load(job['id'])['status']=='cancelled')
 
 def execute_graph(job,graph,stage):
-    if RUNPOD:return execute_serverless(job,graph,stage)
+    if REMOTE:return execute_serverless(job,graph,stage)
     import aiohttp
     async def execute():
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
@@ -692,9 +729,9 @@ def follow_update(follow,reports,next_offset):
 def guide_available(item):
     """The guide video is optional: a serverless reply can leave it out (ComfyUI skips a save node whose inputs did
     not change, e.g. a Retry with another quality), and its absence must not fail the job."""
-    if not RUNPOD:return True
+    if not REMOTE:return True
     key=(item.get('subfolder','')+'/'+item['filename']).lstrip('/')
-    return key in RUNPOD.received or key in RUNPOD.on_volume
+    return key in REMOTE.received or key in REMOTE.on_volume
 
 def frame_count(path):
     out=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-count_packets','-show_entries','stream=nb_read_packets','-of','csv=p=0',str(path)],capture_output=True,text=True)
@@ -857,16 +894,27 @@ async def lifespan(app):
         if legacy and legacy.is_dir() and not (INPUT/'henge'/job['id']).exists():shutil.copytree(legacy,INPUT/'henge'/job['id'])
         if job['status']=='running':save(job,status='failed',error='The bridge restarted during this job. Use Retry to run it again.')
     thread=threading.Thread(target=worker,daemon=True);thread.start();yield;STOP.set()
+    if REMOTE is not None and hasattr(REMOTE,'close'):REMOTE.close()   # stops a managed comfy-api-proxy
 app=FastAPI(lifespan=lifespan)
+
+LAST_INFO={'url':None,'info':{}}
+def comfy_port_open():
+    import socket
+    u=urlsplit(URL)
+    try:socket.create_connection((u.hostname,u.port or (443 if u.scheme=='https' else 80)),timeout=2).close();return True
+    except OSError:return False
 
 @app.get('/health')
 def health():
-    if RUNPOD:online=RUNPOD.online();info=RUNPOD.object_info()
+    if REMOTE:online=REMOTE.online();info=REMOTE.object_info()
     else:
-        try:info=api('GET','/object_info',timeout=10);online=True
-        except Exception:info={};online=False
+        try:info=api('GET','/object_info',timeout=10);online=True;LAST_INFO.update(url=URL,info=info)
+        except Exception:
+            # A ComfyUI busy with a long node (SAM tracking, VAE decode) can miss the timeout while its port is open:
+            # it is busy, not gone, so keep the node list it gave last time instead of marking every model missing.
+            info=LAST_INFO['info'] if LAST_INFO['url']==URL and comfy_port_open() else {};online=bool(info)
     # A serverless endpoint reports its nodes and models only after its first job: until then assume the full image.
-    unknown=bool(RUNPOD) and not info
+    unknown=bool(REMOTE) and not info
     installed=comfy_choices(info,'LoraLoaderModelOnly','lora_name')
     if LOCAL_MODELS:requirements,mode_ready,setup=check_requirements(LOCAL_MODELS,MODELS)
     else:
@@ -880,7 +928,7 @@ def health():
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
-    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if RUNPOD else URL,'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(RUNPOD,'offline_reason','') if RUNPOD else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -903,8 +951,78 @@ async def configure_connection(request:Request):
     except HTTPException:raise
     except (requests.RequestException,ValueError):raise HTTPException(400,'Could not connect to the ComfyUI API at this address')
     tmp=SETTINGS.with_suffix('.tmp');tmp.write_text(json.dumps({'comfy_url':target},indent=2));tmp.replace(SETTINGS);URL=target
-    if not RUNPOD:FILES.url=target
+    if not REMOTE:FILES.url=target
     return {'comfy_url':URL,'connected':True,'message':'Connection saved'}
+
+def public_connection(cfg):
+    """The connection for the settings screen: secrets reduced to whether they are set and their last 4 characters."""
+    out={k:v for k,v in cfg.items() if k not in CONNECTION_SECRETS}
+    for k in CONNECTION_SECRETS:
+        v=cfg.get(k) or '';out['has_'+k]=bool(v);out[k+'_hint']=f'…{v[-4:]}' if len(v)>8 else ''
+    active='runpod' if isinstance(REMOTE,RunPodBackend) else 'comfy_sdk' if REMOTE else 'comfyui'
+    return {**out,'locked':connection_locked(),'active':active,'sdk_available':True}
+
+def merged_connection(body):
+    """The saved config with the screen's changes; blank secrets keep the saved ones; locked keys stay as the env says."""
+    cfg=connection_config();locked=connection_locked()
+    for k in ('provider','comfy_url','runpod_endpoint_id','sdk_target','sdk_url'):
+        if isinstance(body.get(k),str) and k not in locked:cfg[k]=body[k].strip()
+    for k in CONNECTION_SECRETS:
+        if isinstance(body.get(k),str) and body[k].strip() and k not in locked:cfg[k]=body[k].strip()
+        if body.get('clear_'+k) and k not in locked:cfg[k]=''
+    if cfg['provider'] not in PROVIDERS:raise ValueError('Unknown provider')
+    if cfg['sdk_target'] not in ('proxy','url','cloud'):raise ValueError('Unknown Comfy API target')
+    for k in ('comfy_url','sdk_url'):
+        if cfg[k] and not re.match(r'^https?://[^\s?#]+$',cfg[k]):raise ValueError('URLs must start with http:// or https://')
+    cfg['comfy_url']=cfg['comfy_url'].rstrip('/');cfg['sdk_url']=cfg['sdk_url'].rstrip('/')
+    return cfg
+
+HENGE_NODES=['HengeLoadShot','HengeGuide','HengeH3Conditioning','HengeSaveVideo']
+def test_connection(cfg):
+    """One plain-language answer: can Henge run graphs with this configuration?"""
+    if cfg['provider']=='runpod':
+        backend=build_backend(cfg)
+        if not backend.online():return {'ok':False,'message':f'RunPod endpoint does not answer: {backend.offline_reason}'}
+        inv=backend.inventory()
+        return {'ok':True,'message':'RunPod endpoint answers'+(f" · {len(inv['nodes'])} nodes known from the last job" if inv else ' · its nodes and models are listed after the first job')}
+    if cfg['provider']=='comfy_sdk' and cfg['sdk_target']!='proxy':
+        backend=build_backend(cfg)
+        if not backend.online():return {'ok':False,'message':backend.offline_reason}
+        return {'ok':True,'message':f'Comfy API answers at {backend.base}'+(' · it must have the Henge custom nodes installed' if cfg['sdk_target']=='cloud' else '')}
+    # A ComfyUI URL, directly or behind the managed comfy-api-proxy.
+    try:info=requests.get(cfg['comfy_url']+'/object_info',timeout=10).json()
+    except Exception:return {'ok':False,'message':f"No ComfyUI answers at {cfg['comfy_url']}. Start ComfyUI, or check the address and port."}
+    missing=[n for n in HENGE_NODES if n not in info]
+    if missing:return {'ok':False,'message':'ComfyUI answers, but the Henge nodes are missing: '+', '.join(missing)+'. Link backend/comfy_nodes/henge into custom_nodes and restart ComfyUI.'}
+    loras=comfy_choices(info,'LoraLoaderModelOnly','lora_name')
+    ready=[v['label'] for v in MODELS.values() if v['lora'] in loras]
+    via=' through the Comfy SDK (comfy-api-proxy is started by Henge)' if cfg['provider']=='comfy_sdk' else ''
+    return {'ok':True,'message':f'ComfyUI answers{via} · {len(ready)} of {len(MODELS)} Henge models installed','models_ready':ready}
+
+def active_jobs():
+    return [json.loads(p.read_text())['id'] for p in JOBS.glob('*/job.json') if json.loads(p.read_text())['status'] not in TERMINAL|{'awaiting_approval'}]
+
+@app.get('/connection')
+def get_connection():return public_connection(connection_config())
+
+@app.post('/connection/test')
+async def check_connection(request:Request):
+    try:cfg=merged_connection(await request.json())
+    except ValueError as e:raise HTTPException(400,str(e))
+    try:return await asyncio.to_thread(test_connection,cfg)
+    except ValueError as e:return {'ok':False,'message':str(e)}
+
+@app.post('/connection')
+async def save_connection(request:Request):
+    """Save and switch to a connection. Waits for no job to be running, so nothing changes under a render."""
+    try:cfg=merged_connection(await request.json())
+    except ValueError as e:raise HTTPException(400,str(e))
+    if active_jobs():raise HTTPException(409,'Wait for the running generations to finish before switching the connection')
+    result=await asyncio.to_thread(test_connection,cfg)
+    if not result['ok']:raise HTTPException(400,result['message'])
+    tmp=CONNECTION.with_suffix('.tmp');tmp.write_text(json.dumps({k:cfg[k] for k in cfg if k not in connection_locked()},indent=2));os.chmod(tmp,0o600);tmp.replace(CONNECTION)
+    with LOCK:await asyncio.to_thread(apply_connection,cfg)
+    return {**public_connection(cfg),'message':result['message']}
 
 @app.get('/jobs')
 def list_jobs():
@@ -1068,7 +1186,7 @@ def cancel(jid:str):
     job=load(jid)
     if job['status'] in TERMINAL:return public(job)
     pid=job.get('prompt_id');save(job,status='cancelled',stage='cancelled',message='Cancelled by user')
-    if pid and RUNPOD:RUNPOD.cancel(pid)
+    if pid and REMOTE:REMOTE.cancel(pid)
     elif pid:
         queue=api('GET','/queue');running=queue.get('queue_running',[])
         if any(item[1]==pid for item in running):api('POST','/interrupt',json={})
@@ -1163,19 +1281,61 @@ def job_settings(job):
     parts+=[f"{o.get('steps',8)} steps",job.get('quality',''),f"seed {o.get('seed',42)}"]
     return ' · '.join(str(p) for p in parts if p)
 
-@app.get('/jobs/{jid}/comparison-with-refs')
-def comparison_with_refs(jid:str):
-    job=load(jid);work=job_path(jid)
-    if job['status']!='completed' or not (work/'comparison.mp4').is_file():raise HTTPException(409,'The comparison is available after generation completes')
+def build_comparison_with_refs(job):
+    """Guide | result | references video (cached in the job folder). The per-job lock keeps two requests from encoding
+    the same file at once."""
+    work=job_path(job['id'])
     refs=[(int(slot),INPUT/path) for slot,path in sorted(job['assets']['pictures'].items(),key=lambda x:int(x[0]))]
     if (work/'fibo_preview.png').is_file():
         sources=' + '.join(f'Picture {s}' for s in (job.get('plan') or {}).get('fibo_picture_slots',[]))
         refs.append((f'FIBO · from {sources}' if sources else 'FIBO-generated',work/'fibo_preview.png',True))
-    # The job lock prevents two browser/download requests from encoding the same file simultaneously.
-    with LOCK:preview_lock=COMPARISON_LOCKS.setdefault(jid,threading.Lock())
+    with LOCK:preview_lock=COMPARISON_LOCKS.setdefault(job['id'],threading.Lock())
     with preview_lock:
-        result=create_comparison_with_refs(work/'comparison.mp4',work/'result.mp4',refs,work/'comparison_with_refs_v3.mp4',job_settings(job),(job.get('plan') or {}).get('prompt',''))
-    return FileResponse(result,filename='henge-guide-result-references.mp4',media_type='video/mp4')
+        return create_comparison_with_refs(work/'comparison.mp4',work/'result.mp4',refs,work/'comparison_with_refs_v3.mp4',job_settings(job),(job.get('plan') or {}).get('prompt',''))
+
+@app.get('/jobs/{jid}/comparison-with-refs')
+def comparison_with_refs(jid:str):
+    job=load(jid)
+    if job['status']!='completed' or not (job_path(jid)/'comparison.mp4').is_file():raise HTTPException(409,'The comparison is available after generation completes')
+    return FileResponse(build_comparison_with_refs(job),filename='henge-guide-result-references.mp4',media_type='video/mp4')
+
+# Where each job file goes in the bundle (first match wins); None leaves it out (internal or superseded).
+BUNDLE_LAYOUT=[(r'(result|comparison)\.mp4',''),(r'comparison_with_refs_v3\.mp4',None),(r'(concat|guide_concat)\.txt|joined\.mp4|job\.json',None),
+    (r'comparison_with_refs.*',None),(r'piece_(\d{3})\.mp4','shots/'),(r'guide_\d+\.mp4','shots/guides/'),
+    (r'(guide_preview|marks_preview|marks_source|mask_preview)\.mp4','guides/'),(r'.*_prepared\.png|fibo_preview\.png','references_prepared/'),
+    (r'sampling_preview\.jpg','previews/'),(r'vlm_.*|evidence_\d+\.jpg','planner/'),(r'.*\.api\.json','workflows/')]
+
+@app.get('/jobs/{jid}/bundle.zip')
+def bundle_zip(jid:str):
+    """Every asset of one generation in one zip: result and comparisons, every shot and its guide, guide/mark/mask
+    previews, prepared and FIBO references, what the planner saw and wrote, the ComfyUI workflows, the source video and
+    pictures, and generation.json (plan, prompt, settings). Files not in BUNDLE_LAYOUT go to other/."""
+    from starlette.background import BackgroundTask
+    job=load(jid);work=job_path(jid);name=f'henge-{jid[:8]}'
+    if job['status']!='completed':raise HTTPException(409,'The bundle is available after generation completes')
+    files=[]
+    for path in sorted(work.iterdir()):
+        if not path.is_file():continue
+        folder=next((f for pattern,f in BUNDLE_LAYOUT if re.fullmatch(pattern,path.name)),'other/')
+        if folder is None:continue
+        arc=f'shot_{int(path.stem[6:])+1:02d}.mp4' if path.name.startswith('piece_') else path.name.replace('.api.json','.json')
+        files.append((path,folder+arc))
+    if (work/'comparison.mp4').is_file():
+        try:files.append((Path(build_comparison_with_refs(job)),'comparison_with_references.mp4'))
+        except Exception:pass   # the rest of the bundle is still useful
+    assets=job.get('assets') or {}
+    if assets.get('video'):files.append((INPUT/assets['video'],'source/guide'+Path(assets['video']).suffix))
+    files+=[(INPUT/rel,f'source/picture_{slot}{Path(rel).suffix}') for slot,rel in sorted((assets.get('pictures') or {}).items(),key=lambda x:int(x[0]))]
+    plan=job.get('plan') or {}
+    info={'id':jid,'project':(job.get('request') or {}).get('project'),'mode':(job.get('request') or {}).get('mode'),'created':job.get('created'),
+          'run_seconds':job.get('run_seconds'),'settings':job_settings(job),'prompt':plan.get('prompt'),'plan':plan,'options':job.get('options'),'request':job.get('request')}
+    fd,tmp=tempfile.mkstemp(suffix='.zip',dir=ROOT);os.close(fd)
+    with zipfile.ZipFile(tmp,'w') as z:
+        for path,arc in files:
+            if path.is_file():z.write(path,f'{name}/{arc}',compress_type=zipfile.ZIP_STORED if path.suffix in ('.mp4','.png','.jpg','.jpeg','.webp') else zipfile.ZIP_DEFLATED)
+        z.writestr(f'{name}/generation.json',json.dumps(info,indent=2,ensure_ascii=False,default=str),compress_type=zipfile.ZIP_DEFLATED)
+        z.writestr(f'{name}/prompt.txt',plan.get('prompt') or '',compress_type=zipfile.ZIP_DEFLATED)
+    return FileResponse(tmp,filename=f'{name}.zip',media_type='application/zip',background=BackgroundTask(os.unlink,tmp))
 
 @app.get('/jobs/{jid}/workflow')
 def workflow(jid:str,stage:str|None=None):
@@ -1211,6 +1371,27 @@ def job_frames(job,which,count):
     return out
 
 def run_job_tool(name,args):
+    if name=='generate_reference_image':
+        cfg=assistant.load_config(ASSISTANT_CONFIG)
+        if not cfg.get('image_enabled'):raise ValueError('Reference image generation is disabled in Assistant settings')
+        key=cfg.get('image_api_key') or (cfg.get('api_key') if cfg.get('provider')=='openai' else '') or os.environ.get('OPENAI_API_KEY','')
+        if not key:raise ValueError('Add an OpenAI image API key in Assistant settings')
+        prompt=str(args.get('prompt') or '').strip()
+        if not prompt or len(prompt)>32000:raise ValueError('Send an image prompt up to 32,000 characters')
+        size={'portrait':'1024x1536','landscape':'1536x1024','square':'1024x1024'}.get(args.get('aspect_ratio'),'1024x1536')
+        response=requests.post('https://api.openai.com/v1/images/generations',headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+            json={'model':cfg['image_model'],'prompt':prompt,'size':size,'quality':cfg['image_quality'],'n':1,'output_format':'jpeg'},timeout=300)
+        if not response.ok:raise ValueError(f'Image generation failed: HTTP {response.status_code}: {response.text[:500]}')
+        item=(response.json().get('data') or [{}])[0];encoded=item.get('b64_json')
+        if encoded:
+            if len(encoded)>28_000_000:raise ValueError('The generated image is too large')
+            image='data:image/jpeg;base64,'+encoded
+        elif item.get('url'):
+            downloaded=requests.get(item['url'],timeout=60);downloaded.raise_for_status()
+            if len(downloaded.content)>20*1024*1024:raise ValueError('The generated image is too large')
+            image='data:'+downloaded.headers.get('content-type','image/jpeg').split(';')[0]+';base64,'+base64.b64encode(downloaded.content).decode()
+        else:raise ValueError('The image provider returned no image')
+        return json.dumps({'kind':'generated_reference','model':cfg['image_model'],'prompt':prompt},ensure_ascii=False),[image]
     if name=='get_job':return job_summary(load(args['job_id'])),[]
     if name=='wait_for_job':
         job=load(args['job_id'])
@@ -1248,6 +1429,12 @@ def get_assistant_config():return assistant.public_config(assistant.load_config(
 async def set_assistant_config(request:Request):
     try:return assistant.public_config(assistant.save_config(ASSISTANT_CONFIG,await request.json()))
     except ValueError as e:raise HTTPException(400,str(e))
+
+@app.post('/assistant/models')
+async def assistant_models(request:Request):
+    """The models of the provider chosen in the settings (not saved yet), for the model dropdown."""
+    try:return await asyncio.to_thread(assistant.list_models,assistant.load_config(ASSISTANT_CONFIG),await request.json())
+    except Exception as e:raise HTTPException(400,str(e)[:300])
 
 @app.post('/assistant/people')
 async def find_people(request:Request):
