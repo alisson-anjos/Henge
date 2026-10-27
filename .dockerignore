@@ -15,5 +15,7 @@ secrets
 **/*.safetensors
 **/*.pt
 **/*.mp4
+# ...except the Community examples' guide videos, which the UI serves.
+!public/community/**/*.mp4
 **/*.zip
 **/*.tar*
