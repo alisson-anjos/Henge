@@ -26,8 +26,8 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
   const [frame, setFrame] = useState<Image & {width: number; height: number} | null>(null);
   const [result, setResult] = useState<Image & {edit?: string} | null>(null);
   const [edits, setEdits] = useState<Edit[]>([]);
-  const [editor, setEditor] = useState<'klein' | 'fibo' | null>(null);
-  const editorName = editor === 'klein' ? 'FLUX.2 Klein' : 'FIBO';
+  const [editor, setEditor] = useState<'klein3' | 'klein' | 'fibo' | null>(null);
+  const editorName = ({klein3: 'FLUX.3 Klein', klein: 'FLUX.2 Klein', fibo: 'FIBO'} as const)[editor ?? 'fibo'];
   const [op, setOp] = useState<'replace' | 'remove' | 'add' | 'free'>('replace');
   const [what, setWhat] = useState('');
   const paint = useRef<HTMLCanvasElement>(null), drawing = useRef(false);
