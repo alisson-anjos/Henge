@@ -966,7 +966,7 @@ async def lifespan(app):
     if REMOTE is not None and hasattr(REMOTE,'close'):REMOTE.close()   # stops a managed comfy-api-proxy
 app=FastAPI(lifespan=lifespan)
 
-LAST_INFO={'url':None,'info':{}};INFO_REFRESH=threading.Lock()
+LAST_INFO={'url':None,'info':{},'at':0.};INFO_REFRESH=threading.Lock();INFO_TTL=60
 def comfy_alive(url,timeout=5):
     """ComfyUI answers (fast, unlike /object_info, which can take a minute with a very large models folder)."""
     try:return requests.get(url+'/system_stats',timeout=timeout).ok
@@ -983,7 +983,7 @@ def refresh_info_later():
     """Fetch the full node list in the background with a long timeout; health uses it once it arrives."""
     if not INFO_REFRESH.acquire(blocking=False):return
     def run():
-        try:info=api('GET','/object_info',timeout=300);LAST_INFO.update(url=URL,info=info)
+        try:info=api('GET','/object_info',timeout=300);LAST_INFO.update(url=URL,info=info,at=time.time())
         except Exception:pass
         finally:INFO_REFRESH.release()
     threading.Thread(target=run,daemon=True).start()
@@ -998,14 +998,20 @@ def comfy_port_open():
 def health():
     if REMOTE:online=REMOTE.online();info=REMOTE.object_info()
     else:
-        try:info=api('GET','/object_info',timeout=10);online=True;LAST_INFO.update(url=URL,info=info)
-        except Exception:
-            # A ComfyUI busy with a long node (SAM tracking, VAE decode) can miss the timeout while its port is open:
-            # it is busy, not gone, so keep the node list it gave last time instead of marking every model missing.
-            # Answering but slow to list its nodes (a very large models folder): online, the list comes in the background.
-            alive=comfy_port_open() and comfy_alive(URL)
-            if alive:refresh_info_later()
-            info=LAST_INFO['info'] if LAST_INFO['url']==URL and alive else {};online=alive
+        # /object_info is computed on ComfyUI's event loop and can take a minute with a very large models folder, so it
+        # is not asked on every poll: the last list is reused for INFO_TTL seconds and refreshed in the background.
+        cached=LAST_INFO['url']==URL and LAST_INFO['info']
+        if cached and time.time()-LAST_INFO['at']<INFO_TTL:info=LAST_INFO['info'];online=comfy_port_open()
+        elif not cached:
+            try:info=api('GET','/object_info',timeout=10);online=True;LAST_INFO.update(url=URL,info=info,at=time.time())
+            except Exception:
+                # Busy with a long node or slow to list its nodes: if its port answers it is online; the list comes later.
+                online=comfy_port_open()
+                if online:refresh_info_later()
+                info={}
+        else:
+            online=comfy_port_open();info=LAST_INFO['info']
+            if online:refresh_info_later()
     # A serverless endpoint reports its nodes and models only after its first job: until then assume the full image.
     unknown=bool(REMOTE) and not info
     installed=comfy_choices(info,'LoraLoaderModelOnly','lora_name')
@@ -1086,7 +1092,12 @@ def test_connection(cfg):
         if not backend.online():return {'ok':False,'message':backend.offline_reason}
         return {'ok':True,'message':f'Comfy API answers at {backend.base}'+(' · it must have the Henge custom nodes installed' if cfg['sdk_target']=='cloud' else '')}
     # A ComfyUI URL, directly or behind the managed comfy-api-proxy.
-    if not comfy_alive(cfg['comfy_url'],10):return {'ok':False,'message':f"No ComfyUI answers at {cfg['comfy_url']}. Start ComfyUI, or check the address and port."}
+    if not comfy_alive(cfg['comfy_url'],10):
+        u=urlsplit(cfg['comfy_url'])
+        try:import socket;socket.create_connection((u.hostname,u.port or 80),timeout=2).close();busy=True
+        except (OSError,TypeError):busy=False
+        if busy:return {'ok':False,'message':f"ComfyUI at {cfg['comfy_url']} is busy (a job, or listing a very large models folder). Try again in a minute."}
+        return {'ok':False,'message':f"No ComfyUI answers at {cfg['comfy_url']}. Start ComfyUI, or check the address and port."}
     try:info=comfy_nodes(cfg['comfy_url'],HENGE_NODES+['LoraLoaderModelOnly'])
     except Exception:return {'ok':False,'message':f"ComfyUI answers at {cfg['comfy_url']} but did not list its nodes in time; try again in a minute."}
     missing=[n for n in HENGE_NODES if n not in info]
