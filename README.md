@@ -4,6 +4,8 @@
 few pictures, and it swaps characters, transfers motion, swaps heads or sharpens the video — locally, on a RunPod pod
 or on RunPod Serverless.
 
+[![Watch the 4-minute demo](docs/images/demo/demo_poster.jpg)](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-demo.mp4)
+
 | Character Swap | Motion Transfer |
 |---|---|
 | ![A hiker becomes a goblin](docs/images/demo/swap.webp) | ![A character performs the guide's motion on a rooftop](docs/images/demo/motion.webp) |
@@ -12,6 +14,15 @@ or on RunPod Serverless.
 
 Left: guide · right: Henge. All four ran on RunPod Serverless at 480p (Sharpness to 1080p), started from the
 [MCP server](docs/MCP.md).
+
+**Multi-character swap.** Both fighters swapped at once across camera cuts, 30 s rendered as three shots at 480p: the
+studio assistant found the fighters, marked each one with its color (SAM 3.1 tracking) and generated.
+
+| Result (guide inset) | The assistant marking the fighters |
+|---|---|
+| ![Two fighters swapped at once](docs/images/demo/multi_character.webp) | ![The assistant marks each fighter by color](docs/images/demo/assistant_marks.jpg) |
+
+Fight footage: TEKKEN DADDY (YouTube), Tekken 8 © Bandai Namco — used here as a test clip.
 
 ### Not just an interface
 
