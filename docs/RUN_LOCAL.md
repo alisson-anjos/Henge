@@ -118,7 +118,10 @@ the first visit, and from the "offline" banner). Pick where workflows run:
 
 - **ComfyUI**: the address of a ComfyUI with the Henge nodes.
 - **Comfy API · SDK**: Henge starts `comfy-api-proxy` in front of your ComfyUI and talks to it through the
-  official Comfy SDK, or uses a Comfy API URL or Comfy Cloud.
+  official Comfy SDK, or uses a Comfy API URL or Comfy Cloud. Cloud execution requires Henge's custom nodes and
+  models to be included in Comfy Cloud's managed catalog; publishing a package in the Registry alone does not make
+  it available there. Users cannot directly install custom nodes on Cloud. See
+  [Comfy's custom-node policy](https://support.comfy.org/articles/6791455062-custom-nodes-on-cloud).
 - **RunPod Serverless**: endpoint ID and API key.
 
 **Test connection** checks the API and the Henge nodes; **Save and use** stores the choice in `connection.json`

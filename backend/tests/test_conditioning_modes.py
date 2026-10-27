@@ -42,14 +42,14 @@ if __name__=='__main__':unittest.main()
 
 class MotionModelSelection(unittest.TestCase):
  def test_both_motion_models_support_both_methods(self):
-  for profile,filename in [('motion','motion_10500.safetensors'),('motion_mix_dyn95','motion_10500_tara03_fro_dyn95.safetensors'),('motion_tara','motion_tara_4500.safetensors')]:
+  for profile,filename in [('motion','minimax_h3_motion_transfer_v1.0_ref2va.safetensors'),('motion_mix_dyn95','minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors'),('motion_tara','minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors')]:
    for method in ['guide','tara']:
     g=h3_graph('clip.mp4',['identity.png'],'text',512,288,22,22,profile,42,8,'original',[],'human',0,conditioning_mode=method)
     self.assertTrue(g['3']['inputs']['lora_name'].endswith(filename))
     self.assertEqual('21' in g,method=='tara')
  def test_character_swap_uses_v11(self):
   g=h3_graph('clip.mp4',['identity.png'],'text',512,288,22,22,'character',42,8,'original',[],'human',0)
-  self.assertTrue(g['3']['inputs']['lora_name'].endswith('character_v1_1.safetensors'))
+  self.assertTrue(g['3']['inputs']['lora_name'].endswith('minimax_h3_character_swap_v1.1_ref2va_fro.safetensors'))
 
 class PreparationChoice(unittest.TestCase):
  def test_choice_updates_only_awaiting_plan_and_preserves_original_prompt(self):

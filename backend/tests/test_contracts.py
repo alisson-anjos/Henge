@@ -204,8 +204,8 @@ class WorkflowContracts(unittest.TestCase):
   for profile in ['motion','motion_mix_dyn95']:
    g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0)
    # adapter V2 -> turbo (default dmd8) -> motion LoRA
-   self.assertEqual(g['2']['inputs']['lora_name'],'henge/training_adapter_v2.safetensors')
-   self.assertEqual(g['25']['inputs'],{'model':['2',0],'lora_name':'henge/dmd_ref2va_8step.safetensors','strength_model':1.})
+   self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_ref2va_training_adapter_v2.safetensors')
+   self.assertEqual(g['25']['inputs'],{'model':['2',0],'lora_name':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','strength_model':1.})
    self.assertEqual(g['3']['inputs']['model'],['25',0])
    self.assertEqual(h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0,turbo='none')['3']['inputs']['model'],['2',0])
  def test_fixed_recipe_modes_pick_profile_and_picture_count(self):
@@ -217,11 +217,11 @@ class WorkflowContracts(unittest.TestCase):
   with self.assertRaises(ValueError):validate_request(self.request(),{'profile':'sharpness'},[1])
  def test_fixed_recipe_graphs(self):
   g=h3_graph('v.mp4',['face.png'],'head_swap:',512,288,107,107,'headswap',42,8,'original',[],'human',0)
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/head_swap_v1_0_r32.safetensors');self.assertEqual(g['13']['inputs']['scheduler'],'beta');self.assertFalse(g['9']['inputs']['guide_context'])
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/minimax_h3_head_swap_v1.0_r32.safetensors');self.assertEqual(g['13']['inputs']['scheduler'],'beta');self.assertFalse(g['9']['inputs']['guide_context'])
  def test_sharpness_upscale_methods(self):
   args=('v.mp4',[],'Enhance.',512,288,107,107,'sharpness',1,8,'original',[],'human',0)
   g=h3_graph(*args,upscale={'method':'h3','model':'h3_upscaler_lms_v0.1.safetensors','steps':1,'denoise':.15})
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/lms_v1_fro_dyn95.safetensors');self.assertEqual(g['30']['class_type'],'HengeH3LatentUpscale')
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/minimax_h3_lms_v1.0_r64.safetensors');self.assertEqual(g['30']['class_type'],'HengeH3LatentUpscale')
   self.assertEqual((g['30']['inputs']['width'],g['32']['inputs']['width'],g['16']['inputs']['samples']),(1024,1024,['38',0]));self.assertNotIn('41',g)
   self.assertEqual(g['34']['inputs']['denoise'],.15);self.assertEqual(g['16']['class_type'],'VAEDecodeTiled')
   big=h3_graph('v.mp4',[],'Enhance.',1088,1920,107,107,'sharpness',1,8,'original',[],'human',0,upscale={'method':'h3','model':'m'})
@@ -238,7 +238,7 @@ class WorkflowContracts(unittest.TestCase):
   validate_request({**self.request(),'mode':'motion','first_frame_slot':1},{'profile':'motion_ffp'},[1])
   self.assertEqual(ffp_prompt('Add rain.'),'vfx_edit: Add rain.');self.assertIn('<Picture 3> is the edited first frame',ffp_prompt('vfx_edit: Add rain.',3))
   g=h3_graph('v.mp4',['f.png'],'vfx_edit: Add rain.',512,288,107,107,'motion_ffp',1,8,'original',[],'human',0)
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/vfx_ffp_solar05_fro_dyn99.safetensors');self.assertEqual(g['2']['inputs']['lora_name'],'henge/dmd_ref2va_8step.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/vfx_ffp_solar05_fro_dyn99.safetensors');self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
  def test_tara_structure_guidance(self):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion',1,8,'original',[],'human',0,conditioning_mode='tara',structure_cfg=1.5)
   self.assertEqual((g['21']['inputs']['structure_guidance'],g['21']['inputs']['structure_sigma_min']),(1.5,0.))
@@ -263,7 +263,7 @@ class WorkflowContracts(unittest.TestCase):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0,turbo='none',base='omniref')
   self.assertEqual(g['1']['inputs']['unet_name'],'fasth3_omniref_8step_pruned_int8_convrot.safetensors');self.assertNotIn('2',g);self.assertEqual(g['3']['inputs']['model'],['1',0])
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion',1,8,'original',[],'human',0,turbo='none',base='omniref')
-  self.assertEqual(g['2']['inputs']['lora_name'],'henge/training_adapter_v2.safetensors')
+  self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_ref2va_training_adapter_v2.safetensors')
  def test_cfg_adds_zeroed_negative(self):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,30,'original',[],'human',0,turbo='none',cfg=4)
   self.assertEqual(g['24']['class_type'],'ConditioningZeroOut');self.assertEqual(g['10']['inputs']['negative'],['24',0]);self.assertEqual(g['10']['inputs']['cfg'],4.)
