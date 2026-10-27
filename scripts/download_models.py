@@ -65,9 +65,13 @@ def main():
     failed=[]
     for item in items:
         dest=root/item['destination'];dest.parent.mkdir(parents=True,exist_ok=True)
-        # Installs from before 2026-10-27 stored the same files under short names: rename instead of downloading again.
-        old=root/'loras'/LEGACY.get(item['destination'].removeprefix('loras/'),'-')
-        if not dest.exists() and old.is_file() and old.stat().st_size>0:old.rename(dest);print('Renamed:',old.name,'->',dest.name,flush=True)
+        # Already in this ComfyUI under an old short name or in another subfolder (e.g. vae/minimax/…): reuse it as it is;
+        # the bridge finds it by name. Nothing is renamed, so the user's other workflows keep working.
+        if not dest.exists():
+            legacy=root/'loras'/LEGACY.get(item['destination'].removeprefix('loras/'),'-')
+            same=[p for p in (root/PurePosixPath(item['destination']).parts[0]).rglob(dest.name) if p.is_file() and p.stat().st_size>0] if (root/PurePosixPath(item['destination']).parts[0]).is_dir() else []
+            found=legacy if legacy.is_file() and legacy.stat().st_size>0 else (same[0] if same else None)
+            if found:print('Already installed:',item['id'],'as',found.relative_to(root),flush=True);status.set(item,'installed',total=found.stat().st_size);continue
         if dest.is_file() and dest.stat().st_size>0:
             if has_keys(dest,item.get('require_keys')):print('Already installed:',item['id'],flush=True);status.set(item,'installed',total=dest.stat().st_size);continue
             print(f"Replacing {item['id']}: {dest.name} is an incompatible format",flush=True);dest.unlink()

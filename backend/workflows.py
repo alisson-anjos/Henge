@@ -35,14 +35,25 @@ TURBOS={
 # LoRA files keep their published filenames under loras/henge/. Installs from before 2026-10-27 used short names;
 # localize_loras() falls back to the old name when only that one is installed, so nothing has to be downloaded again.
 LEGACY_LORAS=json.loads((Path(__file__).with_name('legacy_loras.json')).read_text())
-INSTALLED_LORAS=set()  # ComfyUI's LoRA list, refreshed by the bridge
+# What ComfyUI lists per loader input, refreshed by the bridge: models already in the user's ComfyUI are reused even
+# under an old short name or in another subfolder (e.g. vae/minimax/…), so nothing is downloaded twice.
+INSTALLED={}
+LOADERS={'LoraLoaderModelOnly':'lora_name','VAELoader':'vae_name','UNETLoader':'unet_name','CLIPLoader':'clip_name'}
+def resolve_model(node,name,installed=None):
+    names=INSTALLED.get(node,set()) if installed is None else installed
+    if not name or not names or name in names:return name
+    old=LEGACY_LORAS.get(name)
+    if old in names:return old
+    bases={name.rsplit('/',1)[-1]}|({old.rsplit('/',1)[-1]} if old else set())
+    hits=sorted(n for n in names if n.replace('\\','/').rsplit('/',1)[-1] in bases)
+    return hits[0] if hits else name
 def lora_installed(name,installed=None):
-    installed=INSTALLED_LORAS if installed is None else installed
-    return not name or name in installed or LEGACY_LORAS.get(name) in installed
+    names=INSTALLED.get('LoraLoaderModelOnly',set()) if installed is None else installed
+    return not name or resolve_model('LoraLoaderModelOnly',name,names) in names
 def localize_loras(graph):
     for n in graph.values():
-        name=n.get('inputs',{}).get('lora_name') if n.get('class_type')=='LoraLoaderModelOnly' else None
-        if name and INSTALLED_LORAS and name not in INSTALLED_LORAS and LEGACY_LORAS.get(name) in INSTALLED_LORAS:n['inputs']['lora_name']=LEGACY_LORAS[name]
+        key=LOADERS.get(n.get('class_type'))
+        if key and isinstance(n.get('inputs',{}).get(key),str):n['inputs'][key]=resolve_model(n['class_type'],n['inputs'][key])
     return graph
 # Base diffusion models. OmniRef (FastVideo) is already distilled to 8 steps: pair it with turbo 'none'.
 BASES={

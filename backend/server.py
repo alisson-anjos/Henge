@@ -298,11 +298,11 @@ def execute_serverless(job,graph,stage):
     return REMOTE.run(graph,on_status,lambda:load(job['id'])['status']=='cancelled')
 
 def known_loras():
-    """ComfyUI's LoRA list (local or the serverless inventory), for localize_loras when no health check ran yet."""
-    if not workflows.INSTALLED_LORAS:
+    """ComfyUI's model lists per loader (local, or the serverless inventory) for localize_loras."""
+    if not workflows.INSTALLED.get('LoraLoaderModelOnly'):
         try:
-            info=REMOTE.object_info() if REMOTE else api('GET','/object_info/LoraLoaderModelOnly',timeout=10)
-            workflows.INSTALLED_LORAS=set(comfy_choices(info,'LoraLoaderModelOnly','lora_name'))
+            info=REMOTE.object_info() if REMOTE else {k:v for n in workflows.LOADERS for k,v in api('GET',f'/object_info/{n}',timeout=10).items()}
+            workflows.INSTALLED={n:set(comfy_choices(info,n,key)) for n,key in workflows.LOADERS.items()}
         except Exception:pass
 
 def execute_graph(job,graph,stage):
@@ -993,7 +993,7 @@ def health():
         setup={'downloading':False,'base_ready':online,'all_ready':online,'free_gb':None,'persistent_volume':None}
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
     unets=comfy_choices(info,'UNETLoader','unet_name')
-    if installed:workflows.INSTALLED_LORAS=set(installed)
+    if installed:workflows.INSTALLED={**workflows.INSTALLED,**{n:set(comfy_choices(info,n,key)) for n,key in workflows.LOADERS.items()}}
     models={key:{**value,'available':unknown or lora_installed(value['lora'],installed) and lora_installed(value['adapter'],installed) and (not value.get('unet') or value['unet'] in unets) and mode_ready[key]} for key,value in MODELS.items()}
     turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or lora_installed(value['lora'],installed)} for key,value in TURBOS.items()}
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
