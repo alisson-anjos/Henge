@@ -57,7 +57,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
@@ -69,7 +69,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
       '6':node('VAELoader',vae_name='minimax_h3_video_vae_fp16.safetensors'),
       '7':node('HengeLoadShot',video=video,pictures=json.dumps(refs),width=width,height=height,length=length),
       '8':node('HengeGuide',images=['7',0],representation=representation,bindings=json.dumps(bindings),source_kind=source_kind,segment_start=segment_start,sam_checkpoint='sam3.1_multiplex_fp16.safetensors',body_model='sam_3d_body_dinov3_bf16.safetensors',preserve_objects=json.dumps(preserve_objects or []),mask_settings=json.dumps(mask or {})),
-      '9':node('HengeH3Conditioning',clip=['5',0],vae=['6',0],guide=['8',0],references=['7',1],prompt=prompt,width=width,height=height,length=length,clip_video_fps=clip_fps,reference_size='match',guide_context=model['clip_context'],audio_conditioning=audio,audio_video=video),
+      '9':node('HengeH3Conditioning',clip=['5',0],vae=['6',0],guide=['8',0],references=['7',1],prompt=prompt,width=width,height=height,length=length,clip_video_fps=clip_fps,reference_size='match',guide_context=model['clip_context'] if guide_context is None else bool(guide_context),audio_conditioning=audio,audio_video=video),
       '10':node('CFGGuider',model=['4',0],positive=['9',0],negative=['9',0],cfg=1.),
       '11':node('RandomNoise',noise_seed=seed),
       '12':node('KSamplerSelect',sampler_name='euler'),
