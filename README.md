@@ -1,6 +1,40 @@
 # Henge
 
-An open studio for **motion transfer** and **video swaps**, designed around MiniMax H3 guide-latent conditioning.
+**Swap · Motion · Transform.** An open-source video studio on ComfyUI and MiniMax H3: give it one guide video and a
+few pictures, and it swaps characters, transfers motion, swaps heads or sharpens the video — locally, on a RunPod pod
+or on RunPod Serverless.
+
+| Character Swap | Motion Transfer |
+|---|---|
+| ![A hiker becomes a goblin](docs/images/demo/swap.webp) | ![A character performs the guide's motion on a rooftop](docs/images/demo/motion.webp) |
+| **Head Swap** | **Sharpness** (Swap result, 480p → 1080p) |
+| ![Only the head changes](docs/images/demo/headswap.webp) | ![Detail restored and upscaled](docs/images/demo/sharpness.webp) |
+
+Left: guide · right: Henge. All four ran on RunPod Serverless at 480p (Sharpness to 1080p), started from the
+[MCP server](docs/MCP.md).
+
+### Not just an interface
+
+- **One trained LoRA per mode**, not plain H3 with a prompt: Character Swap v1.1, Motion Transfer v1.0 and TARA v1.0,
+  Head Swap v1.0 and Little More Sharpness v1.0 (+ an H3 latent upscaler). They come from the BFS LoRA collection,
+  all trained by Alisson Anjos ([alissonerdx](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI)).
+- **Guide-latent training**, a method inherited from LTX's guide-latent IC-LoRAs and brought to MiniMax H3: the
+  guide's VAE latents share the output's frame grid, so frame N is built on frame N of the guide. Pose, camera and
+  timing stay locked, with no desync ([how the guide reaches H3](docs/conditioning.md)).
+- **TARA (Native Temporal Alignment)**, our method: keeps the guide as a native video reference and biases each output
+  moment to attend to the matching guide moment, with no extra trained layers.
+- **Any length, shot by shot**: long clips are split at camera cuts or at a fixed length, with context frames carried
+  between shots; each shot can be previewed, redone alone and downloaded.
+- **Subject guidance**: mark people (SAM 3.1 tracking) and bind each to its pictures, as 2D color marks, a 3D body or a
+  latent mask that keeps the rest of the frame untouched.
+- **A studio assistant** that operates everything (Claude, OpenAI or a local model), or **your own AI client through
+  MCP**; a **first-run wizard** for the backend; every job downloads as the exact ComfyUI graph it ran.
+
+| Studio | Setup wizard | Assistant |
+|---|---|---|
+| ![Studio with source and result](docs/images/demo/studio.jpg) | ![First-run wizard, RunPod Serverless](docs/images/demo/wizard.png) | ![The assistant marks people and generates](docs/images/demo/assistant.jpg) |
+
+Demo footage: [Pexels](https://www.pexels.com/license/) videos and original AI-generated characters.
 
 ## Modes
 
