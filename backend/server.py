@@ -901,7 +901,7 @@ def finalize(job,pieces,guide_pieces,W,H):
         sl=work/'audio_concat.txt';sl.write_text(''.join(f"file '{x.name}'\n" for x in sounds));track=work/'soundtrack.wav'
         run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(sl),'-c','copy','-y',str(track)])
         args+=['-i',str(track),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k']
-    elif r.get('output_audio',{}).get('keep_source') and meta['audio']:args+=['-ss',str(start),'-i',str(INPUT/assets['video']),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac']
+    elif r.get('output_audio',{}).get('keep_source',True) and meta['audio']:args+=['-ss',str(start),'-i',str(INPUT/assets['video']),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac']
     else:args+=['-map','0:v:0','-c:v','copy','-an']
     output_fps=r['processing'].get('timeline_fps',24)
     clamp_float(output_fps,1,120,'output FPS')

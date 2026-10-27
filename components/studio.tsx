@@ -217,9 +217,7 @@ export default function Studio() {
         setProject(typeof s.project === 'string' && s.project !== 'Untitled project' ? s.project : '');
         setQuality(['480p', '720p', '1080p', '1440p', '2160p'].includes(s.quality) ? s.quality : '480p');
         setAudioConditioning(s.audioConditioning === true);
-        // Drafts saved before v2 inherited an early false default. Migrate them once to the current default (on);
-        // after v2, an explicit user choice to turn source audio off remains persistent.
-        setKeepAudio(s.schema_version >= 2 ? s.keepAudio !== false : true);
+        // Keep original audio is not restored from the draft: every session and every mode starts with it on.
         setShotSeconds(Math.min(15, Math.max(1, Number(s.shotSeconds) || 4.5)));
         setTimelineFps(Math.min(120, Math.max(1, Number(s.timelineFps) || 24)));
         setContextFrames([5, 22, 39].includes(s.contextFrames) ? s.contextFrames : 22);
@@ -289,7 +287,7 @@ export default function Studio() {
       }
       case 'set_mode': {
         const m = String(input.mode) as Mode; if (!['swap', 'motion', 'headswap', 'sharpness'].includes(m)) throw Error('Unknown mode');
-        setMode(m); await settle(); return {text: `Mode is now ${m}.`};
+        setMode(m); setKeepAudio(true); await settle(); return {text: `Mode is now ${m}.`};
       }
       case 'set_prompt': setPrompt(String(input.text ?? '')); await settle(); return {text: 'Prompt updated.'};
       case 'mark_subject': {
@@ -705,7 +703,7 @@ export default function Studio() {
           <div className="create-heading rise"><div className="create-top"><span className="eyebrow accent">{t.create}</span><button type="button" className="quiet-button new-studio" onClick={resetStudio} disabled={busy} title={tr('Start over with an empty studio', 'Recomeçar com o estúdio vazio', 'Empezar de nuevo con el estudio vacío')}>↺ {tr('New', 'Novo', 'Nuevo')}</button></div><h1>{t[`h1a_${mode}`]}<br/><span>{t[`h1b_${mode}`]}</span></h1></div>
           <section className="mode-picker" aria-labelledby="mode-picker-title">
             <div className="mode-picker-heading"><span id="mode-picker-title" className="eyebrow">{t.mode}</span><span className="mono">{String(MODES.indexOf(mode) + 1).padStart(2, '0')} / {String(MODES.length).padStart(2, '0')}</span></div>
-            <div className="mode-switch" role="group" aria-label={t.mode}>{MODES.map(m => <button key={m} disabled={!ready || busy} className={mode === m ? 'selected' : ''} onClick={() => setMode(m)} aria-pressed={mode === m} style={accentVars(m, 'mode') as CSSProperties}><span className="mode-icon"><Icon name={m} size={18}/></span><span className="mode-copy"><strong>{modeName(m)}</strong><small>{modeHint(m)}</small></span><span className="mode-selected"><Icon name="check" size={12}/></span></button>)}</div>
+            <div className="mode-switch" role="group" aria-label={t.mode}>{MODES.map(m => <button key={m} disabled={!ready || busy} className={mode === m ? 'selected' : ''} onClick={() => {setMode(m); setKeepAudio(true);}} aria-pressed={mode === m} style={accentVars(m, 'mode') as CSSProperties}><span className="mode-icon"><Icon name={m} size={18}/></span><span className="mode-copy"><strong>{modeName(m)}</strong><small>{modeHint(m)}</small></span><span className="mode-selected"><Icon name="check" size={12}/></span></button>)}</div>
             <p className="mode-description"><span className="mode-description-dot"/>{modeDescription}</p>
           </section>
           {mode === 'sharpness' && <section className="input-card surface output-settings target-resolution"><div className="label-row"><h2>{tr('Target resolution', 'Resolução final', 'Resolución final')}</h2></div>{qualityRow}
