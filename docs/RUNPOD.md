@@ -50,7 +50,7 @@ Environment variables (all optional):
 |---|---|---|
 | `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d` | Comma list: `character`, `omniref` (+22 GB base), `fibo`, `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0, Combined), `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with Motion Transfer v1.0 and TARA v1.0, and the Solar 4-step turbo; private) |
 | `HF_TOKEN` | — | Only for the experimental `ffp` profile (the Motion Transfer LoRAs are public). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
-| `HENGE_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
+| `HENGE_MODEL_OVERRIDES` | — | JSON that replaces a model URL or destination from the bundled manifest |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |
 | `HENGE_PASSWORD` | — | Optional login for the UI (user `HENGE_USER`, default `henge`). Unset: open to anyone with the pod URL until you turn a login on from the 🔓 button in the top bar (saved on the volume). The env value wins over the UI one |
@@ -58,10 +58,9 @@ Environment variables (all optional):
 | `HENGE_EXPOSE_COMFY` | — | `1` makes ComfyUI listen on `0.0.0.0:8189` for debugging. ComfyUI has **no login**: anyone with the URL can run graphs on your GPU, so leave it off on shared pods |
 | `PUBLIC_KEY` | — | RunPod injects your SSH key; enables `sshd` |
 
-The motion LoRAs live in the private dataset `Alissonerdx/Kagemage-Backups`
-until they are published, so the default profiles
-(`character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d`) need `HF_TOKEN` with read access. Without
-it, Character Swap still installs and the motion modes show as unavailable.
+The Character Swap, Motion Transfer, TARA, Combined and Head Swap LoRAs are public. `HF_TOKEN` is only needed when a
+selected optional model is gated or private (currently the experimental `ffp` profile), or when your own override
+points to a private repository.
 
 To point an entry at another link without rebuilding, set
 `HENGE_MODEL_OVERRIDES`, e.g.

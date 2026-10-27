@@ -58,8 +58,8 @@ python scripts/download_models.py --manifest config/model-repos.json --models-di
 python scripts/download_models.py --manifest config/model-repos.json --models-dir /absolute/path/to/ComfyUI/models --profiles character
 ```
 
-The default `character` profile downloads public weights. The private motion
-profiles need configured repository/file entries or your local LoRA files.
+The `character`, `motion`, `headswap` and `sharpness` profiles download their published weights automatically. Only
+the experimental `ffp` profile currently needs a Hugging Face token with access.
 Optional FIBO, audio and SAM profiles
 are documented in the Docker/model guides. The downloader never uploads models.
 

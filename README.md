@@ -47,6 +47,8 @@ Fight footage: TEKKEN DADDY (YouTube), Tekken 8 © Bandai Namco — used here as
 | ![Studio with source and result](docs/images/demo/studio.jpg) | ![First-run wizard, RunPod Serverless](docs/images/demo/wizard.png) | ![The assistant marks people and generates](docs/images/demo/assistant.jpg) |
 
 Demo footage: [Pexels](https://www.pexels.com/license/) videos and original AI-generated characters.
+Project references and community acknowledgements, including crinklypaper's moving-plate contribution, are collected
+in [docs/REFERENCES.md](docs/REFERENCES.md).
 
 ## Modes
 
@@ -202,6 +204,7 @@ Images are built by GitHub Actions and published to GitHub Container Registry:
 
 - **[AI-guided installation](docs/AI_GUIDED_INSTALL.md)**: paste one prompt into Claude Code, Codex or Cursor and it installs Henge for you
 - [Use Henge from your own AI client through MCP](docs/MCP.md) (instead of the built-in assistant)
+- [References and acknowledgements](docs/REFERENCES.md)
 - [Instructions for an AI agent to deploy everything on RunPod](docs/AGENT_DEPLOY.md)
 - [Run locally: ports, connection settings, Windows](docs/RUN_LOCAL.md)
 - [Docker Compose on your own GPU machine](docker/README.md)

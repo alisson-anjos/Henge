@@ -33,6 +33,10 @@ Bricolage Grotesque, Geist and Geist Mono are bundled locally from Google Fonts 
 
 The Studio + History visual reference and its supplied artwork were provided by the project owner in the Claude Design export.
 
+The optional moving-plate workflow was inspired by a community script shared by **crinklypaper** in the Banodoco
+Discord. Henge's implementation was rewritten for automatic per-shot tracking. See
+[`docs/REFERENCES.md`](docs/REFERENCES.md) for project-wide references and acknowledgements.
+
 - Sharpness 2K/4K upscalers (`backend/comfy_nodes/henge/upscale.py`): copied with small changes from
   [bbaudio-2025/Comfyui-MMH3-UltimateUpscale](https://github.com/bbaudio-2025/Comfyui-MMH3-UltimateUpscale)
   (MIT, Copyright (c) 2026 bbaudio-2025): `nodes/h3_latent_upscaler.py` (the MiniMax H3 3D latent upscaler from

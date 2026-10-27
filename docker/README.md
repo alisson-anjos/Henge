@@ -36,8 +36,7 @@ docker build -t henge:local .
 
 On Windows PowerShell, use `Copy-Item config/model-repos.example.json
 config/model-repos.json` instead of `cp`. The remaining Compose commands are the
-same. The default profiles download public Character Swap and the shared H3,
-prompt-writer and preview models. Motion LoRAs are not publicly supplied here.
+same. The default profiles download the public task LoRAs and the shared H3, prompt-writer and preview models.
 
 ## Configure model repositories
 
@@ -58,13 +57,9 @@ Combined). Set `HENGE_MODEL_PROFILES` in an untracked `.env` beside Compose:
 HENGE_MODEL_PROFILES=character,fibo,sam2d,audio
 ```
 
-For private motion models, configure their currently-null `repo_id` and
-`filename` entries, set `repo_type=dataset` if needed, and add their profile.
-Alternatively mount/copy your weights into their documented destinations. An
-unconfigured selected private model fails with an explicit error rather than
-downloading a different model under its name. The SAM3D MoGe entry is also local
-until its exact distribution is configured. Some optional upstream assets may
-require accepted licenses or access permission.
+For your own private models, override their URL (or configure `repo_id`, `filename` and `repo_type`), then add the
+corresponding profile. Alternatively mount/copy weights into their documented destinations. The experimental `ffp`
+profile is private; some optional upstream assets may require accepted licenses or access permission.
 
 If needed, supply `HF_TOKEN` **at runtime** through an untracked environment file.
 Do not put it in the Dockerfile, manifest, image or GitHub. The downloader also

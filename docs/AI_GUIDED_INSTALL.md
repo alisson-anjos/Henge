@@ -43,7 +43,7 @@ ComfyUI and where, and whether they have a RunPod account (if not, give them htt
 | **B. RunPod pod** | no suitable GPU, long sessions | RunPod account with credit |
 | **C. Local UI + RunPod Serverless** | no suitable GPU, occasional use, pay per second | RunPod account, `runpodctl`; Docker or Node+Python locally |
 
-Models are about 125 GB with every profile; fewer profiles download less (step A2). The motion LoRAs need a
+Models are about 125 GB with every profile; fewer profiles download less (step A2). The experimental FFP model needs a
 Hugging Face token only for the experimental `ffp` profile; every other model, Motion Transfer included, is public.
 
 ## A. Local
