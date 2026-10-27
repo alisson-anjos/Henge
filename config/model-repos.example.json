@@ -179,35 +179,8 @@
       ]
     },
     {
-      "id": "solar_motion_transfer_tara",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_solar05.safetensors",
-      "destination": "loras/henge/minimax_h3_motion_transfer_tara_v1.0_solar05.safetensors",
-      "profiles": [
-        "solar"
-      ],
-      "note": "Motion Transfer TARA v1.0 + SolarRenderer control 0.5 (rank-concat merge). Loaded after adapter V2."
-    },
-    {
-      "id": "solar_motion_transfer",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_adapter_v2_solar05.safetensors",
-      "destination": "loras/henge/minimax_h3_motion_transfer_v1.0_adapter_v2_solar05.safetensors",
-      "profiles": [
-        "solar"
-      ],
-      "note": "Motion Transfer v1.0 + adapter V2 + SolarRenderer control 0.5; no separate adapter."
-    },
-    {
-      "id": "solar_control",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_control_comfy.safetensors",
-      "destination": "loras/henge/solarrenderer_control_comfy.safetensors",
-      "profiles": [
-        "solar"
-      ],
-      "note": "SolarRenderer control LoRA converted to ComfyUI H3 keys (Enderfga/SolarRenderer)."
-    },
-    {
       "id": "solar_control_dyn95",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/solarrenderer_control_fro_dyn95.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_control_fro_dyn95.safetensors",
       "destination": "loras/henge/solarrenderer_control_fro_dyn95.safetensors",
       "profiles": [
         "solar",
@@ -217,7 +190,7 @@
     },
     {
       "id": "solar_control_dyn99",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/solarrenderer_control_fro_dyn99.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_control_fro_dyn99.safetensors",
       "destination": "loras/henge/solarrenderer_control_fro_dyn99.safetensors",
       "profiles": [
         "solar",
@@ -331,7 +304,7 @@
     },
     {
       "id": "ffp",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
       "destination": "loras/henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
       "profiles": [
         "ffp"
@@ -340,7 +313,7 @@
     },
     {
       "id": "ffp_dyn95",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
       "destination": "loras/henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
       "profiles": [
         "ffp"
