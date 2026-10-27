@@ -22,6 +22,7 @@ import {SUBJECT_COLORS, bindingPrompt, readSubjectBindings, type SubjectBinding,
 import SetupScreen from './setup-screen';
 import AccessSettings from './access-settings';
 import ThemeSwitcher from './theme-switcher';
+import {DialogHost, confirmDialog} from './dialog';
 import {cutModeLabel, type CutMode} from './shot-plan';
 
 function Icon({name, size = 20}: {name: string; size?: number}) {
@@ -581,9 +582,11 @@ export default function Studio() {
     } catch {/* media no longer on the server: the settings are still restored */}
   }
   /** New: an empty studio (media, people, prompt, template, selected generation). Mode, language and settings stay. */
-  function resetStudio() {
+  async function resetStudio() {
     const busyDraft = video || pictures.length || prompt.trim() || subjects.length;
-    if (busyDraft && !window.confirm(tr('Clear the video, pictures, people and prompt and start a new one?', 'Limpar vídeo, imagens, pessoas e prompt e começar um novo?', '¿Borrar el video, las imágenes, las personas y el prompt y empezar uno nuevo?'))) return;
+    if (busyDraft && !await confirmDialog({tone: 'danger', title: tr('Start a new one?', 'Começar um novo?', '¿Empezar uno nuevo?'),
+      message: tr('The video, pictures, marked people and prompt will be cleared. Mode, language and settings stay. Your generations stay in History.', 'O vídeo, as imagens, as pessoas marcadas e o prompt serão apagados. Modo, idioma e ajustes continuam. Suas gerações continuam no Histórico.', 'Se borrarán el video, las imágenes, las personas marcadas y el prompt. El modo, el idioma y los ajustes se mantienen. Tus generaciones siguen en el Historial.'),
+      confirm: tr('Clear and start new', 'Limpar e começar', 'Borrar y empezar'), cancel: tr('Keep editing', 'Continuar editando', 'Seguir editando')})) return;
     removeVideo(); setGuideSignature(''); removeAllPictures(); setSubjects([]); setPrompt(''); setAutoSource(null); setPendingAutoPromptJob(null);
     setActiveTemplate(null); setProject(''); setNotice(''); setEditingVideo(false); startFresh();
   }
@@ -631,6 +634,7 @@ export default function Studio() {
 
   return <div className={`app-shell mode-${mode}`} style={style}>
     <SetupScreen lang={lang}/>
+    <DialogHost/>
     {!ready && <div className="boot-splash" role="status" aria-label="Loading Henge"><span className="brandmark"><Icon name="spark" size={28}/></span><strong>Henge</strong><span className="boot-bar"/></div>}
     {frameModal && video?.range && <FirstFrameModal videoUrl={video.url} start={video.range.start} pictures={pictures.filter(p => p.slot !== firstFrameSlot)} lang={lang} onClose={() => setFrameModal(false)} onUse={(file, edit) => {
       const slot = firstFrameSlot ?? Array.from({length: maxPictures}, (_, i) => i + 1).find(i => !pictures.some(p => p.slot === i));
