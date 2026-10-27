@@ -5,7 +5,7 @@ folder and paste this:
 
 ```text
 Install Henge (https://github.com/alisson-anjos/Henge) for me by following
-https://github.com/alisson-anjos/Henge/blob/runpod-template/docs/AI_GUIDED_INSTALL.md.
+https://github.com/alisson-anjos/Henge/blob/main/docs/AI_GUIDED_INSTALL.md.
 Read that file first, check my machine, then ask me which option I want before installing anything.
 ```
 

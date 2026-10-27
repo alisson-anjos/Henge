@@ -5,11 +5,11 @@
 # The worker is the full image with HENGE_ROLE=worker (ComfyUI + docker/worker_handler.py); models come
 # from the volume (scripts/runpod_volume.sh). Then run the UI anywhere:
 #   docker run -p 8188:8188 -v henge-state:/state -e HENGE_BACKEND=runpod \
-#     -e RUNPOD_ENDPOINT_ID=<endpoint> -e RUNPOD_API_KEY=<key> ghcr.io/alisson-anjos/henge-ui:runpod-template
+#     -e RUNPOD_ENDPOINT_ID=<endpoint> -e RUNPOD_API_KEY=<key> ghcr.io/alisson-anjos/henge-ui:latest
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME=${ENDPOINT_NAME:-henge-worker}
-IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:runpod-template}
+IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:latest}
 # runpodctl creates the endpoint with one GPU type; it must exist in the volume's datacenter and have a CUDA 13 driver.
 # The live endpoint lists RTX 5090 first (priority, ~half the price) with RTX PRO 6000 only as fallback when no 5090 is
 # free; set that order in the RunPod console or with the REST API (PATCH /v1/endpoints/<id> {"gpuTypeIds": [...]}).

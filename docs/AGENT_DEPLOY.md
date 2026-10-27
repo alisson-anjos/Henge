@@ -26,7 +26,7 @@ and check. A human can follow it the same way.
 | ComfyUI with the Henge and BFS nodes | the pod (B) or the serverless workers (C) | `ghcr.io/alisson-anjos/henge` |
 | Models (~125 GB with every profile) | the pod volume (B) or a RunPod network volume (C) | downloaded, never in an image |
 
-Images are built by GitHub Actions on every push and tagged with the branch name (`runpod-template`) and
+Images are built by GitHub Actions on every push and tagged `latest` (the main branch), with the branch name and
 `sha-<commit>`. Use a `sha-` tag for the serverless template so a later build does not change running workers.
 
 ## 0. Prerequisites (check, do not assume)
@@ -47,7 +47,7 @@ Ask the user for:
 ## Option B: one pod
 
 1. Create a pod template (or reuse one): `scripts/runpod_template.sh` (read it first; `TEMPLATE_ID=<id>`
-   updates an existing template). Settings: image `ghcr.io/alisson-anjos/henge:runpod-template`, container
+   updates an existing template). Settings: image `ghcr.io/alisson-anjos/henge:latest`, container
    disk 30 GB, volume 180 GB at `/workspace`, HTTP port 8188, env `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}`.
 2. With the user's approval, deploy a pod from it on a GPU with a CUDA 13 driver (RTX 5090 or larger).
 3. Check: the pod log shows `model downloads finished`, then
@@ -84,7 +84,7 @@ Ask the user for:
    ```sh
    docker run -d --name henge -p 8188:8188 -v henge-state:/state -e HENGE_BACKEND=runpod \
      -e RUNPOD_ENDPOINT_ID=<endpoint id> -e RUNPOD_API_KEY="$RUNPOD_API_KEY" \
-     ghcr.io/alisson-anjos/henge-ui:runpod-template
+     ghcr.io/alisson-anjos/henge-ui:latest
    ```
 
    Without Docker: clone the repository, `npm ci && npm run build`, install `backend/requirements.txt` in a
@@ -103,7 +103,7 @@ Ask the user for:
 
 ## Updating the workers to a new image
 
-After a push, wait for the GitHub Actions run to finish (`gh run list --branch runpod-template`), then:
+After a push, wait for the GitHub Actions run to finish (`gh run list --branch main`), then:
 
 ```sh
 ENDPOINT_ID=<id> TEMPLATE_ID=<id> IMAGE=ghcr.io/alisson-anjos/henge:sha-<commit> scripts/runpod_serverless.sh

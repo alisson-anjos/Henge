@@ -76,7 +76,7 @@ VOLUME_ID=<id> scripts/runpod_volume.sh                        # top up an exist
 
 - Creates the network volume (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 180), unless
   `VOLUME_ID` is given.
-- Starts the fill pod from `ghcr.io/alisson-anjos/henge:runpod-template` on the first GPU in stock
+- Starts the fill pod from `ghcr.io/alisson-anjos/henge:latest` on the first GPU in stock
   (`FILL_GPUS`), with `HENGE_MODEL_PROFILES=$PROFILES` and `HF_TOKEN` from your RunPod secret `hf_token`.
 - Prints the download progress every minute and deletes the pod when every model is installed.
 
@@ -88,7 +88,7 @@ open its setup screen; delete it with `runpodctl pod delete <pod id>` when done.
 
 1. *Storage* → *New Network Volume*: pick the datacenter (see below) and 180 GB.
 2. *Pods* → *Deploy*, in the same datacenter, any GPU with CUDA 13 (it only downloads). Under the network
-   volume, select the new volume. Use the image `ghcr.io/alisson-anjos/henge:runpod-template`, mount path
+   volume, select the new volume. Use the image `ghcr.io/alisson-anjos/henge:latest`, mount path
    `/workspace`, HTTP port `8188`, and the environment variables
    `HENGE_MODEL_PROFILES=<profiles>` and `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}`.
 3. Open the pod's port 8188: the Henge setup screen shows each model's download progress.
@@ -111,7 +111,7 @@ VOLUME_ID=<volume id> scripts/runpod_serverless.sh
 
 This creates:
 
-- a **serverless template**: the full Henge image (`ghcr.io/alisson-anjos/henge:runpod-template`)
+- a **serverless template**: the full Henge image (`ghcr.io/alisson-anjos/henge:latest`)
   with `HENGE_ROLE=worker`;
 - an **endpoint**: `GPU` (default RTX 5090), 0 to `WORKERS_MAX` workers (default 2),
   `IDLE_TIMEOUT` seconds kept warm after a request (default 15), execution timeout 1 h, with the
@@ -135,7 +135,7 @@ docker run -p 8188:8188 -v henge-state:/state \
   -e HENGE_BACKEND=runpod \
   -e RUNPOD_ENDPOINT_ID=<endpoint id> \
   -e RUNPOD_API_KEY=<your RunPod API key> \
-  ghcr.io/alisson-anjos/henge-ui:runpod-template
+  ghcr.io/alisson-anjos/henge-ui:latest
 ```
 
 Open http://localhost:8188 and use Henge as usual. The `henge-state` volume keeps your job
@@ -151,7 +151,7 @@ Needs Node 22.6+, Python 3.10+ and `ffmpeg` on the `PATH`.
 **Linux, macOS or WSL:**
 
 ```sh
-git clone -b runpod-template https://github.com/alisson-anjos/Henge.git && cd Henge
+git clone https://github.com/alisson-anjos/Henge.git && cd Henge
 npm ci && npm run build
 python3 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt
 ```
@@ -180,7 +180,7 @@ Open http://localhost:8188. Logs are in `.runtime/logs/`.
 `winget install OpenJS.NodeJS.LTS Python.Python.3.12 Gyan.FFmpeg Git.Git`, open a new PowerShell, then:
 
 ```powershell
-git clone -b runpod-template https://github.com/alisson-anjos/Henge.git; cd Henge
+git clone https://github.com/alisson-anjos/Henge.git; cd Henge
 npm ci; npm run build
 py -3.12 -m venv .venv; .venv\Scripts\pip install -r backend\requirements.txt
 ```

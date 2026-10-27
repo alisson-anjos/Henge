@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME=${TEMPLATE_NAME:-Henge}
-IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:runpod-template}
+IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:latest}
 
 ENV_JSON=$(python3 - <<'EOF'
 import json

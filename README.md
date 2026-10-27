@@ -93,7 +93,7 @@ Details and troubleshooting: [docs/RUN_LOCAL.md](docs/RUN_LOCAL.md).
 
 One container runs the UI, the bridge and ComfyUI; models download on the first boot into the pod volume.
 
-1. RunPod → **My Templates → New Template** (Pod): image `ghcr.io/alisson-anjos/henge:runpod-template`,
+1. RunPod → **My Templates → New Template** (Pod): image `ghcr.io/alisson-anjos/henge:latest`,
    container disk 30 GB, volume 180 GB at `/workspace`, HTTP port `8188`.
 2. Environment: `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}` (store the token as the secret `hf_token`), and
    optionally `HENGE_MODEL_PROFILES` to download fewer models and `HENGE_PASSWORD` to require a login (or turn it on later from the 🔓 button in the UI, see [Login](#login-optional)).
@@ -129,7 +129,7 @@ serverless endpoint, whose workers start on demand and stop 15 s after the last 
    ```sh
    docker run -p 8188:8188 -v henge-state:/state -e HENGE_BACKEND=runpod \
      -e RUNPOD_ENDPOINT_ID=<endpoint id> -e RUNPOD_API_KEY=<api key> \
-     ghcr.io/alisson-anjos/henge-ui:runpod-template
+     ghcr.io/alisson-anjos/henge-ui:latest
    ```
 
    Without Docker: clone Henge, `npm ci && npm run build`, install `backend/requirements.txt`, put
@@ -150,7 +150,7 @@ Details, costs and troubleshooting: [docs/SERVERLESS.md](docs/SERVERLESS.md).
 
 Images are built by GitHub Actions and published to GitHub Container Registry:
 `ghcr.io/alisson-anjos/henge` (everything; the serverless worker uses it with `HENGE_ROLE=worker`) and
-`ghcr.io/alisson-anjos/henge-ui` (UI and bridge only), tagged by branch and `sha-<commit>`.
+`ghcr.io/alisson-anjos/henge-ui` (UI and bridge only), tagged `latest` (main), by branch and `sha-<commit>`.
 
 ### More guides
 

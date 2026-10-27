@@ -11,7 +11,7 @@
 set -euo pipefail
 DATACENTER=${DATACENTER:-EU-RO-1}
 VOLUME_GB=${VOLUME_GB:-180}
-IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:runpod-template}
+IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:latest}
 PROFILES=${PROFILES:-character,motion10500,motion4500,ffp,headswap,sharpness,omniref,fibo,sam2d,sam3d}
 # REMOVE: optional comma-separated model paths (relative to models/) to delete from the volume, e.g. retired files.
 # OVERRIDES: JSON for HENGE_MODEL_OVERRIDES (e.g. a link newer than the image's manifest).
