@@ -11,10 +11,10 @@
 - Backends: local ComfyUI, Comfy SDK (API v2), RunPod pod template and RunPod Serverless; first-run wizard.
 - Studio assistant (Claude, OpenAI, local models) and an MCP server for any AI client.
 - Public LoRAs with their own licenses, AI-guided installation, Docker images.
+- Henge nodes on the Comfy Registry ([`comfyui-henge`](https://registry.comfy.org/nodes/comfyui-henge)).
 
 ## Next
 
-- Publish the Henge nodes on the Comfy Registry (`ComfyUI-Henge`) so Comfy Cloud can run them.
 - Several positive and negative points per person when marking, for people standing close together.
 - Moving plate controls per shot (parallax, push-in, particles) in the studio.
 - Community: a unified system (accounts, uploads, moderation) so people can share their own examples; today the tab
