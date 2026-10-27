@@ -174,6 +174,8 @@ def save_config(path: Path, update: dict) -> dict:
         cfg['image_api_key'] = ''
     if cfg['provider'] not in PROVIDERS:
         raise ValueError('Unknown provider')
+    if isinstance(update.get('api_key'), str) and update['api_key'].strip() and key_hint(cfg['provider'], cfg['api_key']):
+        raise ValueError(key_hint(cfg['provider'], cfg['api_key']))
     if cfg['effort'] not in ('', 'low', 'medium', 'high', 'xhigh', 'max'):   # '' = the model's default
         raise ValueError('Unknown effort')
     if not cfg['model']:
@@ -318,6 +320,17 @@ def _to_openai(messages: list) -> list:
 NOT_CHAT = re.compile(r'embed|tts|whisper|transcribe|dall-e|image|moderation|realtime|audio|search|computer-use|babbage|davinci|sora', re.I)
 
 
+def key_hint(provider: str, key: str) -> str:
+    """Why a key cannot work with this provider, judged by its format (the key itself is never echoed)."""
+    if provider == 'anthropic' and key.startswith('sk-ant-oat'):
+        return 'This is a Claude subscription token (from Claude Code), not an API key. Create an API key at console.anthropic.com → API Keys (sk-ant-api…).'
+    if provider == 'anthropic' and key.startswith(('sk-proj', 'sk-svcacct')):
+        return 'This is an OpenAI key. Choose OpenAI as the provider, or paste an Anthropic API key (sk-ant-api…).'
+    if provider == 'openai' and key.startswith('sk-ant'):
+        return 'This is an Anthropic key. Choose Claude as the provider, or paste an OpenAI key.'
+    return ''
+
+
 def list_models(saved: dict, draft: dict) -> list:
     """Model ids the provider in the settings draft offers, newest first. The saved key is used only for the same
     provider and URL it was saved for, so it is never sent to another server."""
@@ -328,8 +341,13 @@ def list_models(saved: dict, draft: dict) -> list:
         key = saved['api_key']
     if provider == 'anthropic':
         import anthropic
+        hint = key_hint(provider, key)
+        if hint: raise ValueError(hint)
+        # An OpenAI URL left over from the previous provider is not Anthropic's.
+        if 'api.openai.com' in base_url: base_url = ''
         client = anthropic.Anthropic(api_key=key or None, **({'base_url': base_url} if base_url else {}))
-        return [{'id': m.id, 'name': m.display_name} for m in client.models.list(limit=100)]
+        try: return [{'id': m.id, 'name': m.display_name} for m in client.models.list(limit=100)]
+        except anthropic.AuthenticationError: raise ValueError('Anthropic rejected this key. Use an API key from console.anthropic.com → API Keys (it starts with sk-ant-api).')
     base = (base_url or 'https://api.openai.com/v1').rstrip('/')
     r = requests.get(base + '/models', headers={'Authorization': f'Bearer {key}'} if key else {}, timeout=20)
     if not r.ok:
