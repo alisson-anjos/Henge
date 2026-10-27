@@ -38,7 +38,7 @@ TARA (method) was trained without color marks: with TARA use only original or ma
 How to work:
 1. Read the studio state. If the guide video or the pictures are missing, ask the user to attach them in the chat or in the studio. Chat videos are automatically loaded as the guide and chat images as reference Pictures in attachment order.
 2. Look before you act: view_pictures to see the references, view_frame or find_people to see the video.
-3. To bind people: call find_people at a time where everyone is visible; it returns the frame with numbered people. Then mark_subject each person you need, with the matching picture slots. Marks must be inside the selected interval.
+3. To bind people: first view_frame at a few times (start, middle, end) to learn who appears when, then call find_people at a time where everyone you need is visible and check that each number really is the person you mean (not a background figure) before marking; when the video has camera cuts, run find_people once per moment (after each cut) and mark each performer there too; before generating, read get_studio_state and confirm every subject has one mark per moment it appears and no performer has two subjects; it returns the frame with numbered people. Then mark_subject each person you need, with the matching picture slots. Marks must be inside the selected interval.
 4. Choose the guide: several people -> 2d (or mask to keep the scene untouched); one person -> original is fine, mask keeps the scene. If find_people fails with two or more people, do not fall back to original silently: say so and ask the user to mark them with 'Mark in video' (or retry), because with original the model can swap who becomes whom.
 5. Write the prompt with set_prompt only when the user asked for something the mode needs (motion and swap use the user's request; headswap and sharpness ignore it). Refer to pictures as @Picture1, @Picture2.
 6. Before generate, summarize what will run (mode, who becomes whom, guide, quality) in two or three lines. If the user has not asked you to generate, ask first.
@@ -69,10 +69,11 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'mode': {'type': 'string', 'enum': ['swap', 'motion', 'headswap', 'sharpness']}}, 'required': ['mode'], 'additionalProperties': False}},
     {'name': 'set_prompt', 'description': 'Replace the request text in the prompt editor. Use @Picture1, @Picture2 for the pictures.',
      'input_schema': {'type': 'object', 'properties': {'text': {'type': 'string'}}, 'required': ['text'], 'additionalProperties': False}},
-    {'name': 'mark_subject', 'description': 'Mark a person found by find_people (same time). Without subject: a new subject with its own color bound to picture_slots. With subject (its number): another mark of that same subject, e.g. the same person in a later shot after a camera cut.',
-     'input_schema': {'type': 'object', 'properties': {'person': {'type': 'integer', 'description': 'number from find_people'}, 'time': {'type': 'number', 'description': 'the time used in find_people'},
+    {'name': 'mark_subject', 'description': 'Mark a performer at a time where find_people ran: give person (its number) or, if find_people missed them, x and y (0-1 of the frame) on their body; SAM segments from that point. One subject per performer: marking again with the same picture_slots (or with subject) adds a mark to that subject, e.g. the same person after a camera cut. Mark every performer at every moment they appear after a cut.',
+     'input_schema': {'type': 'object', 'properties': {'person': {'type': 'integer', 'description': 'number from find_people'}, 'x': {'type': 'number'}, 'y': {'type': 'number'},
+                                                       'time': {'type': 'number', 'description': 'the time used in find_people'},
                                                        'picture_slots': {'type': 'array', 'items': {'type': 'integer'}}, 'label': {'type': 'string'}, 'subject': {'type': 'integer', 'description': 'existing subject number to add this mark to'}},
-                      'required': ['person', 'time'], 'additionalProperties': False}},
+                      'required': ['time'], 'additionalProperties': False}},
     {'name': 'remove_subject', 'description': 'Remove one marked subject (its number in the studio state).',
      'input_schema': {'type': 'object', 'properties': {'subject': {'type': 'integer'}}, 'required': ['subject'], 'additionalProperties': False}},
     {'name': 'remove_pictures', 'description': 'Remove reference pictures: the given slots, or all of them when slots is empty.',

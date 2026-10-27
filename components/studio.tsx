@@ -290,20 +290,32 @@ export default function Studio() {
       case 'mark_subject': {
         const t = num('time'), hit = found.current.get(t.toFixed(2));
         if (!hit) throw Error(`Call find_people at ${t} first`);
-        const person = hit.people.find(p => p.number === num('person')); if (!person) throw Error(`No person #${input.person} at ${t}`);
-        const anchor = {x: person.x, y: person.y, time_seconds: t, frame_width: hit.width, frame_height: hit.height};
-        if (input.subject !== undefined) {
-          const target = c.subjects[num('subject') - 1]; if (!target) throw Error(`No subject ${input.subject}`);
-          setSubjects(current => current.map(s => s.id === target.id ? {...s, anchors: [...s.anchors.filter(a => Math.abs(a.time_seconds - t) > .05), anchor]} : s)); await settle();
-          return {text: `Subject ${input.subject} (${target.color}) is also person #${person.number} at ${t.toFixed(2)} s.`};
-        }
+        // A numbered person from find_people, or a point (0-1) on someone it missed: SAM segments from that point.
+        let point: {x: number; y: number}, who: string;
+        if (input.person !== undefined) {
+          const person = hit.people.find(p => p.number === num('person')); if (!person) throw Error(`No person #${input.person} at ${t}`);
+          point = {x: person.x, y: person.y}; who = `person #${person.number}`;
+        } else if (input.x !== undefined && input.y !== undefined) {
+          point = {x: Math.min(1, Math.max(0, num('x'))), y: Math.min(1, Math.max(0, num('y')))}; who = `the point (${point.x.toFixed(2)}, ${point.y.toFixed(2)})`;
+        } else throw Error('Give person (a number from find_people) or x and y (0-1) on the person');
+        const anchor = {...point, time_seconds: t, frame_width: hit.width, frame_height: hit.height};
         const slots = (input.picture_slots as number[] || []).map(Number);
-        if (!slots.length || slots.some(n => !c.pictures.some(p => p.slot === n))) throw Error('Use attached picture slots');
+        // One subject per performer: marking again someone bound to the same pictures adds a mark to that subject.
+        const index = input.subject !== undefined ? num('subject') - 1
+          : slots.length ? c.subjects.findIndex(s => s.picture_slots.length === slots.length && s.picture_slots.every(n => slots.includes(n))) : -1;
+        if (index >= 0) {
+          const target = c.subjects[index]; if (!target) throw Error(`No subject ${input.subject}`);
+          setSubjects(current => current.map(s => s.id === target.id ? {...s, anchors: [...s.anchors.filter(a => Math.abs(a.time_seconds - t) > .05), anchor].sort((p, q) => p.time_seconds - q.time_seconds)} : s)); await settle();
+          const times = [...target.anchors.filter(a => Math.abs(a.time_seconds - t) > .05).map(a => a.time_seconds), t].sort((p, q) => p - q);
+          return {text: `Subject ${index + 1} (${target.color}, Picture ${target.picture_slots.join(', ')}) is ${who} at ${t.toFixed(2)} s. Its marks: ${times.map(x => x.toFixed(2) + ' s').join(', ')}.`};
+        }
+        if (!slots.length) throw Error('A new subject needs picture_slots. To mark the same person again (another time or after a cut), pass subject with its number instead.');
+        if (slots.some(n => !c.pictures.some(p => p.slot === n))) throw Error('Use attached picture slots');
         const color = SUBJECT_COLORS.find(col => !c.subjects.some(s => s.color === col.name));
         if (!color) throw Error('Every color is in use');
         const subject: SubjectBinding = {id: crypto.randomUUID(), label: String(input.label || `Subject ${c.subjects.length + 1}`), color: color.name, picture_slots: slots, anchors: [anchor]};
         setSubjects(current => [...current, subject]); await settle();
-        return {text: `Subject ${c.subjects.length + 1} (${color.name}) = person #${person.number} → Picture ${slots.join(', ')}.`};
+        return {text: `Subject ${c.subjects.length + 1} (${color.name}) = ${who} at ${t.toFixed(2)} s → Picture ${slots.join(', ')}.`};
       }
       case 'clear_subjects': setSubjects([]); await settle(); return {text: 'All subjects removed.'};
       case 'remove_subject': {const target = c.subjects[num('subject') - 1]; if (!target) throw Error(`No subject ${input.subject}`); setSubjects(current => current.filter(s => s.id !== target.id)); await settle(); return {text: `Subject ${input.subject} removed.`};}
@@ -364,7 +376,21 @@ export default function Studio() {
       case 'set_auto_approve': panelControls.current?.setAutoApprove(Boolean(input.enabled)); await settle(); return {text: `Auto-approve ${input.enabled ? 'on' : 'off'}.`};
       case 'generate': {
         if (!panelControls.current) throw Error('The generation panel is not ready');
-        await settle(); const id = await panelControls.current.submit();
+        await settle();
+        // Say exactly what blocks Generate, so the assistant can fix it instead of asking the user.
+        const c = studioLive.current, missing: string[] = [], fixed = c.mode === 'headswap' || c.mode === 'sharpness';
+        if (!c.video?.range) missing.push('attach a guide video and confirm its interval');
+        if (!fixed && !c.prompt.trim()) missing.push('the prompt is empty: call set_prompt');
+        if (!fixed && !c.pictures.length && c.mode !== 'motion') missing.push('attach at least one picture');
+        c.subjects.forEach((s, i) => {
+          if (!s.picture_slots.length) missing.push(`subject ${i + 1} has no picture: remove it, or add that person as another mark of an existing subject (mark_subject with subject)`);
+          else if (s.picture_slots.some(n => !c.pictures.some(p => p.slot === n))) missing.push(`subject ${i + 1} points to a picture that is not attached`);
+          if (s.anchors.some(a => !c.video?.range || a.time_seconds < c.video.range.start || a.time_seconds >= c.video.range.end)) missing.push(`subject ${i + 1} has a mark outside the selected interval`);
+        });
+        const badTokens = fixed ? [] : invalidReferences(c.prompt, c.pictures.map(p => p.slot));
+        if (badTokens.length) missing.push('the prompt names pictures that are not attached: ' + badTokens.join(', '));
+        if (missing.length) throw Error('Not ready to generate: ' + missing.join('; '));
+        const id = await panelControls.current.submit();
         return {text: `Generation started: reference #${id.slice(0, 8)} (full job id ${id}). Use wait_for_job.`};
       }
       default: throw Error(`Unknown studio tool ${call.name}`);
