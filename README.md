@@ -91,8 +91,9 @@ video with ffmpeg) and **ComfyUI** (runs the MiniMax H3 graphs on a GPU). Pick w
 | Best for | you have an RTX 5090 or similar | long sessions | occasional use, no local GPU |
 
 All three need the models: about 125 GB with every profile (H3 base, text encoder, VAE, planner VLM and the
-task LoRAs). [Models and download links](docs/models-and-downloads.md). The Motion Transfer LoRAs are public in [Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI) (BFS Motion Transfer license); only the experimental FFP model is private:
-its download needs a Hugging Face token with read access (`HF_TOKEN`).
+task LoRAs). [Models and download links](docs/models-and-downloads.md). The Motion Transfer LoRAs are public in [Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI) (BFS Motion Transfer license); only the experimental FFP model is private.
+**No Hugging Face token or RunPod secret is needed** for the default models; `HF_TOKEN` (read access) is only for the
+private `ffp` and `solar` profiles.
 
 ### A. Local, with your own ComfyUI
 

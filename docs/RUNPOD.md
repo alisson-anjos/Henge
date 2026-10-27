@@ -67,8 +67,10 @@ Environment variables (all optional):
 | `PUBLIC_KEY` | — | RunPod injects your SSH key; enables `sshd` |
 
 The Character Swap, Motion Transfer, TARA, Combined and Head Swap LoRAs are public. `HF_TOKEN` is only needed when a
-selected optional model is gated or private (currently the experimental `ffp` profile), or when your own override
-points to a private repository.
+selected optional model is gated or private (currently the experimental `ffp` and `solar` profiles), or when your own
+override points to a private repository. The template does not set it, so no RunPod secret is needed. To add it,
+store the token as a RunPod secret (*Secrets → Create secret*, name `hf_token`) and, in the deploy screen, *Set
+overrides* → `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}`. A reference to a secret your account does not have is ignored.
 
 To point an entry at another link without rebuilding, set
 `HENGE_MODEL_OVERRIDES`, e.g.
