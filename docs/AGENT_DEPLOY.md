@@ -31,6 +31,9 @@ Images are built by GitHub Actions on every push and tagged `latest` (the main b
 
 ## 0. Prerequisites (check, do not assume)
 
+If the user has no RunPod account, give them this sign-up link: https://runpod.io?ref=8t518hht
+
+
 ```sh
 runpodctl doctor                 # installed and configured with an API key
 runpodctl datacenter list        # which GPUs each datacenter has in stock
@@ -46,7 +49,8 @@ Ask the user for:
 
 ## Option B: one pod
 
-1. Create a pod template (or reuse one): `scripts/runpod_template.sh` (read it first; `TEMPLATE_ID=<id>`
+1. Use the published Henge pod template `mnxax277c8` (deploy link for the user: https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht; with runpodctl,
+   `--template-id mnxax277c8`). Only if the user wants their own: `scripts/runpod_template.sh` (read it first; `TEMPLATE_ID=<id>`
    updates an existing template). Settings: image `ghcr.io/alisson-anjos/henge:latest`, container
    disk 30 GB, volume 180 GB at `/workspace`, HTTP port 8188, env `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}`.
 2. With the user's approval, deploy a pod from it on a GPU with a CUDA 13 driver (RTX 5090 or larger).

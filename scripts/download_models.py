@@ -27,8 +27,11 @@ def download_url(url,dest,token=None):
             for chunk in response.iter_content(8<<20):handle.write(chunk)
     part.replace(dest)
 
+# Mode names expand to the profiles that hold their LoRAs, so "motion" gets every Motion Transfer model.
+ALIASES={'motion':['motion10500','motion4500','ffp'],'swap':['character'],'masks':['sam2d']}
+
 def selected_models(manifest,profiles):
-    profiles={p.strip() for p in profiles if p.strip()}
+    profiles={q for p in profiles if p.strip() for q in ALIASES.get(p.strip(),[p.strip()])}
     known={p for item in manifest['models'] for p in item.get('profiles',[])}
     if profiles-known:raise ValueError('Unknown model profiles: '+', '.join(sorted(profiles-known)))
     active=profiles|{'common'}

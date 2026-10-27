@@ -28,9 +28,12 @@ If the GHCR package is private, add a registry credential in RunPod
 and a personal access token with `read:packages`. Select it in the template.
 A public package needs no credential.
 
-## 2. Create the template
+## 2. Deploy the template
 
-RunPod → **My Templates → New Template** (type *Pod*):
+**Use the Henge template: [Deploy on RunPod](https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht).** It has the image, disks, ports and environment below
+already set. New to RunPod? [Create your account with our link](https://runpod.io?ref=8t518hht).
+
+To build your own template instead, RunPod → **My Templates → New Template** (type *Pod*):
 
 | Field | Value |
 |---|---|

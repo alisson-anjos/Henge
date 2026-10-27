@@ -33,7 +33,7 @@ node --version; python3 --version; ffmpeg -version | head -1; git --version
 ```
 
 On Windows run these in PowerShell (use `Get-PSDrive` for disk). Also ask the user whether they already have
-ComfyUI and where, and whether they have a RunPod account.
+ComfyUI and where, and whether they have a RunPod account (if not, give them https://runpod.io?ref=8t518hht).
 
 ## 2. Choose an option with the user
 
@@ -62,8 +62,8 @@ Steps and checks:
    HF_TOKEN=… $COMFY_PY scripts/download_models.py --manifest config/model-repos.example.json \
      --models-dir <ComfyUI>/models --profiles character,headswap,sharpness --dry-run   # show sizes, then without --dry-run
    ```
-   Ask which modes the user wants; profiles: `character` (Character Swap), `motion10500`, `motion4500` (Motion
-   Transfer), `headswap`, `sharpness`, `fibo`, `omniref`, `sam2d`, `sam3d`.
+   Ask which modes the user wants; profiles: `character` (Character Swap), `motion` (every Motion Transfer LoRA), `headswap`, `sharpness`,
+   `fibo`, `sam2d` (color marks and latent masks), `sam3d`, `omniref`.
 3. **Start ComfyUI** on 8189: `$COMFY_PY main.py --listen 127.0.0.1 --port 8189 --preview-method taesd --fast-disk`.
    Check `curl -s http://127.0.0.1:8189/object_info/HengeFindPeople` is not `{}` (the Henge nodes loaded).
 4. **`.env.local`** in Henge: `COMFY_BASE_URL=http://127.0.0.1:8189`, `COMFY_ROOT=<ComfyUI>`,
@@ -73,7 +73,7 @@ Steps and checks:
 
 ## B. RunPod pod
 
-Follow [AGENT_DEPLOY.md → Option B](AGENT_DEPLOY.md#option-b-one-pod). The user can also do it by hand from
+The user deploys the Henge template from https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht (or follow [AGENT_DEPLOY.md → Option B](AGENT_DEPLOY.md#option-b-one-pod)). The user can also do it by hand from
 [RUNPOD.md](RUNPOD.md).
 
 ## C. Local UI + RunPod Serverless

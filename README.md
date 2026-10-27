@@ -95,7 +95,7 @@ You need a working ComfyUI (PyTorch with CUDA 13, NVIDIA driver 580+), Node.js 2
    ```sh
    HF_TOKEN=<token> /path/to/comfy/python scripts/download_models.py \
      --manifest config/model-repos.example.json --models-dir /path/to/ComfyUI/models \
-     --profiles character,headswap,sharpness,motion10500,fibo
+     --profiles character,motion,headswap,sharpness,fibo,sam2d
    ```
 
 3. Start ComfyUI on port 8189 (keep it on localhost):
@@ -127,8 +127,8 @@ Details and troubleshooting: [docs/RUN_LOCAL.md](docs/RUN_LOCAL.md).
 
 One container runs the UI, the bridge and ComfyUI; models download on the first boot into the pod volume.
 
-1. RunPod → **My Templates → New Template** (Pod): image `ghcr.io/alisson-anjos/henge:latest`,
-   container disk 30 GB, volume 180 GB at `/workspace`, HTTP port `8188`.
+1. **[Deploy the Henge template on RunPod](https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht)** — image, disks, ports and environment are already set
+   (new to RunPod? [create your account with our link](https://runpod.io?ref=8t518hht)).
 2. Environment: `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}` (store the token as the secret `hf_token`), and
    optionally `HENGE_MODEL_PROFILES` to download fewer models and `HENGE_PASSWORD` to require a login (or turn it on later from the 🔓 button in the UI, see [Login](#login-optional)).
 3. Deploy on a GPU with a CUDA 13 driver (set the CUDA filter to 13.0+). An RTX 5090 works; 48–96 GB GPUs
@@ -144,15 +144,15 @@ Details: [docs/RUNPOD.md](docs/RUNPOD.md).
 The UI and bridge run on your computer; each job stage (plan, FIBO, every shot) is one request to a
 serverless endpoint, whose workers start on demand and stop 15 s after the last request.
 
-1. Install [`runpodctl`](https://github.com/runpod/runpodctl) with your API key, and store your Hugging Face
-   token as the RunPod secret `hf_token`.
+1. [Create a RunPod account](https://runpod.io?ref=8t518hht) if you have none, install [`runpodctl`](https://github.com/runpod/runpodctl) with
+   your API key, and store your Hugging Face token as the RunPod secret `hf_token`.
 2. Put the models on a network volume (once; a temporary pod downloads them and is deleted):
 
    ```sh
    VOLUME_GB=180 scripts/runpod_volume.sh            # prints the volume id
    ```
 
-3. Create the endpoint (RTX 5090 first; RTX PRO 6000 only when no 5090 is free):
+3. Create the endpoint from the Henge serverless template (RTX 5090 first; RTX PRO 6000 only when no 5090 is free):
 
    ```sh
    VOLUME_ID=<volume id> scripts/runpod_serverless.sh   # prints the endpoint id

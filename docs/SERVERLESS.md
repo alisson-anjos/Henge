@@ -31,7 +31,7 @@ The default setup is unchanged: one pod running UI, bridge and ComfyUI together
 
 ## Requirements
 
-- A RunPod account with credit and an API key (*Settings → API Keys*).
+- A RunPod account with credit and an API key (*Settings → API Keys*). New to RunPod? [Create your account with our link](https://runpod.io?ref=8t518hht).
 - [`runpodctl`](https://github.com/runpod/runpodctl) configured (`runpodctl doctor`).
 - A Hugging Face token with read access while the motion LoRAs are private, stored as the RunPod
   secret `hf_token` (*Settings → Secrets*); the volume fill pod reads it.
