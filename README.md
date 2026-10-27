@@ -22,6 +22,8 @@ API graph it ran.
 
 ## How to run Henge
 
+> **Quickest way:** give [docs/AI_GUIDED_INSTALL.md](docs/AI_GUIDED_INSTALL.md) to a coding agent (Claude Code, Codex, Cursor); it checks your machine, asks which option you want and installs it.
+
 Henge has three parts: the **web UI** (port 8188), the **bridge** (port 8766, plans jobs, cuts and joins
 video with ffmpeg) and **ComfyUI** (runs the MiniMax H3 graphs on a GPU). Pick where each one runs:
 
@@ -83,7 +85,7 @@ You need a working ComfyUI (PyTorch with CUDA 13, NVIDIA driver 580+), Node.js 2
    ```
 
    On Windows, run the two commands from [RUN_LOCAL.md](docs/RUN_LOCAL.md#4-start-the-job-bridge) in two
-   terminals. The ComfyUI address can also be changed in the UI (**Connection settings**).
+   terminals. The backend (ComfyUI address, Comfy SDK or RunPod Serverless) can also be set in the UI: gear in the top bar → **Connection**.
 
 Details and troubleshooting: [docs/RUN_LOCAL.md](docs/RUN_LOCAL.md).
 
@@ -152,6 +154,8 @@ Images are built by GitHub Actions and published to GitHub Container Registry:
 
 ### More guides
 
+- **[AI-guided installation](docs/AI_GUIDED_INSTALL.md)**: paste one prompt into Claude Code, Codex or Cursor and it installs Henge for you
+- [Use Henge from your own AI client through MCP](docs/MCP.md) (instead of the built-in assistant)
 - [Instructions for an AI agent to deploy everything on RunPod](docs/AGENT_DEPLOY.md)
 - [Run locally: ports, connection settings, Windows](docs/RUN_LOCAL.md)
 - [Docker Compose on your own GPU machine](docker/README.md)

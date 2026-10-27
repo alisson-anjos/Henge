@@ -113,17 +113,21 @@ pod does not prove its public proxy is configured.
 
 ## Connection settings in the UI
 
-The sidebar above Output has **Connection settings**. Enter the ComfyUI API
-address and click **Test and save**. The bridge checks the API and required
-Henge nodes, then saves the connection in its data directory. Changing the
-connection is blocked while jobs are active.
+The gear in the top bar opens **Settings → Connection** (it also opens as the first step of the setup wizard on
+the first visit, and from the "offline" banner). Pick where workflows run:
 
-The address must be reachable **from the job bridge**, not just your browser.
-`COMFY_ROOT` must point to the same ComfyUI files. For a separate machine or
-container, input/output folders must be shared or synchronized. An API address
-alone does not transfer those files. Saved UI connection settings override the
-environment's URL on the next bridge restart; edit/remove `settings.json` in the
-data directory if you deliberately want to reset that override.
+- **ComfyUI**: the address of a ComfyUI with the Henge nodes.
+- **Comfy API · SDK**: Henge starts `comfy-api-proxy` in front of your ComfyUI and talks to it through the
+  official Comfy SDK, or uses a Comfy API URL or Comfy Cloud.
+- **RunPod Serverless**: endpoint ID and API key.
+
+**Test connection** checks the API and the Henge nodes; **Save and use** stores the choice in `connection.json`
+in the bridge's data folder and switches to it immediately. Keys never come back to the browser. Environment
+variables (`HENGE_BACKEND`, `RUNPOD_ENDPOINT_ID`, `RUNPOD_API_KEY`, `HENGE_COMFY_SDK_*`, `COMFY_API_KEY`) win
+over the screen and show there as read-only.
+
+The address must be reachable **from the job bridge**, not just your browser. Files move through ComfyUI's own
+upload and view API, so a ComfyUI on another machine works without shared folders.
 
 Check these endpoints from the machine running the UI/bridge:
 
