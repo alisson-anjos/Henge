@@ -304,7 +304,7 @@
     },
     {
       "id": "ffp",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
       "destination": "loras/henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
       "profiles": [
         "ffp"
@@ -313,7 +313,7 @@
     },
     {
       "id": "ffp_dyn95",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
       "destination": "loras/henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
       "profiles": [
         "ffp"
