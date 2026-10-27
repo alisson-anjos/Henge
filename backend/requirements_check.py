@@ -6,7 +6,15 @@ this module turns it into the checklist the UI shows while the pod is preparing.
 import json,os,shutil
 from pathlib import Path
 
-ADAPTER_LABELS={'training_adapter_v2.safetensors':'Motion training adapter V2','dmd_ref2va_8step.safetensors':'Turbo LoRA · DMD 8-step'}
+LEGACY_LORAS=json.loads(Path(__file__).with_name('legacy_loras.json').read_text())
+
+# Matched on the file name's ending, so both the published names (minimax_h3_…) and the old short ones get a label.
+ADAPTER_LABELS={'training_adapter_v2.safetensors':'Motion training adapter V2','dmd_ref2va_8step.safetensors':'Turbo LoRA · DMD 8-step',
+                'dmd_ref2va_8step_turbo_pruned.safetensors':'Turbo LoRA · DMD 8-step'}
+
+def adapter_label(path):
+    name=path.rsplit('/',1)[-1]
+    return next((label for end,label in ADAPTER_LABELS.items() if name.endswith(end)),'Adapter LoRA')
 
 def base_files():
     planner=os.environ.get('HENGE_VLM_CLIP','qwen3.5_9b_w4a8_gptq.safetensors')
@@ -34,10 +42,17 @@ def check(models_dir,models):
     models_dir=Path(models_dir);status=_status(models_dir)
     by_destination={row['destination']:row for row in status.get('models',[])}
     rows={}
+    def installed_path(relative):
+        path=models_dir/relative
+        if path.is_file():return path
+        if relative.startswith('loras/'):
+            legacy=LEGACY_LORAS.get(relative.removeprefix('loras/'))
+            if legacy and (models_dir/'loras'/legacy).is_file():return models_dir/'loras'/legacy
+        return path
     def add(key,label,relative,group):
         if relative in rows:rows[relative]['groups'].append(group);return
         row={'id':key,'label':label,'file':relative,'groups':[group]}
-        path=models_dir/relative;download=by_destination.get(relative,{})
+        path=installed_path(relative);download=by_destination.get(relative,{})
         if path.is_file() and path.stat().st_size>0:row.update(state='installed',total=path.stat().st_size)
         else:
             row['state']=download.get('state') if download.get('state') in ('pending','downloading','failed') else 'missing'
@@ -50,9 +65,9 @@ def check(models_dir,models):
         lora='loras/'+model['lora']
         # Profiles the downloader was not asked to fetch (e.g. local-only mixes) stay out of the checklist;
         # they still report available=False in /health.
-        if lora not in by_destination and not (models_dir/lora).is_file():continue
+        if lora not in by_destination and not installed_path(lora).is_file():continue
         if model.get('adapter'):
-            adapter=model['adapter'];add(profile+'_adapter',ADAPTER_LABELS.get(adapter.rsplit('/',1)[-1],'Adapter LoRA'),'loras/'+adapter,profile)
+            adapter=model['adapter'];add(profile+'_adapter',adapter_label(adapter),'loras/'+adapter,profile)
         add(profile+'_lora',f"{model.get('label',profile)} LoRA",lora,profile)
         for key,label,relative in model.get('files',[]):add(profile+'_'+key,label,relative,profile)
     requirements=list(rows.values())

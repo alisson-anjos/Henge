@@ -63,7 +63,7 @@ Steps and checks:
      --models-dir <ComfyUI>/models --profiles character,motion,headswap,sharpness,sam2d,audio --dry-run   # list, then without --dry-run
    ```
    Models the user already has in that ComfyUI are reused (old names, other subfolders), never renamed or
-   downloaded twice. Ask which modes the user wants; profiles: `character` (Character Swap), `motion` (every Motion Transfer LoRA), `headswap`, `sharpness`, `audio`
+   downloaded twice. Ask which modes the user wants; profiles: `character` (Character Swap), `motion` (every public Motion Transfer LoRA; `ffp` is private), `headswap`, `sharpness`, `audio`
    (generated audio),
    `fibo`, `sam2d` (color marks and latent masks), `sam3d`, `omniref`.
 3. **Start ComfyUI** on 8189: `$COMFY_PY main.py --listen 127.0.0.1 --port 8189 --preview-method taesd --fast-disk`.
