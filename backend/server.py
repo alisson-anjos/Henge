@@ -336,8 +336,16 @@ def known_loras():
             workflows.INSTALLED={n:set(comfy_choices(info,n,key)) for n,key in workflows.LOADERS.items()}
         except Exception:pass
 
+def posix_inputs(graph):
+    """Staged inputs are henge/<job>/<file>; jobs created on Windows before 2026-10-27 stored henge\\<job>\\<file>, which
+    ComfyUI's upload step does not recognise."""
+    for n in graph.values():
+        for k,v in (n.get('inputs') or {}).items():
+            if isinstance(v,str) and v.startswith('henge\\'):n['inputs'][k]=v.replace('\\','/')
+    return graph
+
 def execute_graph(job,graph,stage):
-    known_loras();graph=localize_loras(graph)
+    known_loras();graph=posix_inputs(localize_loras(graph))
     if REMOTE:return execute_serverless(job,graph,stage)
     import aiohttp
     async def execute():
@@ -462,7 +470,7 @@ def mask_preview(job):
     frames=min(per,total);clip=inp/'mask_preview_source.mp4'
     run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-t',str(frames/24),'-vf',f'fps=24,scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2','-an','-c:v','libx264','-threads','2','-crf','20','-pix_fmt','yuv420p','-y',str(clip)])
     bindings=[{**s,'hex':COLORS[s['color']]} for s in r.get('subject_guidance',{}).get('bindings',[])]
-    relative=str(clip.relative_to(INPUT));out=relative.replace('.mp4','_overlay.mp4')
+    relative=clip.relative_to(INPUT).as_posix();out=relative.replace('.mp4','_overlay.mp4')
     args=(relative,w,h,grid_frames(frames),frames,bindings,job['plan'].get('source_kind','human'),start,job['plan'].get('preserve_objects',[]))
     if job['plan'].get('representation')=='2d':
         # 2D color marks: the marks at full opacity plus the same source clip; the UI blends them live.
@@ -567,7 +575,7 @@ def planning(job):
                 json={'model':os.environ['VLM_MODEL'],'messages':[{'role':'user','content':content}],'temperature':.1,'max_tokens':tokens},timeout=180)
             response.raise_for_status();raw=response.json()['choices'][0]['message']['content']
         else:
-            graph=plan_graph(str(image.relative_to(INPUT)) if image is not None else None,instruction,tokens,
+            graph=plan_graph(image.relative_to(INPUT).as_posix() if image is not None else None,instruction,tokens,
                 os.environ.get('HENGE_VLM_CLIP','qwen3.5_9b_w4a8_gptq.safetensors'))
             outputs=execute_graph(job,graph,stage);raw=outputs.get('4',{}).get('text',[''])[0]
         if not isinstance(raw,str) or not raw.strip():raise ValueError(f'VLM returned no text during {stage}')
@@ -674,7 +682,7 @@ def fibo_prepare(job,runner,regenerate=False):
     if regenerate or not cached.is_file():
         seed=int(time.time())%2**31 if regenerate else int(job['options'].get('seed',42))
         frame=inp/'fibo_source.png';run(['ffmpeg','-v','error','-ss',str(job['request']['video']['start_seconds']),'-i',str(INPUT/job['assets']['video']),'-frames:v','1','-threads','1','-y',str(frame)])
-        frame=str(frame.relative_to(INPUT))
+        frame=frame.relative_to(INPUT).as_posix()
         if req['figure']:graph=fibo_graph(req['selected'][0],req['selected'][1:]+[frame],req['instruction'],seed)
         else:graph=fibo_graph(frame,req['selected'],req['instruction'],seed)
         made=image_from_output(execute_graph(runner,graph,'fibo_edit'),inp/'fibo_new.png');shutil.move(made,cached)
@@ -749,7 +757,7 @@ def subject_looks(job,bindings,inp):
     for s in bindings:
         a=min(s['anchors'],key=lambda a:a['time_seconds']);dest=inp/f"look_{s['color']}.png"
         if grab_frame(INPUT/job['assets']['video'],a['time_seconds'],dest) is None:continue
-        looks.append((str(dest.relative_to(INPUT)),s['id'],a['x'],a['y']))
+        looks.append((dest.relative_to(INPUT).as_posix(),s['id'],a['x'],a['y']))
     if not looks:return follow
     save(job,message='Learning how each marked person looks')
     try:outputs=execute_graph(job,subject_looks_graph(looks),'subject_looks')
@@ -795,11 +803,11 @@ def frame_count(path):
 
 def generate(job):
     r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'henge'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
-    if r['mode']=='headswap':refs=[str(head_reference(INPUT/refs[0],inp/'head_reference.png').relative_to(INPUT))]
+    if r['mode']=='headswap':refs=[head_reference(INPUT/refs[0],inp/'head_reference.png').relative_to(INPUT).as_posix()]
     # Character Swap with an animal: the FIBO humanoid figure (plain gray background) becomes Picture 1 itself, since
     # the Character Swap prompt and LoRA take a single reference.
     swap_figure=r['mode']=='swap' and plan['use_fibo'] and fibo_request(job)['figure']
-    if swap_figure:refs[0]=str(fibo_prepare(job,job).relative_to(INPUT))
+    if swap_figure:refs[0]=fibo_prepare(job,job).relative_to(INPUT).as_posix()
     if r['mode'] in ('swap','motion') and options.get('prepare_references',True):
         # A person/outfit/object picture contributes only its subject: its backdrop must not become the scene.
         # Scene and style pictures stay whole; the scene changes only when one is attached and the prompt asks for it.
@@ -810,7 +818,7 @@ def generate(job):
             save(job,message=f'Removing the background of Picture {i}')
             outputs=execute_graph(job,mask_graph(ref,f'henge/{job["id"]}/mask_{i}'),f'reference_{i}')
             dest=character_reference(INPUT/ref,image_from_output(outputs,inp/f'mask_{i}.png'),inp/f'reference_{i}_prepared.png')
-            shutil.copyfile(dest,work/f'reference_{i}_prepared.png');prepared.append(str(dest.relative_to(INPUT)))
+            shutil.copyfile(dest,work/f'reference_{i}_prepared.png');prepared.append(dest.relative_to(INPUT).as_posix())
             urls.append(f"/api/backend/jobs/{job['id']}/files/reference_{i}_prepared.png")
         refs=prepared;save(job,prepared_reference_urls=urls)
     width,height=meta['width'],meta['height']
@@ -836,7 +844,7 @@ def generate(job):
     if plan['representation']!='original' and bindings:follow=subject_looks(job,bindings,inp)
     prompt=plan['prompt'];fibo_ref=None
     if plan['use_fibo'] and not swap_figure:
-        figure=fibo_request(job)['figure'];fibo_ref=fibo_prepare(job,job);refs.append(str(fibo_ref.relative_to(INPUT)))
+        figure=fibo_request(job)['figure'];fibo_ref=fibo_prepare(job,job);refs.append(fibo_ref.relative_to(INPUT).as_posix())
         if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> shows that character in humanoid form, in the starting pose of the guide; use it for body shape, limb proportions and appearance only, it does not supply motion or a background." if figure else f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
     pieces=[];guide_pieces=[];previous=None;save(job,shot_urls=[])
     for i,shot in enumerate(shots):
@@ -844,9 +852,9 @@ def generate(job):
         if shot.get('reset_context'):previous=None
         name=f'shot_{i:03d}.mp4';path=inp/name;t=start+shot['start']/24;duration=shot['frames']/24
         args=['ffmpeg','-v','error','-ss',str(t),'-i',str(INPUT/assets['video']),'-t',str(duration),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-c:v','libx264','-threads','2','-crf','18','-pix_fmt','yuv420p','-c:a','aac','-y',str(path)];run(args)
-        relative=str(path.relative_to(INPUT));context_rel=None
+        relative=path.relative_to(INPUT).as_posix();context_rel=None
         if previous is not None:
-            ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=str(ctx.relative_to(INPUT))
+            ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=ctx.relative_to(INPUT).as_posix()
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
         # The next shot's context is read from the end of this one, so the worker may drop the overlap only when
         # enough frames remain after it.
@@ -891,7 +899,7 @@ def make_plate(job):
     save(job,stage='plate',message='Separating the people for the new background')
     run(['ffmpeg','-v','error','-ss',str(start),'-t',str(end-start),'-i',str(INPUT/assets['video']),'-vf',f'fps=24,scale=-2:{h}','-an','-c:v','libx264','-crf','14','-y',str(clip)])
     info=probe(clip);n=frame_count(clip);w32,h32=max(32,info['width']//32*32),max(32,info['height']//32*32)
-    outputs=execute_graph(job,plate_mask_graph(str(clip.relative_to(INPUT)),w32,h32,n,str((inp/'plate_masks.mp4').relative_to(INPUT))),'plate')
+    outputs=execute_graph(job,plate_mask_graph(clip.relative_to(INPUT).as_posix(),w32,h32,n,(inp/'plate_masks.mp4').relative_to(INPUT).as_posix()),'plate')
     videos=output_files(outputs,'5','videos')
     if not videos:raise ValueError('ComfyUI finished without the people masks for the new background')
     masks=FILES.download(videos[0],inp/'plate_masks_dl.mp4')
@@ -907,7 +915,7 @@ def make_plate(job):
     # Marks were placed on the source timeline: move them onto the plate's.
     for b in (r.get('subject_guidance') or {}).get('bindings') or []:
         for a in b.get('anchors') or []:a['time_seconds']=max(0.,a['time_seconds']-start)
-    save(job,request=r,assets={**assets,'video':str(final.relative_to(INPUT)),'original_video':assets['video']},video_info=probe(final),
+    save(job,request=r,assets={**assets,'video':final.relative_to(INPUT).as_posix(),'original_video':assets['video']},video_info=probe(final),
          plate={'shots':result['shots'],'frames':result['frames']},plate_url=f"/api/backend/jobs/{job['id']}/source/video")
 
 def shot_audio(job,outputs,i,shot,piece):
@@ -1192,17 +1200,17 @@ async def create_job(request:Request):
         source=inp/'source.mp4';await upload(video,source,500*1024*1024);meta=probe(source)
         if r['video']['end_seconds']>meta['duration']+.1:raise ValueError('Selected interval exceeds the uploaded video')
         if r.get('audio_conditioning',{}).get('enabled') and not meta['audio']:raise ValueError('The guide contains no audio track')
-        assets={'video':str(source.relative_to(INPUT)),'pictures':{}}
+        assets={'video':source.relative_to(INPUT).as_posix(),'pictures':{}}
         background=form.get('background')
         if hasattr(background,'read'):
             # Moving plate: a new background that follows the guide's camera (built before planning).
             temp=inp/'upload_background';await upload(background,temp,25*1024*1024)
             with Image.open(temp) as im:im.convert('RGB').save(inp/'background.png')
-            temp.unlink();assets['background']=str((inp/'background.png').relative_to(INPUT))
+            temp.unlink();assets['background']=(inp/'background.png').relative_to(INPUT).as_posix()
         for slot,file in sorted(pictures.items()):
             dest=inp/f'picture_{slot}.png';temp=inp/f'upload_{slot}';await upload(file,temp,25*1024*1024)
             with Image.open(temp) as im:im.convert('RGB').save(dest)
-            temp.unlink();assets['pictures'][str(slot)]=str(dest.relative_to(INPUT))
+            temp.unlink();assets['pictures'][str(slot)]=dest.relative_to(INPUT).as_posix()
         job={'id':jid,'created':time.time(),'project':r.get('project','Henge'),'status':'queued_plan','stage':'queued','progress':0,'request':r,'options':options,'assets':assets,'video_info':meta,'message':'Queued for VLM planning'};save(job);return public(job)
     except (ValueError,TypeError,KeyError,json.JSONDecodeError) as e:raise HTTPException(400,str(e))
 
@@ -1303,7 +1311,7 @@ async def frame_edit(request:Request):
     staged=[]
     for i,(name,im) in enumerate(images):
         if i==0 and region:im=im.crop(region)
-        dest=inp/f'{name}.png';im.save(dest);staged.append(str(dest.relative_to(INPUT)))
+        dest=inp/f'{name}.png';im.save(dest);staged.append(dest.relative_to(INPUT).as_posix())
     text=edit_instruction(op,what,instruction,len(staged)-1)
     job={'id':jid,'created':time.time(),'status':'running','stage':'frame_edit','progress':0,'request':{'mode':'frame_edit','instruction':instruction or what,'op':op,'editor':editor,'masked':bool(region)},'options':{},'message':'Editing the frame'};save(job)
     try:
@@ -1624,7 +1632,7 @@ async def find_people(request:Request):
     except OSError:raise HTTPException(400,'The frame is not an image')
     job={'id':jid,'created':time.time(),'status':'running','stage':'find_people','progress':0,'request':{'mode':'find_people'},'options':{},'message':'Finding people'};save(job)
     try:
-        outputs=await asyncio.to_thread(execute_graph,job,find_people_graph(str(dest.relative_to(INPUT)),kind),'find_people')
+        outputs=await asyncio.to_thread(execute_graph,job,find_people_graph(dest.relative_to(INPUT).as_posix(),kind),'find_people')
         found=json.loads(outputs.get('4',{}).get('text',['{}'])[0])
         overlay=await asyncio.to_thread(image_from_output,outputs,inp/'people.png')
         with Image.open(overlay) as im:

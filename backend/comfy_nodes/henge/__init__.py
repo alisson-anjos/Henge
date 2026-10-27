@@ -81,7 +81,7 @@ class HengeGuide:
         if not subjects:raise ValueError('Color guides need a selected subject and its reference binding')
         if representation=='3d' and source_kind!='human':raise ValueError('SAM 3D Body supports human sources. Use a 2D color guide for animals.')
         from comfy_extras.nodes_sam3 import SAM3_VideoTrack
-        from comfy.ldm.sam3.tracker import unpack_masks
+        from comfy.ldm.sam3.tracker import unpack_masks,pack_masks
         loaded=comfy.sd.load_checkpoint_guess_config(folder_paths.get_full_path_or_raise('checkpoints',sam_checkpoint),output_vae=False)
         sam,clip=loaded[:2]
         cond=clip.encode_from_tokens_scheduled(clip.tokenize('person' if source_kind=='human' else 'animal'))
@@ -145,7 +145,10 @@ class HengeGuide:
             visible=np.where(masks[:,idx].flatten(1).sum(1).numpy()>64)[0]
             for span in np.split(visible,np.where(np.diff(visible)>1)[0]+1):
                 if len(span)==0:continue
-                subset={'packed_masks':packed[span,idx:idx+1],'n_frames':len(span),'orig_size':tracks['orig_size']}
+                # SAM 3D Body reads bit-packed masks; they come from the scene-by-scene tracks (width padded to a multiple of 8).
+                m=masks[torch.as_tensor(span),idx:idx+1]
+                if m.shape[-1]%8:m=torch.nn.functional.pad(m,(0,8-m.shape[-1]%8))
+                subset={'packed_masks':pack_masks(m),'n_frames':len(span),'orig_size':(h,w)}
                 pose=SAM3DBody_Predict.execute(body,images[span],track_data=subset,run_hand_refinement=True,fov=fov,batch_size=1)[0]
                 pose=SAM3DBody_FaceExpression.execute(body,pose,images[span],strength=1.,mouth_strength=1.5,eye_strength=1.5,brow_strength=1.5,input_threshold=.02,blendshape_smooth_window=3)[0]
                 pose=SAM3DBody_Smooth.execute(pose,strength=.35,method='gaussian',window=3,rotation_threshold_degrees=30.)[0]

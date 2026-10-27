@@ -41,7 +41,10 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
 
   useEffect(() => {
     dialog.current?.showModal();
-    fetch('/api/backend/health').then(r => r.json()).then(h => setEditor(h.frame_editor ?? (h.fibo_ready ? 'fibo' : null))).catch(() => {});
+    // ComfyUI can take a while to list its nodes (very large models folder): ask again until the editor is known.
+    let tries = 0, timer: ReturnType<typeof setTimeout> | undefined;
+    const ask = () => fetch('/api/backend/health').then(r => r.json()).then(h => {const e = h.frame_editor ?? (h.fibo_ready ? 'fibo' : null); setEditor(e); if (!e && ++tries < 12) timer = setTimeout(ask, 10000);}).catch(() => {});
+    ask();
     fetch('/api/backend/frame-edits').then(r => r.json()).then(rows => {if (Array.isArray(rows)) setEdits(rows);}).catch(() => {});
     const video = document.createElement('video');
     video.muted = true; video.preload = 'auto'; video.src = videoUrl;
@@ -53,7 +56,7 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
       canvas.toBlob(blob => {if (blob) setFrame({blob, url: URL.createObjectURL(blob), width: canvas.width, height: canvas.height});}, 'image/png');
     };
     video.onerror = () => setError(tr('Could not read the guide video.', 'Não foi possível ler o vídeo guia.', 'No se pudo leer el vídeo guía.'));
-    return () => {video.removeAttribute('src'); video.load();};
+    return () => {clearTimeout(timer); video.removeAttribute('src'); video.load();};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoUrl, start]);
   useEffect(() => () => {if (frame) URL.revokeObjectURL(frame.url);}, [frame]);
@@ -102,7 +105,7 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
       <button type="button" className="trim-close" aria-label={tr('Close', 'Fechar', 'Cerrar')} onClick={onClose}>×</button></header>
     <div className="first-frame-panes">
       <figure><figcaption className="eyebrow muted">{tr('Guide frame', 'Quadro do guia', 'Fotograma de la guía')}{frame ? ` · ${frame.width}×${frame.height}` : ''}</figcaption>{frame ? <div className="first-frame-paint" style={{aspectRatio: `${frame.width} / ${frame.height}`}}><img src={frame.url} alt=""/>{editor && <canvas ref={paint} aria-label={tr('Paint the area to edit', 'Pinte a área a editar', 'Pinta el área a editar')} onPointerDown={e => {drawing.current = true; e.currentTarget.setPointerCapture(e.pointerId); stroke(e);}} onPointerMove={stroke} onPointerUp={() => {drawing.current = false;}}/>}</div> : <div className="first-frame-empty">{tr('Reading the frame…', 'Lendo o quadro…', 'Leyendo el fotograma…')}</div>}</figure>
-      <figure><figcaption className="eyebrow muted">{tr('Edited', 'Editado', 'Editado')}</figcaption>{result ? <img src={result.url} alt=""/> : <div className="first-frame-empty">{busy ? tr(`${editorName} is editing… (about 1 min)`, `${editorName} está editando… (cerca de 1 min)`, `${editorName} está editando… (alrededor de 1 min)`) : tr(`Edit with ${editorName} or upload an image`, `Edite com ${editorName} ou envie uma imagem`, `Edita con ${editorName} o sube una imagen`)}</div>}</figure>
+      <figure><figcaption className="eyebrow muted">{tr('Edited', 'Editado', 'Editado')}</figcaption>{result ? <img src={result.url} alt=""/> : <div className="first-frame-empty">{busy ? tr(`${editorName} is editing… (about 1 min)`, `${editorName} está editando… (cerca de 1 min)`, `${editorName} está editando… (alrededor de 1 min)`) : editor ? tr(`Edit with ${editorName} or upload an image`, `Edite com ${editorName} ou envie uma imagem`, `Edita con ${editorName} o sube una imagen`) : tr('Upload an edited image', 'Envie uma imagem editada', 'Sube una imagen editada')}</div>}</figure>
     </div>
     <div className="first-frame-controls">
       {editor ? <>
