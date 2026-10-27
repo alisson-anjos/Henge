@@ -1,14 +1,16 @@
-# Henge — open character & motion studio
+# Henge — Swap · Motion · Transform
 
-Character swap and motion transfer for video, built on **ComfyUI** with
-**MiniMax-H3**. One pod runs the web UI, the job bridge and ComfyUI.
+Character swap, motion transfer, head swap and sharpness for video, built on **ComfyUI** with
+**MiniMax H3** and a trained LoRA per mode. One pod runs the web UI, the job bridge and ComfyUI.
+
+New to RunPod? Create your account with our link: https://runpod.io?ref=8t518hht
 
 **Open the app:** *Connect → HTTP Service [8188]* once the logs show the UI is up.
 
 ## First boot
 
 The pod downloads the models into your volume at `/workspace/henge/models`
-(≈ 65 GB with the default profiles, plus ≈ 25 GB for the SolarRenderer `solar` profile). This takes a while the first time only;
+(≈ 125 GB with the default profiles). This takes a while the first time only;
 later boots, or a new pod on the same network volume, start straight away.
 Follow progress in **Logs** (`Downloading: …` / `Installed: …`).
 
@@ -17,9 +19,7 @@ Follow progress in **Logs** (`Downloading: …` / `Installed: …`).
 | Mode | Models |
 |---|---|
 | Character Swap v1.1 | H3 ref2va + Character Swap v1.1 LoRA + DMD 8-step |
-| Motion · Original 10500 | H3 ref2va + training adapter V2 + motion 10500 |
-| Motion · TARA 4500 | H3 ref2va + training adapter V2 + TARA motion 4500 |
-| Motion · Solar (`solar` profile) | Solar control alone, or merged at 0.5 with 10500 / TARA 4500; pair with TARA |
+| Motion Transfer v1.0 / TARA v1.0 / Combined / FFP | H3 ref2va + training adapter V2 + the Motion Transfer LoRAs (`motion` profile) |
 | Head Swap v1.0 | H3 ref2va + Head Swap r32 + turbo LoRA; face picture + source video |
 | Sharpness | MiniMax H3 + Little More Sharpness LoRA; 2K/4K via the H3 upscaler (learned latent upscale + short tiled refine) or NVIDIA RTX Video Super Resolution; source video only |
 
@@ -39,7 +39,7 @@ The prompt planner / VLM is Qwen3.5 9B (W4A8 GPTQ), running inside ComfyUI.
 | Variable | Default | Purpose |
 |---|---|---|
 | `HF_TOKEN` | — | Hugging Face token. Required for the motion LoRAs while they are private |
-| `HENGE_MODEL_PROFILES` | `character,motion10500,motion4500,solar,ffp,headswap,sharpness,omniref,fibo` | Also: `omniref` (+22 GB), `fibo`, `sam2d`, `sam3d`, `audio` |
+| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d` | `motion` = every Motion Transfer LoRA; also `audio`, `solar` |
 | `HENGE_MODEL_OVERRIDES` | — | JSON to replace a model URL, e.g. `{"motion4500":{"url":"https://…"}}` |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |
 | `HENGE_EXPOSE_COMFY` | — | `1` also serves ComfyUI on port 8189 |
