@@ -1,5 +1,8 @@
 # Henge on RunPod Serverless
 
+**Video tutorial (4 min):** [both RunPod options step by step](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-runpod-tutorial.mp4), from the network volume to a job on
+Serverless.
+
 Run the Henge UI on your own computer (no GPU needed) and pay for a GPU only while a job is
 running. Each job stage is sent to a RunPod Serverless endpoint; workers start on demand and
 scale back to zero when idle.

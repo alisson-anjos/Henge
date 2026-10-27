@@ -147,6 +147,11 @@ Details and troubleshooting: [docs/RUN_LOCAL.md](docs/RUN_LOCAL.md).
 
 ### B. RunPod, everything in one pod
 
+**Video tutorial (4 min), both RunPod options step by step:** network volume, the pod template, the first boot,
+the Serverless endpoint and the UI on your computer.
+
+[![Henge on RunPod, step by step](docs/images/demo/runpod-tutorial.jpg)](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-runpod-tutorial.mp4)
+
 One container runs the UI, the bridge and ComfyUI; models download on the first boot into the pod volume.
 
 1. **[Deploy the Henge template on RunPod](https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht)** — image, disks, ports and environment are already set

@@ -1,5 +1,8 @@
 # Run Henge on RunPod
 
+**Video tutorial (4 min):** [both RunPod options step by step](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-runpod-tutorial.mp4), from the network volume to a job on
+Serverless.
+
 One container runs everything: the web UI (port 8188), the bridge and ComfyUI.
 Models download on the first boot into the pod's volume at `/workspace`, so the
 next boots (or a new pod with a different GPU on the same network volume) start
