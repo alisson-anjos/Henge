@@ -805,3 +805,45 @@ img{display:block;max-width:100%}
 .field-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:4px 8px;border:0;border-radius:6px;background:rgba(var(--fg-rgb),.06);color:var(--muted);font-size:11px;cursor:pointer}.field-toggle:hover{color:var(--text)}
 .access-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:2px}.access-actions .primary:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:700px){.access-settings>button span{display:none}.access-popover{position:fixed;left:16px;right:16px;top:70px;width:auto}}
+/* Job panel: status pill, pipeline timeline, callouts, plan cards (components/job-pipeline.tsx, generation-panel.tsx) */
+.generation-job{display:grid;gap:12px}
+.job-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px}.job-head .mono{font-size:11px}
+.job-pill{--tone:var(--accent);--tone-rgb:var(--accent-rgb);display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 9px;border-radius:999px;background:rgba(var(--tone-rgb),.12);border:1px solid rgba(var(--tone-rgb),.35);color:var(--tone);font-size:12px;font-weight:650}
+.job-pill i{width:7px;height:7px;border-radius:50%;background:var(--tone)}
+.job-pill.running i,.job-pill.queued_plan i,.job-pill.queued_render i,.job-pill.waiting_gpu i,.job-pill.queued_redo i,.job-pill.queued_mask i{animation:pulse-dot 1.2s ease-in-out infinite}
+.job-pill.completed{--tone:var(--s-48d17a,#48d17a);--tone-rgb:72,209,122}.job-pill.failed{--tone:var(--s-ff8b8b,#ff8b8b);--tone-rgb:239,90,80}.job-pill.cancelled{--tone:var(--muted);--tone-rgb:142,139,160}
+.job-pill.awaiting_approval{--tone:var(--s-f0c35a,#f0c35a);--tone-rgb:240,195,90}
+@keyframes pulse-dot{50%{opacity:.35;transform:scale(.8)}}
+.job-pipeline{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.job-pipeline li{position:relative;display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;padding-bottom:12px}
+.job-pipeline li:not(:last-child):before{content:"";position:absolute;left:11.5px;top:24px;bottom:2px;width:1px;background:var(--line)}
+.job-pipeline li.done:not(:last-child):before,.job-pipeline li.skipped:not(:last-child):before{background:rgba(var(--accent-rgb),.5)}
+.pipeline-dot{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);color:var(--muted);font:600 10px var(--mono);background:var(--surface)}
+.job-pipeline .done .pipeline-dot,.job-pipeline .skipped .pipeline-dot{background:rgba(var(--accent-rgb),.15);border-color:rgba(var(--accent-rgb),.5);color:var(--accent)}
+.job-pipeline .active .pipeline-dot{border-color:var(--accent)}.job-pipeline .active .pipeline-dot i{width:12px;height:12px;border:2px solid rgba(var(--accent-rgb),.25);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+.job-pipeline .failed .pipeline-dot{background:rgba(239,90,80,.15);border-color:rgba(239,90,80,.6);color:var(--s-ff8b8b,#ff8b8b);font-family:var(--display);font-size:13px}
+.pipeline-text{display:grid;gap:2px;min-width:0;padding-top:3px}.pipeline-text strong{font-size:12px;font-weight:600;color:var(--muted)}
+.job-pipeline .done strong,.job-pipeline .skipped strong{color:var(--text);font-weight:500}.job-pipeline .active strong{color:var(--text)}.job-pipeline .failed strong{color:var(--s-ff8b8b,#ff8b8b)}
+.pipeline-text small{font-size:11px;color:var(--muted);line-height:1.4}
+.pipeline-bar{display:block;height:4px;margin-top:5px;border-radius:4px;background:var(--line);overflow:hidden}.pipeline-bar b{display:block;height:100%;border-radius:4px;background:var(--accent);transition:width .6s}
+.job-callout{margin:0;display:grid;gap:6px;padding:11px 12px;border-radius:11px;font-size:12px;line-height:1.5}
+.job-callout p{margin:0}.job-callout small{color:var(--muted)}.job-callout pre{max-height:180px;overflow:auto;font-size:10px;white-space:pre-wrap}
+.job-callout.error{background:rgba(239,90,80,.08);border:1px solid rgba(239,90,80,.35)}.job-callout.error strong{color:var(--s-ff8b8b,#ff8b8b)}
+.job-callout.warn{background:rgba(240,180,41,.08);border:1px solid rgba(240,180,41,.35);color:var(--text)}.job-callout.warn:before{content:"⚠ ";color:var(--s-f0c35a,#f0c35a)}
+.job-message{margin:0;font-size:12px;color:var(--muted)}
+.job-section>summary{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:13px}
+.job-chip{margin-left:auto;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font:500 10px var(--mono);color:var(--muted)}.job-chip.on{color:var(--accent);border-color:rgba(var(--accent-rgb),.5)}
+.plan-summary{font-size:12px;line-height:1.55;color:var(--text)}
+.plan-roles{list-style:none;margin:8px 0;padding:0;display:grid;gap:8px}
+.plan-roles li{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:start;padding:8px;border:1px solid var(--line);border-radius:10px;background:rgba(var(--fg-rgb),.02)}
+.plan-roles img{width:44px;height:56px;object-fit:cover;border-radius:7px;background:var(--n-0c0c11)}
+.plan-role-slot{display:grid;place-items:center;width:44px;height:44px;border-radius:7px;background:rgba(var(--accent-rgb),.12);color:var(--accent);font:600 13px var(--mono)}
+.plan-roles strong{font-size:12px}.plan-roles p{margin:3px 0 0;font-size:11px;line-height:1.45;color:var(--muted);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.plan-roles li:hover p{-webkit-line-clamp:unset}
+.job-subhead{display:block;font-size:12px;font-weight:600;margin-bottom:6px}
+.job-fibo{margin:0;display:grid;gap:5px}.job-fibo figcaption{font-size:11px}
+.generation-job details>summary{list-style:none;display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600;font-size:13px;padding:4px 0}
+.generation-job details>summary::-webkit-details-marker{display:none}
+.generation-job details>summary:before{content:"";flex:none;width:6px;height:6px;margin:0 2px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+.generation-job details[open]>summary:before{transform:rotate(45deg)}
+.generation-job .job-callout details>summary{font-size:11px;font-weight:500;color:var(--muted)}
