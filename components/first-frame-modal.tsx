@@ -17,7 +17,7 @@ export async function coverFit(src: string, width: number, height: number): Prom
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(new File([blob], 'first_frame.png', {type: 'image/png'})) : reject(Error('Could not encode the frame')), 'image/png'));
 }
 
-/** The guide's first selected frame, edited with FLUX.2 [klein] (or FIBO 2) or replaced by an uploaded image. Paint a
+/** The guide's first selected frame, edited with FLUX.3 / FLUX.2 [klein] (or FIBO 2) or replaced by an uploaded image. Paint a
  * mask to edit only that area; Replace, Remove, Add or a free instruction. The result is cropped and resized to the frame's
  * exact size so it can be propagated (Motion Transfer · first-frame propagate). */
 export default function FirstFrameModal({videoUrl, start, image, pictures, lang, onUse, onClose}: {videoUrl?: string; start?: number; image?: File; pictures: Picture[]; lang: Language; onUse: (file: File, edit: {id: string; width: number; height: number} | null) => void; onClose: () => void}) {
@@ -43,7 +43,7 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
     dialog.current?.showModal();
     // ComfyUI can take a while to list its nodes (very large models folder): ask again until the editor is known.
     let tries = 0, timer: ReturnType<typeof setTimeout> | undefined;
-    const ask = () => fetch('/api/backend/health').then(r => r.json()).then(h => {const e = h.frame_editor ?? (h.fibo_ready ? 'fibo' : null); setEditor(e); if (!e && ++tries < 12) timer = setTimeout(ask, 10000);}).catch(() => {});
+    const ask = () => fetch('/api/backend/health').then(r => r.json()).then(h => {const e = h.frame_editor ?? (h.editor_ready ? 'fibo' : null); setEditor(e); if (!e && ++tries < 12) timer = setTimeout(ask, 10000);}).catch(() => {});
     ask();
     fetch('/api/backend/frame-edits').then(r => r.json()).then(rows => {if (Array.isArray(rows)) setEdits(rows);}).catch(() => {});
     if (image) {

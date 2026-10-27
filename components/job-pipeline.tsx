@@ -8,7 +8,7 @@ import type {GenerationJob} from './generation-panel';
 type StepState = 'done' | 'active' | 'waiting' | 'failed' | 'skipped' | 'todo';
 
 const ANALYZE = /^(planning|vlm_|find_people|subject_looks|translate)/;
-const PREPARE = /^(preparing|reference_|fibo_edit|mask_preview|marks_preview)/;
+const PREPARE = /^(preparing|reference_|reference_edit|mask_preview|marks_preview)/;
 
 /** Index of the step the job is on (0..4) and whether it is waiting in a queue there. */
 function position(job: GenerationJob): {at: number; waiting: boolean} {

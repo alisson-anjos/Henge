@@ -28,7 +28,7 @@ class WorkflowContracts(unittest.TestCase):
   process=Mock();process.read_bytes.return_value=b'bash\0-c\0echo /tmp/h3-tara-motion-runtime/run.py\0'
   with patch('server.Path.glob',return_value=[process]):self.assertFalse(training_busy())
  def request(self):return {'mode':'motion','prompt':'motion_transfer: <Picture 1> follows <Video 1>.','quality':'480p','video':{'start_seconds':0,'end_seconds':4.5},'processing':{'requested_seconds_per_shot':4.5,'context_frames':22},'subject_guidance':{'representation':'3d','bindings':[]}}
- def plan(self):return {'source_kind':'human','target_kind':'animal','use_fibo':False,'fibo_instruction':'Replace <image_1> performer with <image_2>.','fibo_picture_slots':[1],'picture_roles':[{'slot':1,'role':'identity'}],'prompt':structured_prompt(),'warnings':[]}
+ def plan(self):return {'source_kind':'human','target_kind':'animal','adapt_reference':False,'adapt_instruction':'Replace <image_1> performer with <image_2>.','adapt_picture_slots':[1],'picture_roles':[{'slot':1,'role':'identity'}],'prompt':structured_prompt(),'warnings':[]}
  def test_raw_prompt_preserves_exact_user_text(self):
   r=self.request();r['prompt']='  Troque pelo <Picture 1> — anime.\nNão mude o ritmo!  '
   p=self.plan();p['prompt']='Rewritten <Picture 99>'
@@ -57,24 +57,24 @@ class WorkflowContracts(unittest.TestCase):
    preview=server.shot_preview(job)
   self.assertEqual((len(fit),len(every)),(4,len(cuts)+1));self.assertTrue(all(s['frames']<=345 for s in off+fit))
   self.assertEqual(preview['cut_mode'],'fit');self.assertEqual(preview['shots'][0]['start'],2);self.assertTrue(preview['shots'][1]['after_cut'])
- def test_fibo_reference_is_reused(self):
+ def test_adapted_reference_is_reused(self):
   import server,shutil as sh
   from PIL import Image
   def job(jid,options={}):
    (server.INPUT/'henge'/jid).mkdir(parents=True,exist_ok=True);server.job_path(jid).mkdir(parents=True,exist_ok=True)
    pic=server.INPUT/'henge'/jid/'cat.png';Image.new('RGB',(8,8),'gray').save(pic);(server.INPUT/'henge'/jid/'guide.mp4').write_bytes(b'v')
    j={'id':jid,'created':0,'status':'awaiting_approval','request':{'mode':'motion','video':{'start_seconds':0}},'options':{'seed':1,**options},'assets':{'video':f'henge/{jid}/guide.mp4','pictures':{'1':str(pic.relative_to(server.INPUT))}},
-      'plan':{'use_fibo':True,'fibo_picture_slots':[1],'source_kind':'human','target_kind':'animal','fibo_instruction':'x','picture_roles':[{'slot':1,'description':'A cat.'}]}}
+      'plan':{'adapt_reference':True,'adapt_picture_slots':[1],'source_kind':'human','target_kind':'animal','adapt_instruction':'x','picture_roles':[{'slot':1,'description':'A cat.'}]}}
    server.save(j);return j
   def fake(outputs,dest):Image.new('RGB',(8,8),'white').save(dest);return dest
   with patch.object(server,'execute_graph',return_value={}) as run,patch.object(server,'image_from_output',side_effect=fake),patch.object(server,'run'):
-   server.fibo_prepare(job('1'*32),job('1'*32));server.fibo_prepare(job('2'*32),job('2'*32));self.assertEqual(run.call_count,1)
-   server.fibo_prepare(job('3'*32),job('3'*32),regenerate=True);self.assertEqual(run.call_count,2)
-   edited=job('4'*32,{'fibo_instruction':'A cat knight, front and back.'});server.fibo_prepare(edited,edited);self.assertEqual(run.call_count,3)
+   server.adapt_prepare(job('1'*32),job('1'*32));server.adapt_prepare(job('2'*32),job('2'*32));self.assertEqual(run.call_count,1)
+   server.adapt_prepare(job('3'*32),job('3'*32),regenerate=True);self.assertEqual(run.call_count,2)
+   edited=job('4'*32,{'adapt_instruction':'A cat knight, front and back.'});server.adapt_prepare(edited,edited);self.assertEqual(run.call_count,3)
    graph=run.call_args[0][1];self.assertEqual(graph['5']['inputs']['prompt'],'A cat knight, front and back.')
-   self.assertTrue(graph['4']['inputs']['image'].endswith('cat.png'));self.assertTrue(graph['22']['inputs']['image'].endswith('fibo_source.png'))
-  self.assertTrue(server.fibo_state(server.load('2'*32))['ready'])
- def test_character_swap_animal_gets_one_fibo_figure(self):
+   self.assertTrue(graph['4']['inputs']['image'].endswith('cat.png'));self.assertTrue(graph['22']['inputs']['image'].endswith('adapt_source.png'))
+  self.assertTrue(server.adapt_state(server.load('2'*32))['ready'])
+ def test_character_swap_animal_gets_one_adapted_figure(self):
   import server
   from edit_modes import character_figure_instruction
   text=character_figure_instruction(2);self.assertIn('Exactly one figure',text);self.assertIn('the person in <image_3>',text)
@@ -87,8 +87,8 @@ class WorkflowContracts(unittest.TestCase):
   def fake_graph(job,graph,stage):return {'4':{'text':[answers[stage]]}}
   with patch.object(server,'prepare_evidence',return_value=([(1,pic)],pic,{})),patch.object(server,'fibo_available',return_value=True),patch.object(server,'execute_graph',side_effect=fake_graph):
    server.planning(job)
-  plan=server.load(jid)['plan'];self.assertTrue(plan['use_fibo'] and plan['preparation_recommended']);self.assertEqual(plan['target_kind'],'animal')
-  req=server.fibo_request(server.load(jid));self.assertTrue(req['figure']);self.assertIn('Exactly one figure',req['instruction'])
+  plan=server.load(jid)['plan'];self.assertTrue(plan['adapt_reference'] and plan['preparation_recommended']);self.assertEqual(plan['target_kind'],'animal')
+  req=server.adapt_request(server.load(jid));self.assertTrue(req['figure']);self.assertIn('Exactly one figure',req['instruction'])
  def test_worker_drops_shot_overlap(self):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0,skip_frames=22)
   self.assertEqual(g['17']['inputs']['skip_frames'],22);self.assertEqual(g['18']['inputs']['skip_frames'],22)
@@ -181,19 +181,19 @@ class WorkflowContracts(unittest.TestCase):
  def test_invented_reference_is_rejected(self):
   r=self.request();r['prompt']='Use <Picture 2>'
   with self.assertRaises(ValueError):validate_request(r,{},[1])
- def test_cross_species_turns_on_fibo(self):self.assertTrue(validate_plan(self.plan(),[1],{},self.request())['use_fibo'])
+ def test_cross_species_turns_on_adaptation(self):self.assertTrue(validate_plan(self.plan(),[1],{},self.request())['adapt_reference'])
  def test_human_to_human_does_not_prepare_for_clothing_or_hair(self):
-  p=self.plan();p.update(source_kind='human',target_kind='human',use_fibo=True)
-  out=validate_plan(p,[1],{'fibo':'auto'},self.request())
-  self.assertFalse(out['use_fibo']);self.assertFalse(out['preparation_recommended'])
- def test_humanoid_creature_does_not_get_fibo(self):
-  plan=self.plan();plan.update(target_kind='other',use_fibo=True)
-  out=validate_plan(plan,[1],{},self.request());self.assertFalse(out['use_fibo']);self.assertFalse(out['preparation_recommended'])
- def test_explicit_fibo_off_is_respected(self):self.assertFalse(validate_plan(self.plan(),[1],{'fibo':'off'},self.request())['use_fibo'])
+  p=self.plan();p.update(source_kind='human',target_kind='human',adapt_reference=True)
+  out=validate_plan(p,[1],{'adapt':'auto'},self.request())
+  self.assertFalse(out['adapt_reference']);self.assertFalse(out['preparation_recommended'])
+ def test_humanoid_creature_does_not_get_adaptation(self):
+  plan=self.plan();plan.update(target_kind='other',adapt_reference=True)
+  out=validate_plan(plan,[1],{},self.request());self.assertFalse(out['adapt_reference']);self.assertFalse(out['preparation_recommended'])
+ def test_explicit_adapt_off_is_respected(self):self.assertFalse(validate_plan(self.plan(),[1],{'adapt':'off'},self.request())['adapt_reference'])
  def test_animal_never_uses_human_body_model(self):
   r=self.request();r['subject_guidance']['bindings']=[{'id':'cat'}];p=self.plan();p.update(source_kind='animal',target_kind='human');self.assertEqual(validate_plan(p,[1],{},r)['representation'],'2d')
  def test_environment_reference_does_not_become_character(self):
-  p=self.plan();p['picture_roles']=[{'slot':1,'role':'identity'},{'slot':2,'role':'environment'}];p['fibo_picture_slots']=[1,2];self.assertEqual(validate_plan(p,[1,2],{},self.request())['picture_roles'][1]['role'],'environment')
+  p=self.plan();p['picture_roles']=[{'slot':1,'role':'identity'},{'slot':2,'role':'environment'}];p['adapt_picture_slots']=[1,2];self.assertEqual(validate_plan(p,[1,2],{},self.request())['picture_roles'][1]['role'],'environment')
  def test_roles_cover_all_input_pictures(self):
   with self.assertRaises(ValueError):validate_plan(self.plan(),[1,2],{},self.request())
  def test_disabled_branches_have_no_loaders(self):

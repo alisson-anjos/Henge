@@ -17,7 +17,7 @@ const stages: Record<string, [string,string,string]> = {
   vlm_guide: ['Analyzing the guide video','Analisando o vídeo guia','Analizando el vídeo guía'],
   vlm_prompt: ['Preparing your description','Preparando sua descrição','Preparando tu descripción'],
   vlm_route: ['Checking reference preparation','Verificando a preparação das referências','Revisando la preparación de referencias'],
-  fibo_edit: ['Adapting the reference','Adaptando a referência','Adaptando la referencia'],
+  reference_edit: ['Adapting the reference','Adaptando a referência','Adaptando la referencia'],
 };
 function translate(labels: [string,string,string], lang: Language) {return labels[lang === 'pt' ? 1 : lang === 'es' ? 2 : 0];}
 export function jobStatusLabel(status: string, lang: Language) {return translate(statuses[status] || statuses.running,lang);}

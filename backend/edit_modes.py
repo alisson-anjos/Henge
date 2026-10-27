@@ -104,7 +104,7 @@ def fixed_plan(mode,prompt,summary,description=''):
     """A reviewed-plan shaped record so the UI and generate() treat every mode alike."""
     roles=[{'slot':1,'role':'identity','description':description}] if mode=='headswap' else []
     return {'prompt':prompt,'summary':summary,'picture_roles':roles,'source_kind':'human','target_kind':'human',
-            'use_fibo':False,'fibo_instruction':'','fibo_picture_slots':[],'preparation_recommended':False,
+            'adapt_reference':False,'adapt_instruction':'','adapt_picture_slots':[],'preparation_recommended':False,
             'preparation_reason':'','warnings':[],'preserve_objects':[],'representation':'original'}
 
 def head_reference(source,dest,size=256):
@@ -135,7 +135,7 @@ def ffp_prompt(sentence,first_frame=None):
 
 
 def character_figure_instruction(count,description=''):
-    """FIBO instruction for a human guide driving an animal. <image_1>..<image_count> show the animal; the image after
+    """Adaptation instruction for a human guide driving an animal. <image_1>..<image_count> show the animal; the image after
     them is the guide's first frame, used only for the pose. One full-body humanoid figure on plain gray: a sheet with
     several figures, or animal leg proportions, let the video model put paws or extra bodies in the wrong places."""
     images=', '.join(f'<image_{i}>' for i in range(1,count+1));pose=f'<image_{count+1}>'

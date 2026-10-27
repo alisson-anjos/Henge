@@ -53,7 +53,7 @@ def summary(job):
     keys = ('id', 'reference', 'mode', 'project', 'status', 'stage', 'progress', 'message', 'error', 'quality', 'duration')
     out = {k: job[k] for k in keys if job.get(k) not in (None, '')}
     plan = job.get('plan') or {}
-    if plan: out['plan'] = {k: plan[k] for k in ('summary', 'prompt', 'representation', 'warnings', 'use_fibo') if k in plan}
+    if plan: out['plan'] = {k: plan[k] for k in ('summary', 'prompt', 'representation', 'warnings', 'adapt_reference') if k in plan}
     return out
 
 
@@ -61,7 +61,7 @@ def summary(job):
 def status() -> dict:
     """Whether Henge and its GPU backend are online, which backend is in use, and which models, turbos and upscalers are installed."""
     h = api('GET', '/health').json()
-    keep = ('online', 'comfy_url', 'offline_reason', 'training_busy', 'tara_ready', 'fibo_ready')
+    keep = ('online', 'comfy_url', 'offline_reason', 'training_busy', 'tara_ready', 'editor_ready')
     return {**{k: h.get(k) for k in keep}, 'models': {k: {'label': v.get('label'), 'task': v.get('task'), 'available': v.get('available', True)} for k, v in (h.get('models') or {}).items()},
             'turbos': {k: v.get('label') for k, v in (h.get('turbos') or {}).items() if v.get('available', True)}, 'upscalers': h.get('upscalers')}
 

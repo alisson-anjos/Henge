@@ -523,7 +523,7 @@ export default function Studio() {
       const request = makeRequest(); if (!request) throw Error('Select a guide interval.');
       request.prompt = nativePrompt(brief + (subjects.length && !subjectErrors ? '\n' + bindingPrompt(subjects, guideRepresentation) : ''));
       request.editor_prompt = brief; setAutoSource(brief); setTranslation(null);
-      const body = new FormData(); body.set('direction', JSON.stringify(request)); body.set('options', JSON.stringify({profile: mode === 'motion' ? 'motion' : 'character', fibo: 'auto', seed: 42, steps: 8, clip_fps: 2})); body.set('video', video.file);
+      const body = new FormData(); body.set('direction', JSON.stringify(request)); body.set('options', JSON.stringify({profile: mode === 'motion' ? 'motion' : 'character', adapt: 'auto', seed: 42, steps: 8, clip_fps: 2})); body.set('video', video.file);
       pictures.forEach(p => body.set(`picture_${p.slot}`, p.file));
       const response = await fetch('/api/backend/jobs', {method: 'POST', body}); const result = await readJson(response);
       if (!response.ok) throw Error(result.detail || result.error || 'Planning failed.');
@@ -578,7 +578,7 @@ export default function Studio() {
     setQuality(q => QUALITY_SHORT[q] > short ? q : Object.keys(QUALITY_SHORT).find(k => QUALITY_SHORT[k] > short) ?? q);
   }, [mode, guideSize]);
   const qualityRow = <div className="setting-row"><span>{t.quality}</span><div className="quality-options">{['480p', '720p', '1080p', ...(mode === 'sharpness' ? ['1440p', '2160p'] : [])].map(q => <button key={q} className={'mono nc ' + (quality === q ? 'chosen' : '')} aria-pressed={quality === q} onClick={() => setQuality(q)}>{q === '1440p' ? '2K' : q === '2160p' ? '4K' : q}</button>)}</div></div>;
-  // The same guide is back (reload, re-upload or a restored job): bring back its FIBO-edited first frame.
+  // The same guide is back (reload, re-upload or a restored job): bring back its edited first frame.
   useEffect(() => {
     if (!video || !guideSignature) return;
     let saved: {id: string; width: number; height: number; slot: number; guide: string} | null = null;
@@ -685,7 +685,7 @@ export default function Studio() {
       if (!slot) {setNotice(tr('Remove a picture to make room for the first frame.', 'Remova uma Picture para abrir espaço para o primeiro quadro.', 'Quita una imagen para dejar espacio al primer fotograma.')); return;}
       setPictures(current => [...current.filter(p => {if (p.slot === slot) URL.revokeObjectURL(p.url); return p.slot !== slot;}), {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
       setFirstFrameSlot(slot); setRequestedProfile('motion_ffp'); setFrameModal(false);
-      // A FIBO edit lives on the bridge: remember it with this guide so a reload can bring it back.
+      // A frame edit lives on the bridge: remember it with this guide so a reload can bring it back.
       try {if (edit) localStorage.setItem(FIRST_FRAME_KEY, JSON.stringify({...edit, slot, guide: guideSignature})); else localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}
       setNotice(tr(`Picture ${slot} is the edited first frame. The First-frame propagate model is selected; describe the edit in the prompt.`, `A Imagem ${slot} é o primeiro quadro editado. O modelo First-frame propagate foi selecionado; descreva a edição no prompt.`, `La Imagen ${slot} es el primer fotograma editado. Se seleccionó el modelo First-frame propagate; describe la edición en el prompt.`));
     }}/>}

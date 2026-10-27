@@ -15,7 +15,7 @@ def settings_block(settings,prompt,width,small):
     return image
 
 def reference_header(references,width,settings='',prompt=''):
-    """references: (slot, path) for a user picture, or (label, path, True) for an image generated from them (FIBO),
+    """references: (slot, path) for a user picture, or (label, path, True) for an image generated from them (adapted reference),
     drawn with an accent label and frame."""
     columns=min(6,max(1,len(references)));cell=width//columns;rows=math.ceil(len(references)/columns)
     height=36+rows*150+30;image=Image.new('RGB',(width,height),'#101018');draw=ImageDraw.Draw(image)
