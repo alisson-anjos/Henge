@@ -1,6 +1,7 @@
 'use client';
 import {useEffect, useRef, useState} from 'react';
 import type {Language} from '../lib/design-copy';
+import Select from './select';
 
 export type CutMode = 'fit' | 'every' | 'off';
 type Shot = {index: number; start: number; end: number; context_seconds: number; after_cut: boolean};
@@ -56,7 +57,7 @@ export default function ShotPlan({jobId, editable, lang}: {jobId: string; editab
   if (!plan) return <small className="muted">{tr('Splitting the guide into shots…', 'Dividindo o guia em trechos…', 'Dividiendo la guía en tramos…')}</small>;
   return <div className="shot-plan">
     <div className="label-row"><small className="muted">{tr('Shots', 'Trechos', 'Tramos')} · {plan.shots.length}</small>
-      {editable ? <select aria-label={tr('Camera cuts', 'Cortes de câmera', 'Cortes de cámara')} value={plan.cut_mode} disabled={busy} onChange={e => change(e.target.value as CutMode)}>{(['fit', 'every', 'off'] as CutMode[]).map(m => <option key={m} value={m}>{cutModeLabel(m, lang)}</option>)}</select>
+      {editable ? <Select aria-label={tr('Camera cuts', 'Cortes de câmera', 'Cortes de cámara')} value={plan.cut_mode} disabled={busy} onChange={e => change(e.target.value as CutMode)}>{(['fit', 'every', 'off'] as CutMode[]).map(m => <option key={m} value={m}>{cutModeLabel(m, lang)}</option>)}</Select>
         : <small className="muted">{cutModeLabel(plan.cut_mode, lang)}</small>}</div>
     <div>{plan.shots.map(s => <figure key={`${s.index}-${s.start}`}>
       <ShotClip src={`/api/backend/jobs/${jobId}/source/video`} start={s.start} end={s.end} label={`${tr('Play shot', 'Tocar trecho', 'Reproducir tramo')} ${s.index}`}/>

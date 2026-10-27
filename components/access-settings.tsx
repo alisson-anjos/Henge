@@ -1,8 +1,11 @@
 'use client';
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import type {Language} from '../lib/design-copy';
 
 type State = {enabled: boolean; source: 'env' | 'ui' | null; user: string};
+
+const Lock = ({open}: {open: boolean}) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <rect x="4" y="11" width="16" height="10" rx="2.5"/><path d={open ? 'M8 11V7a4 4 0 0 1 7.5-2' : 'M8 11V7a4 4 0 0 1 8 0v4'}/></svg>;
 
 /** Lock button in the top bar: turn the optional UI login on, change it or turn it off. Saved on the server
  * (access.json in the bridge data folder); HENGE_PASSWORD in the environment overrides it. */
@@ -12,8 +15,17 @@ export default function AccessSettings({lang}: {lang: Language}) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState('henge');
   const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
   const [error, setError] = useState('');
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {fetch('/api/access').then(r => r.ok ? r.json() : null).then((s: State | null) => {setState(s); if (s?.user) setUser(s.user);}).catch(() => {});}, []);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {if (!box.current?.contains(e.target as Node)) setOpen(false);};
+    const esc = (e: KeyboardEvent) => {if (e.key === 'Escape') setOpen(false);};
+    document.addEventListener('mousedown', away); document.addEventListener('keydown', esc);
+    return () => {document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc);};
+  }, [open]);
 
   async function save(disable: boolean) {
     setError('');
@@ -27,24 +39,29 @@ export default function AccessSettings({lang}: {lang: Language}) {
   }
 
   if (!state) return null;
-  return <div className="access-settings">
-    <button type="button" className="source-link ghost" aria-expanded={open} title={tr('Login for this studio', 'Login deste estúdio', 'Acceso a este estudio')} onClick={() => setOpen(o => !o)}>
-      {state.enabled ? '🔒' : '🔓'}<span>{state.enabled ? tr('Protected', 'Protegido', 'Protegido') : tr('Open', 'Aberto', 'Abierto')}</span></button>
-    {open && <div className="access-popover surface">
+  return <div className="access-settings" ref={box}>
+    <button type="button" className={'source-link ghost access-button' + (state.enabled ? ' on' : '')} aria-expanded={open} title={tr('Login for this studio', 'Login deste estúdio', 'Acceso a este estudio')} onClick={() => setOpen(o => !o)}>
+      <Lock open={!state.enabled}/><span>{state.enabled ? tr('Protected', 'Protegido', 'Protegido') : tr('Open', 'Aberto', 'Abierto')}</span></button>
+    {open && <form className="access-popover" onSubmit={e => {e.preventDefault(); if (password.length >= 8 && user) void save(false);}}>
+      <header><span className={'access-icon' + (state.enabled ? ' on' : '')}><Lock open={!state.enabled}/></span>
+        <div><strong>{tr('Studio login', 'Login do estúdio', 'Acceso al estudio')}</strong>
+          <small>{state.enabled ? tr(`Required · user "${state.user}"`, `Obrigatório · usuário "${state.user}"`, `Obligatorio · usuario "${state.user}"`) : tr('Off · anyone with the address can use it', 'Desligado · qualquer um com o endereço pode usar', 'Desactivado · cualquiera con la dirección puede usarlo')}</small></div></header>
       {state.source === 'env'
-        ? <p className="muted">{tr(`Login required (user "${state.user}"). The password comes from HENGE_PASSWORD on the server; change it there.`, `Login obrigatório (usuário "${state.user}"). A senha vem de HENGE_PASSWORD no servidor; troque por lá.`, `Acceso obligatorio (usuario "${state.user}"). La contraseña viene de HENGE_PASSWORD en el servidor; cámbiala allí.`)}</p>
+        ? <p>{tr('The password comes from HENGE_PASSWORD on the server; change it there.', 'A senha vem de HENGE_PASSWORD no servidor; troque por lá.', 'La contraseña viene de HENGE_PASSWORD en el servidor; cámbiala allí.')}</p>
         : <>
-          <p className="muted">{state.enabled
-            ? tr('Anyone opening this studio must log in. Change the login or turn it off.', 'Quem abrir este estúdio precisa fazer login. Troque o login ou desligue.', 'Quien abra este estudio debe iniciar sesión. Cambia el acceso o desactívalo.')
-            : tr('Anyone with this address can use the studio and your GPU. Set a user and password to require a login.', 'Qualquer um com este endereço pode usar o estúdio e sua GPU. Defina usuário e senha para exigir login.', 'Cualquiera con esta dirección puede usar el estudio y tu GPU. Define usuario y contraseña para exigir acceso.')}</p>
-          <label>{tr('User', 'Usuário', 'Usuario')}<input value={user} autoComplete="username" onChange={e => setUser(e.target.value)}/></label>
-          <label>{tr('Password (8+ characters)', 'Senha (8+ caracteres)', 'Contraseña (8+ caracteres)')}<input type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)}/></label>
+          <p>{state.enabled
+            ? tr('Change the user or password, or turn the login off.', 'Troque o usuário ou a senha, ou desligue o login.', 'Cambia el usuario o la contraseña, o desactiva el acceso.')
+            : tr('Anyone who reaches this address can use the studio and your GPU. Set a login before sharing it.', 'Qualquer um que acesse este endereço pode usar o estúdio e sua GPU. Defina um login antes de compartilhar.', 'Cualquiera que llegue a esta dirección puede usar el estudio y tu GPU. Define un acceso antes de compartirlo.')}</p>
+          <label className="field"><span>{tr('User', 'Usuário', 'Usuario')}</span><input value={user} autoComplete="username" onChange={e => setUser(e.target.value)}/></label>
+          <label className="field"><span>{tr('Password', 'Senha', 'Contraseña')}</span>
+            <span className="field-row"><input type={show ? 'text' : 'password'} autoComplete="new-password" value={password} placeholder={tr('8+ characters', '8+ caracteres', '8+ caracteres')} onChange={e => setPassword(e.target.value)}/>
+              <button type="button" className="field-toggle" onClick={() => setShow(v => !v)}>{show ? tr('Hide', 'Ocultar', 'Ocultar') : tr('Show', 'Mostrar', 'Mostrar')}</button></span></label>
           {error && <small className="validation" role="alert">{error}</small>}
-          <div className="plan-actions">
+          <div className="access-actions">
             {state.enabled && <button type="button" className="quiet-button" onClick={() => save(true)}>{tr('Turn off', 'Desligar', 'Desactivar')}</button>}
-            <button type="button" className="primary" disabled={password.length < 8 || !user} onClick={() => save(false)}>{state.enabled ? tr('Change login', 'Trocar login', 'Cambiar acceso') : tr('Require login', 'Exigir login', 'Exigir acceso')}</button>
+            <button type="submit" className="primary" disabled={password.length < 8 || !user}>{state.enabled ? tr('Save login', 'Salvar login', 'Guardar acceso') : tr('Require login', 'Exigir login', 'Exigir acceso')}</button>
           </div>
         </>}
-    </div>}
+    </form>}
   </div>;
 }
