@@ -10,7 +10,8 @@ export const SETUP_KEY = 'henge-setup-done';
 // Henge's published RunPod templates and referral (supports the project).
 const RUNPOD_SIGNUP = 'https://runpod.io?ref=8t518hht';
 const RUNPOD_POD = 'https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht';
-const RUNPOD_SERVERLESS = 'https://console.runpod.io/serverless/new-endpoint?template=ouo6ep22pd&ref=8t518hht';
+// Serverless templates can't be public on RunPod: the guide creates the worker template in the user's account.
+const RUNPOD_SERVERLESS = 'https://github.com/alisson-anjos/Henge/blob/main/docs/SERVERLESS.md';
 type Tab = 'connection' | 'assistant' | 'access';
 type Provider = 'comfyui' | 'comfy_sdk' | 'runpod';
 type Connection = {provider: Provider; comfy_url: string; runpod_endpoint_id: string; sdk_target: 'proxy' | 'url' | 'cloud'; sdk_url: string;
@@ -135,7 +136,7 @@ function ConnectionPanel({lang}: {lang: Language}) {
         {field('runpod_endpoint_id', tr('Endpoint ID', 'ID do endpoint', 'ID del endpoint'), {placeholder: 'abc123xyz', hint: tr('Create it from the Henge serverless template (docs/SERVERLESS.md).', 'Crie a partir do template serverless do Henge (docs/SERVERLESS.md).', 'Créalo desde la plantilla serverless de Henge (docs/SERVERLESS.md).')})}
         {field('runpod_api_key', tr('RunPod API key', 'Chave da API do RunPod', 'Clave de API de RunPod'), {secret: true, placeholder: saved.has_runpod_api_key ? `${tr('saved', 'salva', 'guardada')} ${saved.runpod_api_key_hint}` : 'rpa_…'})}
         <small className="muted runpod-links">
-          <a href={RUNPOD_SERVERLESS} target="_blank" rel="noreferrer">{tr('Create the endpoint from the Henge template', 'Criar o endpoint pelo template do Henge', 'Crear el endpoint con la plantilla de Henge')} ↗</a>
+          <a href={RUNPOD_SERVERLESS} target="_blank" rel="noreferrer">{tr('Set up a Serverless endpoint (guide)', 'Criar um endpoint Serverless (guia)', 'Crear un endpoint Serverless (guía)')} ↗</a>
           {' · '}<a href={RUNPOD_POD} target="_blank" rel="noreferrer">{tr('or run everything in one pod', 'ou rodar tudo num pod', 'o todo en un pod')} ↗</a>
           {' · '}<a href={RUNPOD_SIGNUP} target="_blank" rel="noreferrer">{tr('No RunPod account? Sign up', 'Sem conta no RunPod? Crie aqui', '¿Sin cuenta de RunPod? Regístrate')} ↗</a>
         </small>

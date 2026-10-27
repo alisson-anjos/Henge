@@ -9,9 +9,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NAME=${ENDPOINT_NAME:-henge-worker}
-# Without IMAGE or TEMPLATE_ID the endpoint uses the published Henge worker template (kept on the current image).
-HENGE_TEMPLATE=${HENGE_TEMPLATE:-ouo6ep22pd}
-[ -z "${IMAGE:-}" ] && [ -z "${TEMPLATE_ID:-}" ] && [ -z "${ENDPOINT_ID:-}" ] && TEMPLATE_ID=$HENGE_TEMPLATE && USE_PUBLISHED=1
+# Serverless templates can't be public on RunPod: without TEMPLATE_ID a worker template is created in your account
+# from the public Henge image.
 IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:latest}
 # runpodctl creates the endpoint with one GPU type; it must exist in the volume's datacenter and have a CUDA 13 driver.
 # The live endpoint lists RTX 5090 first (priority, ~half the price) with RTX PRO 6000 only as fallback when no 5090 is
@@ -26,9 +25,7 @@ id() { python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])'; }
 # the H3 text encoder + model + VAE alone are ~51 GB: without it a second conditioning (Sharpness H3 upscale) is OOM-killed.
 ENV_JSON='{"HENGE_ROLE":"worker","HENGE_COMFY_ARGS":"--fast-disk"}'
 
-if [ -n "${USE_PUBLISHED:-}" ]; then
-  :  # the published template is maintained by Henge
-elif [ -n "${TEMPLATE_ID:-}" ]; then
+if [ -n "${TEMPLATE_ID:-}" ]; then
   runpodctl template update "$TEMPLATE_ID" --image "$IMAGE" --env "$ENV_JSON" >/dev/null
 else
   TEMPLATE_ID=$(runpodctl template create --serverless --name "$NAME" --image "$IMAGE" --env "$ENV_JSON" --container-disk-in-gb 40 | id)

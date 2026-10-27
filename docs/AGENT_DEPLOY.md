@@ -79,9 +79,9 @@ Ask the user for:
    VOLUME_ID=<volume id> scripts/runpod_serverless.sh
    ```
 
-   It creates the endpoint from the published Henge worker template `ouo6ep22pd` (`HENGE_ROLE=worker`,
-   `HENGE_COMFY_ARGS=--fast-disk`, kept on the current image); pass `IMAGE=` to build your own template instead:
-   RTX 5090, 0–2 workers, idle timeout 15 s, execution timeout 1 h. It prints the endpoint id. To add the RTX PRO 6000
+   It creates a worker template in the user's account from the public image `ghcr.io/alisson-anjos/henge:latest`
+   (`HENGE_ROLE=worker`, `HENGE_COMFY_ARGS=--fast-disk`; RunPod does not allow public serverless templates) and the
+   endpoint: RTX 5090, 0–2 workers, idle timeout 15 s, execution timeout 1 h. It prints the endpoint id. To add the RTX PRO 6000
    as a fallback behind the 5090, edit the endpoint's GPU list in the RunPod console (5090 first).
 
 3. **UI on the user's computer**:
