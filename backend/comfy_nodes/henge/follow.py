@@ -84,12 +84,23 @@ def choose(subjects: list, masks: torch.Tensor, images: torch.Tensor, segment_st
     for s in subjects:
         anchors = [a for a in s.get('anchors', []) if segment_start <= a['time_seconds'] < segment_start + n / 24]
         if anchors:
-            scores = torch.zeros(tracks, dtype=torch.int32)
+            # Each mark claims the track under it. A camera cut starts new SAM tracks, so one subject marked before
+            # and after a cut owns one track per side; a mark that falls on no track (or on two overlapping) is skipped.
+            fw, fh = anchors[0]['frame_width'], anchors[0]['frame_height']
+            claimed = []
             for a in anchors:
                 fw, fh = a['frame_width'], a['frame_height']; scale = min(w / fw, h / fh)
-                scores += score_point(round((a['time_seconds'] - segment_start) * 24),
-                                      a['x'] * fw * scale + (w - fw * scale) / 2, a['y'] * fh * scale + (h - fh * scale) / 2)
-            if take(scores, s, 'mark'):
+                hit = score_point(round((a['time_seconds'] - segment_start) * 24),
+                                  a['x'] * fw * scale + (w - fw * scale) / 2, a['y'] * fh * scale + (h - fh * scale) / 2).clone()
+                for u in used | set(claimed):
+                    hit[u] = 0
+                if int(hit.sum()) == 1:
+                    claimed.append(int(hit.argmax()))
+            if claimed:
+                for t in claimed:
+                    used.add(t); chosen.append((t, s, 'mark'))
+                if len(claimed) < len(anchors):
+                    warnings.append(f"{s['label']}: {len(anchors) - len(claimed)} of its marks in this shot are not on one person")
                 continue
             warnings.append(f"{s['label']}: the mark in this shot is not on one person; trying by look")
         elif s.get('carry'):

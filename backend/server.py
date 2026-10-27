@@ -424,6 +424,13 @@ def mask_preview(job):
         videos=output_files(outputs,'4','videos')
         if not videos:raise ValueError('ComfyUI finished without the color guide preview')
         FILES.download(videos[0],work/'marks_preview.mp4');shutil.copyfile(clip,work/'marks_source.mp4')
+        # What tracking said (a subject not found, a mark between two people) shows on the approval screen.
+        try:found=[json.loads(x) for x in (outputs.get('2',{}).get('henge_tracks') or [])]
+        except (TypeError,ValueError):found=[]
+        notes=[f'Color guide: {w}' for f in found for w in f.get('warnings',[])]
+        missing=[b['label'] for b in bindings if not any(x.get('id')==b['id'] for f in found for x in f.get('subjects',[]))]
+        notes+=[f'Color guide: {m} was not found in the first shot' for m in missing]
+        if notes:job['plan']['warnings']=[w for w in job['plan'].get('warnings',[]) if not w.startswith('Color guide:')]+notes;save(job,plan=job['plan'])
         v=time.time_ns();save(job,marks_preview_url=f"/api/backend/jobs/{job['id']}/files/marks_preview.mp4?v={v}",marks_source_url=f"/api/backend/jobs/{job['id']}/files/marks_source.mp4?v={v}");return
     save(job,message='Building the latent mask preview')
     outputs=execute_graph(job,mask_preview_graph(*args,job['options'].get('mask'),out),'mask_preview')
