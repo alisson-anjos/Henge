@@ -916,7 +916,8 @@ def health():
     # A serverless endpoint reports its nodes and models only after its first job: until then assume the full image.
     unknown=bool(REMOTE) and not info
     installed=comfy_choices(info,'LoraLoaderModelOnly','lora_name')
-    if LOCAL_MODELS:requirements,mode_ready,setup=check_requirements(LOCAL_MODELS,MODELS)
+    # The disk checklist describes the local ComfyUI only: with a remote backend (Comfy SDK, RunPod) its files decide.
+    if LOCAL_MODELS and not REMOTE:requirements,mode_ready,setup=check_requirements(LOCAL_MODELS,MODELS)
     else:
         # Remote ComfyUI: no download checklist; availability comes from the files ComfyUI lists.
         requirements,mode_ready=[],{key:online for key in MODELS}
