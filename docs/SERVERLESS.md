@@ -82,7 +82,8 @@ VOLUME_ID=<id> scripts/runpod_volume.sh                        # top up an exist
 - Creates the network volume (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 180), unless
   `VOLUME_ID` is given.
 - Starts the fill pod from `ghcr.io/alisson-anjos/henge:latest` on the first GPU in stock
-  (`FILL_GPUS`), with `HENGE_MODEL_PROFILES=$PROFILES` and `HF_TOKEN` from your RunPod secret `hf_token`.
+  (`FILL_GPUS`), with `HENGE_MODEL_PROFILES=$PROFILES` (and `HF_TOKEN` from your RunPod secret `hf_token` only when
+  `ffp` or `solar` is asked for).
 - Prints the download progress every minute and deletes the pod when every model is installed.
 
 A top-up skips the files that are already there: use it after an interrupted download or to add profiles.

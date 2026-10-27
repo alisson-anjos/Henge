@@ -52,7 +52,7 @@ Ask the user for:
 1. Use the published Henge pod template `mnxax277c8` (deploy link for the user: https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht; with runpodctl,
    `--template-id mnxax277c8`). Only if the user wants their own: `scripts/runpod_template.sh` (read it first; `TEMPLATE_ID=<id>`
    updates an existing template). Settings: image `ghcr.io/alisson-anjos/henge:latest`, container
-   disk 30 GB, volume 180 GB at `/workspace`, HTTP port 8188, env `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}`.
+   disk 30 GB, volume 180 GB at `/workspace`, HTTP port 8188 (add `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}` only for the private `ffp` profile).
 2. With the user's approval, deploy a pod from it on a GPU with a CUDA 13 driver (RTX 5090 or larger).
 3. Check: the pod log shows `model downloads finished`, then
    `curl -s https://<pod id>-8188.proxy.runpod.net/api/backend/health` returns `"online": true`.

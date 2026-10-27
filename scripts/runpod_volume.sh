@@ -4,7 +4,7 @@
 # Usage: scripts/runpod_volume.sh                      # new volume in $DATACENTER
 #        VOLUME_ID=<id> scripts/runpod_volume.sh       # fill (or top up) an existing one
 #        PROFILES=character,solar VOLUME_ID=<id> scripts/runpod_volume.sh   # choose the model profiles
-# Needs: runpodctl configured; a RunPod secret named hf_token for the private LoRAs.
+# Needs: runpodctl configured. Only the private profiles (ffp, solar) need a RunPod secret named hf_token.
 # How: a temporary pod from the Henge image mounts the volume at /workspace, downloads the PROFILES models
 # exactly as a normal pod does, and is deleted once its setup screen (/api/backend/health) reports every
 # model installed. Already present files are skipped. Serverless workers never download: they only read.
@@ -15,7 +15,7 @@ IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:latest}
 PROFILES=${PROFILES:-character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d,audio}
 # REMOVE: optional comma-separated model paths (relative to models/) to delete from the volume, e.g. retired files.
 # OVERRIDES: JSON for HENGE_MODEL_OVERRIDES (e.g. a link newer than the image's manifest).
-ENV_JSON=$(PROFILES=$PROFILES REMOVE=${REMOVE:-} OVERRIDES=${OVERRIDES:-} python3 -c 'import json,os;e={"HENGE_MODEL_PROFILES":os.environ["PROFILES"],"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"};e.update({"HENGE_REMOVE_MODELS":os.environ["REMOVE"]} if os.environ["REMOVE"] else {});e.update({"HENGE_MODEL_OVERRIDES":os.environ["OVERRIDES"]} if os.environ["OVERRIDES"] else {});print(json.dumps(e))')
+ENV_JSON=$(PROFILES=$PROFILES REMOVE=${REMOVE:-} OVERRIDES=${OVERRIDES:-} python3 -c 'import json,os;e={"HENGE_MODEL_PROFILES":os.environ["PROFILES"]};e.update({"HF_TOKEN":"{{ RUNPOD_SECRET_hf_token }}"} if {"ffp","solar"}&set(os.environ["PROFILES"].split(",")) else {});e.update({"HENGE_REMOVE_MODELS":os.environ["REMOVE"]} if os.environ["REMOVE"] else {});e.update({"HENGE_MODEL_OVERRIDES":os.environ["OVERRIDES"]} if os.environ["OVERRIDES"] else {});print(json.dumps(e))')
 # Any GPU with a CUDA 13 driver will do (it only downloads); the first one in stock is used.
 FILL_GPUS=${FILL_GPUS:-NVIDIA RTX PRO 6000 Blackwell Server Edition,NVIDIA A100-SXM4-80GB,NVIDIA L40S,NVIDIA RTX A6000,NVIDIA GeForce RTX 5090,NVIDIA GeForce RTX 4090}
 id() { python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])'; }

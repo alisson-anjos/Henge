@@ -11,6 +11,9 @@ moved to another GPU without re-downloading ~60 GB of weights.
 import os,shlex,shutil,signal,subprocess,sys,time
 from pathlib import Path
 APP=Path('/app');COMFY=Path(os.environ.get('COMFY_ROOT','/opt/ComfyUI'));processes=[];stopping=False
+# A RunPod secret reference that did not resolve (no such secret on this account) is not a token; every child
+# process (downloader, ComfyUI, huggingface_hub) would send it and be refused even on public files.
+if os.environ.get('HF_TOKEN','').startswith('{{'):del os.environ['HF_TOKEN']
 
 def shutdown(*_):
     global stopping

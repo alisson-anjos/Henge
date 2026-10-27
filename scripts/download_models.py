@@ -62,6 +62,9 @@ def main():
     from huggingface_hub import hf_hub_download
     token=os.environ.get('HF_TOKEN') or None
     if os.environ.get('HF_TOKEN_FILE'):token=Path(os.environ['HF_TOKEN_FILE']).read_text().strip()
+    # A RunPod secret reference that did not resolve ({{ RUNPOD_SECRET_… }} on an account without that secret) is not a
+    # token: sending it would make Hugging Face refuse even the public files.
+    if token and (token.startswith('{{') or not token.strip()):token=None
     status=DownloadStatus(root,items)
     failed=[]
     for item in items:

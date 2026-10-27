@@ -10,7 +10,6 @@ IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:latest}
 ENV_JSON=$(python3 - <<'EOF'
 import json
 print(json.dumps({
-  "HF_TOKEN": "{{ RUNPOD_SECRET_hf_token }}",
   "HENGE_MODEL_PROFILES": "character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d,audio",
   "HENGE_COMFY_ARGS": "--lowvram",
 }))
