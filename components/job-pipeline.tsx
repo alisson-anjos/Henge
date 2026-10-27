@@ -40,7 +40,7 @@ export default function JobPipeline({job, lang}: {job: GenerationJob; lang: Lang
     {label: tr('Review the plan', 'Revisar o plano', 'Revisar el plan'),
      detail: s => s === 'active' ? tr('check it below, then Generate video', 'confira abaixo e clique em Gerar vídeo', 'revísalo abajo y pulsa Generar vídeo') : s === 'skipped' ? tr('auto-approved', 'aprovado automaticamente', 'aprobado automáticamente') : s === 'done' ? tr('approved', 'aprovado', 'aprobado') : ''},
     {label: tr('Prepare references', 'Preparar referências', 'Preparar referencias'),
-     detail: s => s === 'active' ? (waiting ? queue : tr('background removal, marks, FIBO if needed', 'remoção de fundo, marcações, FIBO se preciso', 'quitar fondo, marcas, FIBO si hace falta')) : ''},
+     detail: s => s === 'active' ? (waiting ? queue : tr('background removal, marks, reference adaptation if needed', 'remoção de fundo, marcações, adaptação da referência se preciso', 'quitar fondo, marcas, adaptación de la referencia si hace falta')) : ''},
     {label: tr('Generate the video', 'Gerar o vídeo', 'Generar el vídeo'),
      detail: s => s === 'active' ? [shots, pct, eta].filter(Boolean).join(' · ') || tr('starting', 'começando', 'empezando') : s === 'done' && job.total_segments ? `${job.total_segments} ${job.total_segments > 1 ? tr('shots', 'trechos', 'tramos') : tr('shot', 'trecho', 'tramo')}` : ''},
     {label: tr('Join, add audio, finish', 'Juntar, pôr áudio, finalizar', 'Unir, añadir audio, terminar'),

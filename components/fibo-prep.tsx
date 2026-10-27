@@ -31,10 +31,10 @@ export default function FiboPrep({jobId, lang}: {jobId: string; lang: Language})
   if (!state?.enabled) return null;
   const edited = instruction.trim() !== (state.instruction || '').trim();
   return <div className="fibo-prep">
-    <div className="label-row"><strong>{state.figure ? tr('FIBO humanoid figure', 'Figura humanoide do FIBO', 'Figura humanoide de FIBO') : tr('FIBO reference', 'Referência do FIBO', 'Referencia de FIBO')}</strong>
+    <div className="label-row"><strong>{state.figure ? tr('Humanoid figure', 'Figura humanoide', 'Figura humanoide') : tr('Adapted reference', 'Referência adaptada', 'Referencia adaptada')}</strong>
       <small className="muted">{state.ready ? tr('Ready · reused, not generated again', 'Pronta · reaproveitada, não será gerada de novo', 'Lista · reutilizada, no se genera de nuevo') : tr('Generated before the video if you approve', 'Gerada antes do vídeo ao aprovar', 'Se genera antes del vídeo al aprobar')}</small></div>
-    {state.ready && state.preview_url ? <img src={state.preview_url} alt={tr('FIBO reference', 'Referência do FIBO', 'Referencia de FIBO')}/> : <div className="fibo-prep-empty">{busy ? tr('FIBO is generating… (about 1–3 min)', 'O FIBO está gerando… (cerca de 1–3 min)', 'FIBO está generando… (unos 1–3 min)') : tr('Not generated yet', 'Ainda não gerada', 'Aún no generada')}</div>}
-    <label>{tr('FIBO instruction', 'Instrução do FIBO', 'Instrucción de FIBO')}<textarea value={instruction} disabled={busy} onChange={e => setInstruction(e.target.value)}/></label>
+    {state.ready && state.preview_url ? <img src={state.preview_url} alt={tr('Adapted reference', 'Referência adaptada', 'Referencia adaptada')}/> : <div className="fibo-prep-empty">{busy ? tr('Generating… (about 1–3 min)', 'Gerando… (cerca de 1–3 min)', 'Generando… (unos 1–3 min)') : tr('Not generated yet', 'Ainda não gerada', 'Aún no generada')}</div>}
+    <label>{tr('Edit instruction', 'Instrução de edição', 'Instrucción de edición')}<textarea value={instruction} disabled={busy} onChange={e => setInstruction(e.target.value)}/></label>
     {error && <p className="validation" role="alert">{error}</p>}
     <div className="plan-actions">
       <button className="quiet-button" disabled={busy || !instruction.trim()} onClick={generate}>{busy ? tr('Generating…', 'Gerando…', 'Generando…') : state.ready && !edited ? tr('Regenerate', 'Regenerar', 'Regenerar') : tr('Generate now', 'Gerar agora', 'Generar ahora')}</button>

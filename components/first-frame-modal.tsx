@@ -102,6 +102,11 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
   }
   function clearMask() {const c = paint.current; c?.getContext('2d')?.clearRect(0, 0, c.width, c.height); setPainted(false);}
   const ready = op === 'remove' ? !!(what.trim() || painted) : op === 'replace' ? !!((what.trim() || painted) && instruction.trim()) : !!instruction.trim();
+  // Why the edit button is still off: a disabled button with no reason looks stuck.
+  const missing = ready ? '' : op === 'remove' ? tr('Say what should go away, or paint it.', 'Diga o que deve sumir, ou pinte a área.', 'Di qué debe desaparecer, o píntalo.')
+    : op === 'replace' && !(what.trim() || painted) ? tr('Say what you replace (or paint it) and with what.', 'Diga o que vai substituir (ou pinte a área) e pelo quê.', 'Di qué reemplazas (o píntalo) y por qué.')
+    : op === 'replace' ? tr('Say what to replace it with.', 'Diga pelo que substituir.', 'Di por qué reemplazarlo.')
+    : op === 'add' ? tr('Say what to add, and where.', 'Diga o que adicionar, e onde.', 'Di qué añadir y dónde.') : tr('Describe the change.', 'Descreva a mudança.', 'Describe el cambio.');
   // Both panes take the guide frame's shape (a 16:9 frame no longer sits beside a tall 9:16 box).
   const shape = frame ? {aspectRatio: `${frame.width} / ${frame.height}`, maxWidth: `min(100%, calc(var(--ff-h) * ${(frame.width / frame.height).toFixed(4)}))`} : undefined;
   const ops: [typeof op, string][] = [['replace', tr('Replace', 'Substituir', 'Reemplazar')], ['remove', tr('Remove', 'Remover', 'Quitar')], ['add', tr('Add', 'Adicionar', 'Añadir')], ['free', tr('Describe', 'Descrever', 'Describir')]];
@@ -125,15 +130,16 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
         {(op === 'replace' || op === 'remove') && <label>{op === 'remove' ? tr('What should go away?', 'O que deve sumir?', '¿Qué debe desaparecer?') : tr('What do you replace?', 'O que você vai substituir?', '¿Qué reemplazas?')}<input value={what} onChange={e => setWhat(e.target.value)} placeholder={tr('the black hoodie', 'o moletom preto', 'la sudadera negra')}/></label>}
         {op !== 'remove' && <label>{op === 'replace' ? tr('With what?', 'Pelo quê?', '¿Por qué?') : op === 'add' ? tr('What do you add, and where?', 'O que adicionar, e onde?', '¿Qué añades y dónde?') : tr('What should change in this frame?', 'O que deve mudar neste quadro?', '¿Qué debe cambiar en este fotograma?')}<textarea value={instruction} onChange={e => setInstruction(e.target.value)} placeholder={op === 'add' ? tr('a small dragon on his shoulder', 'um pequeno dragão no ombro dele', 'un pequeño dragón en su hombro') : op === 'replace' ? tr('a red leather jacket', 'uma jaqueta de couro vermelha', 'una chaqueta de cuero roja') : tr('Set his hands on fire', 'Coloque fogo nas mãos dele', 'Pon fuego en sus manos')}/></label>}
         {pictures.length > 0 && <label className="prompt-assist-row"><input type="checkbox" checked={useRefs} onChange={e => setUseRefs(e.target.checked)}/><span><strong>{tr(`Send my pictures to ${editorName} as references`, `Enviar minhas Pictures ao ${editorName} como referência`, `Enviar mis imágenes a ${editorName} como referencia`)}</strong></span></label>}
-      </> : <small className="muted">{tr('No image editor (FLUX.2 Klein or FIBO) is installed on this ComfyUI; upload an edited frame instead.', 'Nenhum editor de imagem (FLUX.2 Klein ou FIBO) está instalado neste ComfyUI; envie um quadro já editado.', 'No hay editor de imagen (FLUX.2 Klein o FIBO) en este ComfyUI; sube un fotograma editado.')}</small>}
+      </> : <small className="muted">{tr('No image editor (FLUX Klein or FIBO) is installed on this ComfyUI; upload an edited frame instead.', 'Nenhum editor de imagem (FLUX Klein ou FIBO) está instalado neste ComfyUI; envie um quadro já editado.', 'No hay editor de imagen (FLUX Klein o FIBO) en este ComfyUI; sube un fotograma editado.')}</small>}
       {edits.length > 0 && <div className="recent-edits"><span className="eyebrow muted">{tr('Recent edits', 'Edições recentes', 'Ediciones recientes')}</span><div>{edits.map(e => <button key={e.id} title={e.instruction} aria-pressed={result?.edit === e.id} onClick={() => pick(e)}><img src={e.url} alt={e.instruction} loading="lazy"/></button>)}</div></div>}
       {error && <p className="validation" role="alert">{error}</p>}
     </div>
     </div>
       <input hidden ref={upload} type="file" accept="image/jpeg,image/png,image/webp" onChange={e => {const file = e.target.files?.[0]; if (file) setResult({blob: file, url: URL.createObjectURL(file)}); e.target.value = '';}}/>
     <div className="modal-actions first-frame-footer">
+        {editor && frame && missing && !busy && <small className="muted first-frame-hint">{missing}</small>}
         <button className="quiet-button" disabled={!frame} onClick={() => upload.current?.click()}>{tr('Upload edited image', 'Enviar imagem editada', 'Subir imagen editada')}</button>
-        {editor && <button className="quiet-button" disabled={!frame || !ready || busy} onClick={edit}>{busy ? tr('Editing…', 'Editando…', 'Editando…') : tr(`Edit with ${editorName}`, `Editar com ${editorName}`, `Editar con ${editorName}`)}</button>}
+        {editor && <button className="quiet-button" disabled={!frame || !ready || busy} title={missing || undefined} onClick={edit}>{busy ? tr('Editing…', 'Editando…', 'Editando…') : tr(`Edit with ${editorName}`, `Editar com ${editorName}`, `Editar con ${editorName}`)}</button>}
         <button className="primary" disabled={!frame || !result || busy} onClick={use}>{image ? tr('Use this picture', 'Usar esta imagem', 'Usar esta imagen') : tr('Use as first frame', 'Usar como primeiro quadro', 'Usar como primer fotograma')}</button>
     </div>
   </dialog>;

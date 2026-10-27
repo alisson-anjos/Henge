@@ -601,7 +601,7 @@ def planning(job):
         # One character, no bindings: the Character Swap v1.1 training-format prompt.
         details=ask(CHARACTER_INSTRUCTION,pictures[0][1],'vlm_picture_1',1024)
         plan=fixed_plan('headswap',character_swap_prompt(details),'Replace the main subject of the guide video with the character from Picture 1, keeping scene, camera and performance (Character Swap v1.1 prompt format).',details)
-        if job['options'].get('fibo','auto')!='off' and fibo_available():
+        if job['options'].get('fibo','auto')!='off' and frame_editor():
             # An animal reference for a human performer: FIBO can redraw it as one upright humanoid figure.
             kind=ask('Is the main subject of this picture a human, an animal or something else? Answer with one word: human, animal or other.',pictures[0][1],'vlm_species',16)
             if re.search(r'\banimal\b',kind.lower()):
@@ -656,9 +656,9 @@ def planning(job):
     raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw.strip());plan=json.loads(raw)
     plan['prompt']=strip_timecodes(evidence['prompt'])
     plan=validate_plan(plan,slots,job['options'],r)
-    if (plan['use_fibo'] or plan['preparation_recommended']) and not fibo_available():
+    if (plan['use_fibo'] or plan['preparation_recommended']) and not frame_editor():
         plan['use_fibo']=plan['preparation_recommended']=False
-        plan['warnings'].append('Reference adaptation (FIBO) is not installed on this ComfyUI; the original pictures are used.')
+        plan['warnings'].append('Reference adaptation needs an image editor (FLUX Klein or FIBO), not installed on this ComfyUI; the original pictures are used.')
     plan['prompt']=add_marks(plan['prompt'],r,plan['representation'])
     if plan['representation'] in ('mask','2d') and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
     save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.',step=None,step_total=None)
@@ -681,13 +681,14 @@ def fibo_request(job):
         described={str(x.get('slot')):x.get('description','') for x in plan.get('picture_roles',[])}
         default=character_figure_instruction(len(selected),described.get(str(slots[0]),''))
     else:default=plan['fibo_instruction']
-    h=hashlib.sha256(f"v3|{'figure' if figure else 'frame'}|{override or ('' if figure else default)}".encode())
+    # The editor is part of the key: a reference made by FIBO is not reused once Klein is installed.
+    h=hashlib.sha256(f"v3|{frame_editor() or 'fibo'}|{'figure' if figure else 'frame'}|{override or ('' if figure else default)}".encode())
     for p in selected:file_digest(INPUT/p,h)
     h.update(f"|{job['request']['video']['start_seconds']}|".encode());file_digest(INPUT/assets['video'],h)
     return {'figure':figure,'selected':selected,'instruction':override or default,'default_instruction':default,'key':h.hexdigest()[:32]}
 
 def fibo_prepare(job,runner,regenerate=False):
-    """The FIBO reference for a job, from the cache when the same pictures (and instruction) were prepared before.
+    """The prepared reference for a job (Klein or FIBO), from the cache when the same pictures (and instruction) were prepared before.
     `runner` is the job whose status the ComfyUI run reports to. Copies it to the job's input and preview."""
     req=fibo_request(job);inp=INPUT/'henge'/job['id'];inp.mkdir(parents=True,exist_ok=True);FIBO_CACHE.mkdir(parents=True,exist_ok=True)
     cached=FIBO_CACHE/f"{req['key']}.png"
@@ -695,8 +696,10 @@ def fibo_prepare(job,runner,regenerate=False):
         seed=int(time.time())%2**31 if regenerate else int(job['options'].get('seed',42))
         frame=inp/'fibo_source.png';run(['ffmpeg','-v','error','-ss',str(job['request']['video']['start_seconds']),'-i',str(INPUT/job['assets']['video']),'-frames:v','1','-threads','1','-y',str(frame)])
         frame=frame.relative_to(INPUT).as_posix()
-        if req['figure']:graph=fibo_graph(req['selected'][0],req['selected'][1:]+[frame],req['instruction'],seed)
-        else:graph=fibo_graph(frame,req['selected'],req['instruction'],seed)
+        # The same editor as the edit modal: FLUX.3 / FLUX.2 [klein] when installed, else FIBO 2.
+        build={'klein3':klein3_graph,'klein':klein_graph}.get(frame_editor(),fibo_graph)
+        if req['figure']:graph=build(req['selected'][0],req['selected'][1:]+[frame],req['instruction'],seed)
+        else:graph=build(frame,req['selected'],req['instruction'],seed)
         made=image_from_output(execute_graph(runner,graph,'fibo_edit'),inp/'fibo_new.png');shutil.move(made,cached)
     prepared=inp/'fibo_prepared.png';shutil.copyfile(cached,prepared);shutil.copyfile(cached,job_path(job['id'])/'fibo_preview.png')
     # During generation `job` is the live record; on the approval screen it was read before the long FIBO run.
@@ -1081,7 +1084,7 @@ def health():
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
-    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info) or klein_available(info),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -1238,7 +1241,7 @@ async def preparation(jid:str,request:Request):
         job=load(jid)
         if job['status']!='awaiting_approval':raise HTTPException(409,'Reference preparation can only change before approval')
         plan=dict(job['plan']);enabled=body['enabled']
-        if enabled and not fibo_available():raise HTTPException(409,'Reference adaptation (FIBO) is not installed on this ComfyUI')
+        if enabled and not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FLUX Klein or FIBO), not installed on this ComfyUI')
         if enabled and (not plan.get('fibo_picture_slots') or not plan.get('fibo_instruction','').strip()):raise HTTPException(400,'The analysis did not provide a reference preparation instruction')
         plan['use_fibo']=enabled
         options={**job['options'],'fibo':'on' if enabled else 'off'}
@@ -1399,7 +1402,7 @@ def file(jid:str,name:str):
 @app.get('/jobs/{jid}/fibo')
 def get_fibo(jid:str):
     try:return fibo_state(load(jid))
-    except (KeyError,TypeError) as e:raise HTTPException(409,f'The FIBO reference is not available yet: {e}')
+    except (KeyError,TypeError) as e:raise HTTPException(409,f'The adapted reference is not available yet: {e}')
 
 @app.post('/jobs/{jid}/fibo')
 async def regenerate_fibo(jid:str,request:Request):
@@ -1409,18 +1412,18 @@ async def regenerate_fibo(jid:str,request:Request):
     if instruction is not None and (not isinstance(instruction,str) or len(instruction)>4000):raise HTTPException(400,'The instruction must be text up to 4000 characters')
     with LOCK:
         job=load(jid)
-        if job['status']!='awaiting_approval':raise HTTPException(409,'The FIBO reference can only change while the plan awaits approval')
-        if not (job.get('plan') or {}).get('use_fibo'):raise HTTPException(409,'This job does not use FIBO')
-        if not fibo_available():raise HTTPException(409,'Reference adaptation (FIBO) is not installed on this ComfyUI')
+        if job['status']!='awaiting_approval':raise HTTPException(409,'The adapted reference can only change while the plan awaits approval')
+        if not (job.get('plan') or {}).get('use_fibo'):raise HTTPException(409,'This job does not adapt the reference')
+        if not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FLUX Klein or FIBO), not installed on this ComfyUI')
         if instruction is not None:
             options={**job['options'],'fibo_instruction':instruction.strip()}
             if not instruction.strip() or instruction.strip()==fibo_request({**job,'options':{**job['options'],'fibo_instruction':''}})['default_instruction']:options.pop('fibo_instruction')
             save(job,options=options);job=load(jid)
-    runner={'id':uuid.uuid4().hex,'created':time.time(),'status':'running','stage':'fibo_edit','progress':0,'request':{'mode':'fibo_prepare','job':jid},'options':{},'message':'Preparing the FIBO reference'}
+    runner={'id':uuid.uuid4().hex,'created':time.time(),'status':'running','stage':'fibo_edit','progress':0,'request':{'mode':'fibo_prepare','job':jid},'options':{},'message':'Adapting the reference'}
     job_path(runner['id']).mkdir(parents=True);save(runner)
     try:await asyncio.to_thread(fibo_prepare,job,runner,bool(body.get('regenerate',True)))
     except Exception as e:
-        save(runner,status='failed',error=str(e)[:2000]);raise HTTPException(502,f'FIBO failed: {e}')
+        save(runner,status='failed',error=str(e)[:2000]);raise HTTPException(502,f'Reference adaptation failed: {e}')
     save(runner,status='completed',stage='complete',progress=1)
     return fibo_state(load(jid))
 
@@ -1608,7 +1611,7 @@ def run_job_tool(name,args):
         return f"{len(images)} frames of the {args['which']} video, in order{note}.",images
     if name=='view_job_image':
         job=load(args['job_id']);path=job_path(job['id'])/'fibo_preview.png'
-        if args.get('which')!='fibo' or not path.is_file():raise ValueError('This job has no FIBO preview; its plan did not use FIBO or preparation has not finished')
+        if args.get('which')!='fibo' or not path.is_file():raise ValueError('This job has no adapted reference; its plan did not adapt one or preparation has not finished')
         return 'FIBO-prepared appearance and pose reference.',[assistant.jpeg_data_url(path)]
     try:
         if name=='set_job_mark_opacity':set_mark_opacity(args['job_id'],args['opacity']);return 'Mark opacity saved.',[]
