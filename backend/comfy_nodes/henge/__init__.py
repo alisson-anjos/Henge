@@ -7,6 +7,7 @@ from PIL import Image
 import folder_paths,comfy.utils,comfy.sd,comfy.model_management as mm
 from .clip_video import clip_with_video_context
 from . import follow
+from .report import ui_report
 
 
 def input_path(name):
@@ -56,14 +57,14 @@ class HengeGuide:
         if packed is None or packed.shape[1]==0:
             # Nobody in this shot (a cutaway, an empty room): it goes through unmarked instead of failing the job.
             del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
-            return {'ui':{'henge_tracks':[json.dumps({'warnings':['Nobody found in this shot; it was left unmarked'],'subjects':[]})]},'result':(images,empty)}
+            return {'ui':ui_report({'henge_tracks':[json.dumps({'warnings':['Nobody found in this shot; it was left unmarked'],'subjects':[]})]}),'result':(images,empty)}
         masks=unpack_masks(packed).cpu().bool() # N,objects,h,w
         if tuple(masks.shape[-2:])!=tuple(images.shape[1:3]):masks=torch.nn.functional.interpolate(masks.float(),size=images.shape[1:3],mode='nearest').bool()
         n,h,w=images.shape[:3]
         # Marks, continuity from the previous shot and recognition by look (follow.py): never guessed by position.
         picked,warnings=follow.choose(subjects,masks,images,segment_start)
         chosen=[(t,s,tuple(int(s['hex'].lstrip('#')[i:i+2],16) for i in [0,2,4])) for t,s,_ in picked]
-        tracking={'ui':{'henge_tracks':[json.dumps(follow.report(picked,masks,images,warnings))]}}
+        tracking={'ui':ui_report({'henge_tracks':[json.dumps(follow.report(picked,masks,images,warnings))]})}
         object_mask=torch.zeros((n,h,w),dtype=torch.bool)
         for noun in json.loads(preserve_objects):
             if noun not in ['phone','microphone','guitar','ukulele','cup','bottle','bicycle','torch','piano','keyboard']:continue
@@ -266,7 +267,9 @@ class HengeSaveVideo:
         proc=subprocess.Popen(['ffmpeg','-v','error','-y','-f','rawvideo','-pix_fmt','rgb24','-s',f'{w}x{h}','-r',str(fps),'-i','pipe:0','-an','-c:v','libx264','-threads','2','-crf','17','-pix_fmt','yuv420p','-movflags','+faststart',str(p)],stdin=subprocess.PIPE,stderr=subprocess.PIPE)
         _,err=proc.communicate(frames.tobytes())
         if proc.returncode:raise RuntimeError(err.decode(errors='replace')[-1000:])
-        return {'ui':{'videos':[{'filename':p.name,'subfolder':str(p.parent.relative_to(root)),'type':'output'}]}}
+        # 'videos' for /history readers; the same entry under 'gifs' (VHS's key) is what Comfy API v2 lists as a video output.
+        entry={'filename':p.name,'subfolder':str(p.parent.relative_to(root)),'type':'output'}
+        return {'ui':{'videos':[entry],'gifs':[entry]}}
 
 NODE_CLASS_MAPPINGS={c.__name__:c for c in [HengeLoadShot,HengeGuide,HengeH3Conditioning,HengeLatentMask,HengeMaskPreview,HengeSaveVideo]}
 
@@ -274,7 +277,7 @@ class HengeTextResult:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'text':('STRING',{'forceInput':True})}}
     RETURN_TYPES=();FUNCTION='save';OUTPUT_NODE=True;CATEGORY='Henge'
-    def save(self,text):return {'ui':{'text':[text]}}
+    def save(self,text):return {'ui':ui_report({'text':[text]})}
 
 NODE_CLASS_MAPPINGS['HengeTextResult']=HengeTextResult
 from .find_people import HengeFindPeople

@@ -847,3 +847,8 @@ img{display:block;max-width:100%}
 .generation-job details>summary:before{content:"";flex:none;width:6px;height:6px;margin:0 2px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
 .generation-job details[open]>summary:before{transform:rotate(45deg)}
 .generation-job .job-callout details>summary{font-size:11px;font-weight:500;color:var(--muted)}
+/* "Read in [language] Show": one row, same height for the dropdown and the button. */
+.auto-prompt-bar .read-in label{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.auto-prompt-bar .read-in :is(.select-button,.quiet-button){height:32px;min-height:32px;padding-top:0;padding-bottom:0;font-size:12px}
+.auto-prompt-bar .read-in .select-button{min-width:120px}
+.setting-help{display:block;margin:-4px 0 10px;color:var(--muted);font-size:11px;line-height:1.45}

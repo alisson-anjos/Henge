@@ -15,10 +15,12 @@ CHUNK=6_000_000
 
 
 class RunPodBackend:
-    def __init__(self,staging,state):
-        endpoint=os.environ['RUNPOD_ENDPOINT_ID']
+    queue_message='Waiting for a serverless worker (a cold start loads the models and can take minutes)'
+    def __init__(self,staging,state,endpoint=None,api_key=None):
+        # Settings screen values, else the environment (RUNPOD_ENDPOINT_ID, RUNPOD_API_KEY).
+        endpoint=endpoint or os.environ['RUNPOD_ENDPOINT_ID']
         self.base=os.environ.get('RUNPOD_API_BASE',f'https://api.runpod.ai/v2/{endpoint}').rstrip('/')
-        self.headers={'Authorization':'Bearer '+os.environ.get('RUNPOD_API_KEY','')}
+        self.headers={'Authorization':'Bearer '+(api_key or os.environ.get('RUNPOD_API_KEY',''))}
         self.staging=Path(staging);self.inventory_file=Path(state)/'runpod_inventory.json';self.received={};self.on_volume={}
 
     def request(self,method,path,**kw):

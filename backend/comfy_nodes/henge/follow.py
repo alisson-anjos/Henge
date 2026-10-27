@@ -156,4 +156,5 @@ class HengeSubjectLook:
         masks, _ = SAM3_Detect.execute(sam, frame, positive_coords=json.dumps([{'x': int(x * w), 'y': int(y * h)}]), refine_iterations=2, individual_masks=True)
         del sam; mm.unload_all_models(); mm.soft_empty_cache()
         mask = (masks.cpu()[:1] > .5) if masks.numel() else torch.zeros(1, h, w, dtype=torch.bool)
-        return {'ui': {'henge_look': [json.dumps({'id': subject_id, 'signature': signature(frame.cpu(), mask)})]}}
+        from .report import ui_report
+        return {'ui': ui_report({'henge_look': [json.dumps({'id': subject_id, 'signature': signature(frame.cpu(), mask)})]})}
