@@ -628,7 +628,7 @@ def planning(job):
         for s in bindings:
             slot=s['picture_slots'][0];image=dict(pictures)[slot]
             subjects.append((s['color'],s['picture_slots'],ask(CHARACTER_INSTRUCTION,image,f'vlm_picture_{slot}',1024)))
-        plan=fixed_plan('swap',multi_swap_prompt(subjects,guidance['representation']),'Replace each marked person with the character bound to their color, keeping scene, camera and performance (multi-person Character Swap).')
+        plan=fixed_plan('swap',multi_swap_prompt(subjects,guidance['representation'],bool(guidance.get('mark_labels'))),'Replace each marked person with the character bound to their color, keeping scene, camera and performance (multi-person Character Swap).')
         plan['picture_roles']=[{'slot':slot,'role':'identity','description':next((d for c,sl,d in subjects if slot in sl),'')} for slot in slots]
         plan['representation']=guidance['representation']
         raw=ask('Look at these frames of a video. Which of these objects do the people hold or play: phone, microphone, guitar, ukulele, cup, bottle, bicycle, torch, piano, keyboard? Answer with a JSON array of the matching words only, for example ["guitar"], or [] if none.',guide,'vlm_guide',64)
