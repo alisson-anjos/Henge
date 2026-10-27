@@ -4,11 +4,11 @@
 few pictures, and it swaps characters, transfers motion, swaps heads or sharpens the video — locally, on a RunPod pod
 or on RunPod Serverless.
 
-[![Henge 25-second animated feature reel](docs/images/demo/teaser.gif)](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-teaser.mp4)
+[![Watch the Henge 2-minute demo](docs/images/demo/demo_poster.jpg)](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-demo-under-2min.mp4)
 
-[Play the 50-second feature reel with sound](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-teaser.mp4)
+[Watch the demo — 1:58](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-demo-under-2min.mp4)
 · [Download the complete 4-minute demo](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-demo.mp4)
-· [Competition cut — 1:58](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-demo-under-2min.mp4)
+· [50-second feature reel](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-teaser.mp4)
 
 | Character Swap | Motion Transfer |
 |---|---|
