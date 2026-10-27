@@ -90,10 +90,25 @@ CHARACTER_SWAP_PROMPT=("body_swap: subject_definitions: <Subject 1> is the {deta
     "structure, hair or fur, skin, body shape and clothing stay stable in every frame. The background, lighting, colors and camera of the guide "
     "video are preserved. Prevent identity drift, clothing changes, texture crawling and flicker.")
 
+EMPTY_ITEMS={'none','n/a','na','null','unknown','not visible','-',''}
+def clean_details(details,limit):
+    """A VLM description, made safe for the prompt: one line, without empty list items ('none', 'n/a') and without
+    the same item repeated (a small VLM can loop on 'none, none, none...' until its token limit)."""
+    text=' '.join(str(details).split()).strip().strip('"')
+    out=[];seen=[]
+    for sentence in re.split(r'(?<=;)\s*',text):
+        items=[]
+        for item in sentence.split(','):
+            word=item.strip();key=word.lower().rstrip('.;').strip()
+            if key in EMPTY_ITEMS or (items and key==items[-1].lower().rstrip('.;').strip()) or seen.count(key)>=2:continue
+            items.append(word);seen.append(key)
+        if items:out.append(', '.join(items))
+    return ' '.join(out).rstrip('.,; ')[:limit]
+
 def character_swap_prompt(details):
-    text=' '.join(str(details).split()).strip().strip('"').rstrip('.')
+    text=clean_details(details,2000)
     if not text or text.lower() in ('details','{details}'):raise ValueError('The VLM returned no character description for Picture 1')
-    return CHARACTER_SWAP_PROMPT.format(details=text[:2000])
+    return CHARACTER_SWAP_PROMPT.format(details=text)
 
 def head_swap_prompt(face_details):
     face=' '.join(str(face_details).split()).strip().strip('"')
@@ -161,7 +176,7 @@ def multi_swap_prompt(subjects,representation='2d'):
     defs=[];swaps=[];names=[]
     for i,(color,slots,details) in enumerate(subjects,1):
         pictures=' and '.join(f'<Picture {n}>' for n in slots)
-        text=' '.join(str(details).split()).strip().strip('"').rstrip('.')[:1500] or 'the character'
+        text=clean_details(details,1500) or 'the character'
         defs.append(f'<Subject {i}> is the character shown in {pictures}: {text}. Their identity, face, hair, body shape, proportions and clothing define the {color}-marked replacement.')
         swaps.append(f'the {color}-{marked} person with <Subject {i}>');names.append(f'<Subject {i}>')
     colors=' and '.join(c for c,_,_ in subjects)
