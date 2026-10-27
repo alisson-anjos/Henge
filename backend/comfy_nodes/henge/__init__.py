@@ -125,6 +125,7 @@ class HengeGuide:
             result[m]=color if alpha>=1 else images[m]*(1-alpha)+color*alpha
         if representation=='2d':
             result[object_mask]=images[object_mask]
+            if spec.get('labels'):result=draw_labels(result,chosen,masks)
             return {**tracking,'result':(result,selected.float())}
         from comfy_extras.nodes_sam3d_body import SAM3DBody_Loader,SAM3DBody_Predict,SAM3DBody_FaceExpression,SAM3DBody_Smooth
         from .mesh_renderer import render
@@ -155,7 +156,11 @@ class HengeGuide:
                 faces=pose['faces'];regions=np.asarray(pose['canonical_colors']['face_region_rgb'],np.float32)
                 for j,k in enumerate(span):
                     for person in pose['frames'][j]:person['_rgb']=rgb;persons[int(k)].append(person)
-        if faces is None:raise ValueError('SAM 3D Body produced no visible geometry')
+        if faces is None:
+            # None of the marked people is in this shot (a cut to someone else): like 2D, it goes through unmarked
+            # instead of failing the job.
+            note='None of the marked people is visible in this shot; it was left unmarked'
+            return {'ui':ui_report({'henge_tracks':[json.dumps(follow.report(picked,masks,images,warnings+[note]))]}),'result':(images,selected.float())}
         output=[]
         for k in range(n):
             background=(images[k].clamp(0,1).numpy()*255).astype(np.uint8)
@@ -204,6 +209,26 @@ class HengeH3Conditioning:
 
 
 # Defaults of the BFS Shot Planner "Mask" card (feather/paste are paste-back settings, not used by a latent mask).
+def draw_labels(result,chosen,masks):
+    """Experimental (mask_settings labels=true): write each subject's picture tag (<Picture 1>) over its marked person
+    in every frame, centred above the top of the mask, so the binding is readable in the guide itself."""
+    from PIL import ImageDraw,ImageFont
+    n,h,w=result.shape[:3];size=max(14,round(h/22))
+    try:font=ImageFont.truetype('DejaVuSans-Bold.ttf',size)
+    except OSError:font=ImageFont.load_default(size=size)
+    frames=(result.clamp(0,1)*255).byte().cpu().numpy()
+    for idx,s,rgb in chosen:
+        text='<Picture '+', '.join(str(x) for x in s.get('picture_slots') or [])+'>'
+        for f in range(n):
+            ys,xs=np.nonzero(masks[f,idx].cpu().numpy())
+            if not len(xs):continue
+            im=Image.fromarray(frames[f]);d=ImageDraw.Draw(im)
+            box=d.textbbox((0,0),text,font=font);tw,th=box[2]-box[0],box[3]-box[1]
+            x=int(np.clip(xs.mean()-tw/2,2,w-tw-2));y=int(np.clip(ys.min()+th*.6,2,h-th-2))
+            d.rectangle((x-4,y-3,x+tw+4,y+th+5),fill=(0,0,0));d.text((x,y-box[1]),text,font=font,fill=rgb)
+            frames[f]=np.asarray(im)
+    return torch.from_numpy(frames).to(result.dtype)/255
+
 DEFAULT_MASK={'threshold':.5,'shape':'box','padding':.15,'expand':16,'fill_holes':True,'temporal_expand':2,'blockify':0,'invert':False,'strength':1.}
 
 def shape_mask(masks,spec):

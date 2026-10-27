@@ -94,6 +94,7 @@ export default function Studio() {
   const [guideRepresentation, setGuideRepresentation] = useState<GuideRepresentation>('original');
   // 2D color marks: 1 = solid; lower keeps the guide person visible under a translucent tint (BFS Colored Mark used 0.35).
   const [markOpacity, setMarkOpacity] = useState(0.35);
+  const [markLabels, setMarkLabels] = useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   // A new guide starts a new generation: the panel drops the selected job (its plan, shots and result) until one is
   // picked again from the history.
@@ -559,7 +560,7 @@ export default function Studio() {
       audio_conditioning: {enabled: audioConditioning, source: audioConditioning ? 'guide_video' : null},
       output_audio: {keep_source: keepAudio && !generateAudio, generate: generateAudio}, prompt: fixedRecipe ? '' : nativePrompt(executionPrompt), editor_prompt: fixedRecipe ? '' : prompt,
       // Sharpness uses only the video: subjects marked in another mode are not sent.
-      subject_guidance: mode === 'sharpness' ? {representation: 'original', bindings: [], status: 'selection_only', marker_colors_are_output_appearance: false} : {representation: guideRepresentation, bindings: subjects, status: 'selection_only', marker_colors_are_output_appearance: false, ...(guideRepresentation === '2d' ? {mark_opacity: markOpacity} : {})},
+      subject_guidance: mode === 'sharpness' ? {representation: 'original', bindings: [], status: 'selection_only', marker_colors_are_output_appearance: false} : {representation: guideRepresentation, bindings: subjects, status: 'selection_only', marker_colors_are_output_appearance: false, ...(guideRepresentation === '2d' ? {mark_opacity: markOpacity, ...(markLabels ? {mark_labels: true} : {})} : {})},
       video: {name: video.file.name, source_signature: guideSignature, conditioning: 'guide_latents', source_duration: video.duration, start_seconds: video.range.start, end_seconds: video.range.end, duration: selectedDuration},
       pictures: activePictures.map(p => ({slot: p.slot, token: `<Picture ${p.slot}>`, name: p.file.name})),
       ...(mode === 'motion' && firstFrameSlot && activePictures.some(p => p.slot === firstFrameSlot) ? {first_frame_slot: firstFrameSlot} : {}), generation_status: 'not_submitted',
@@ -802,7 +803,7 @@ export default function Studio() {
             {working && <div className="jutsu-loading" role="status"><div className="jutsu-seal"><i/><i/><Icon name="spark" size={42}/></div><strong>{tr('Directing your scene', 'Preparando sua direção', 'Preparando tu dirección')}</strong><small>{tr('Reading references and sampled guide frames', 'Lendo referências e quadros do vídeo guia', 'Leyendo referencias y fotogramas de la guía')}</small></div>}
             <span className="stage-corner mono">Henge / {modeName(mode)}</span>
           </div>
-          {video?.range && (!fixedRecipe || mode === 'headswap') && <SubjectBindings subjects={subjects} onChange={setSubjects} representation={guideRepresentation} onRepresentation={setGuideRepresentation} pictures={pictures} lang={lang} pickingId={pickingId} onPick={setPickingId} onPrompt={() => setNative(true)} mode={mode} markOpacity={markOpacity} onMarkOpacity={setMarkOpacity}/>}
+          {video?.range && (!fixedRecipe || mode === 'headswap') && <SubjectBindings subjects={subjects} onChange={setSubjects} representation={guideRepresentation} onRepresentation={setGuideRepresentation} pictures={pictures} lang={lang} pickingId={pickingId} onPick={setPickingId} onPrompt={() => setNative(true)} mode={mode} markOpacity={markOpacity} onMarkOpacity={setMarkOpacity} markLabels={markLabels} onMarkLabels={setMarkLabels}/>}
           {mode !== 'sharpness' && subjects.length > 0 && subjectErrors && <p className="validation" role="status">{tr('Mark each subject inside the selected interval and attach its references.', 'Marque cada personagem dentro do intervalo selecionado e vincule suas referências.', 'Marca cada personaje dentro del intervalo seleccionado y vincula sus referencias.')}</p>}
           <section className="creation-card surface" aria-label={tr('Create video', 'Criar vídeo', 'Crear vídeo')}><section className="prompt-card"><div className="prompt-header"><h2><Icon name="spark" size={16}/>{t.direct}</h2>{!fixedRecipe && <div className="editor-tabs prompt-modes" role="group" aria-label={tr('Prompt mode', 'Modo do prompt', 'Modo del prompt')}>{([['improve', tr('Improve', 'Melhorar', 'Mejorar')], ['auto', 'Auto Prompt'], ['exact', tr('Exact text', 'Texto exato', 'Texto exacto')]] as const).map(([value, label]) => <button key={value} aria-pressed={promptMode === value} className={promptMode === value ? 'active' : ''} onClick={() => setPromptMode(value)}>{label}</button>)}</div>}</div>
             {!fixedRecipe && <p className="prompt-mode-help">{promptMode === 'improve'

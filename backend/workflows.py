@@ -245,12 +245,12 @@ def find_people_graph(image,kind='person'):
     return {'1':node('LoadImage',image=image),'2':node('HengeFindPeople',image=['1',0],kind=kind,threshold=.4,sam_checkpoint='sam3.1_multiplex_fp16.safetensors'),
             '3':node('SaveImage',images=['2',0],filename_prefix=image.rsplit('.',1)[0]+'_people'),'4':node('HengeTextResult',text=['2',1])}
 
-def marks_preview_graph(video,width,height,length,trim_frames,bindings,source_kind,segment_start,preserve_objects,filename):
+def marks_preview_graph(video,width,height,length,trim_frames,bindings,source_kind,segment_start,preserve_objects,filename,labels=False):
     # The 2D color guide at full opacity: the UI lays it over the source with the chosen opacity, which is exactly the
     # blend HengeGuide makes, so the opacity can be tried live without running SAM again.
     return {'1':node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length),
             '2':node('HengeGuide',images=['1',0],representation='2d',bindings=json.dumps(bindings),source_kind=source_kind,segment_start=segment_start,
-                     sam_checkpoint='sam3.1_multiplex_fp16.safetensors',body_model='sam_3d_body_dinov3_bf16.safetensors',preserve_objects=json.dumps(preserve_objects or []),mask_settings='{"mark_opacity": 1}'),
+                     sam_checkpoint='sam3.1_multiplex_fp16.safetensors',body_model='sam_3d_body_dinov3_bf16.safetensors',preserve_objects=json.dumps(preserve_objects or []),mask_settings=json.dumps({'mark_opacity':1,'labels':labels})),
             '4':node('HengeSaveVideo',images=['2',0],filename=filename,trim_frames=trim_frames,fps=24.)}
 
 def mask_preview_graph(video,width,height,length,trim_frames,bindings,source_kind,segment_start,preserve_objects,mask,filename):
