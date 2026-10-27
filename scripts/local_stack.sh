@@ -8,7 +8,7 @@ ROOT=$PWD
 RUN=$ROOT/.runtime; mkdir -p "$RUN/logs"
 PYTHON=${PYTHON:-python3}
 # A relative path (.venv/bin/python) must survive the cd into backend/.
-case $PYTHON in */*) PYTHON=$(realpath "$PYTHON") ;; esac
+case $PYTHON in /*) ;; */*) PYTHON=$ROOT/$PYTHON ;; esac
 UI_PORT=${UI_PORT:-8188}
 BRIDGE_PORT=${BRIDGE_PORT:-8766}
 
