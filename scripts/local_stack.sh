@@ -25,7 +25,8 @@ case "${1:-}" in
     stop_one bridge "$BRIDGE_PORT"; stop_one ui "$UI_PORT"
     (cd backend && nohup "$PYTHON" -m uvicorn server:app --host 127.0.0.1 --port "$BRIDGE_PORT" \
       --env-file ../.env.local > "$RUN/logs/bridge.log" 2>&1 < /dev/null & echo $! > "$RUN/bridge.pid")
-    nohup node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port "$UI_PORT" > "$RUN/logs/ui.log" 2>&1 < /dev/null & echo $! > "$RUN/ui.pid"
+    # The UI reaches the bridge through HENGE_BACKEND_URL; point it at this BRIDGE_PORT.
+    HENGE_BACKEND_URL=${HENGE_BACKEND_URL:-http://127.0.0.1:$BRIDGE_PORT} nohup node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port "$UI_PORT" > "$RUN/logs/ui.log" 2>&1 < /dev/null & echo $! > "$RUN/ui.pid"
     echo "bridge pid $(cat "$RUN/bridge.pid"), ui pid $(cat "$RUN/ui.pid"); logs in $RUN/logs"
     ;;
   stop) stop_one bridge "$BRIDGE_PORT"; stop_one ui "$UI_PORT" ;;
