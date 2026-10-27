@@ -5,7 +5,7 @@ Each graph is one request. Small media travel base64 inside it and its reply. Ru
 (any worker can read the volume) and "get" requests read large results back. Nothing besides the endpoint and
 its volume is involved. The worker's node/model inventory comes back with every reply and is cached, so /health
 never wakes a worker."""
-import base64,json,os,re,time
+import base64,json,os,re,threading,time
 from pathlib import Path
 import requests
 from comfy_client import referenced_files
@@ -21,7 +21,7 @@ class RunPodBackend:
         endpoint=endpoint or os.environ['RUNPOD_ENDPOINT_ID']
         self.base=os.environ.get('RUNPOD_API_BASE',f'https://api.runpod.ai/v2/{endpoint}').rstrip('/')
         self.headers={'Authorization':'Bearer '+(api_key or os.environ.get('RUNPOD_API_KEY',''))}
-        self.staging=Path(staging);self.inventory_file=Path(state)/'runpod_inventory.json';self.received={};self.on_volume={}
+        self.staging=Path(staging);self.inventory_file=Path(state)/'runpod_inventory.json';self.received={};self.on_volume={};self.lock=threading.Lock()
 
     def request(self,method,path,**kw):
         r=requests.request(method,self.base+path,headers={**self.headers,**kw.pop('headers',{})},timeout=kw.pop('timeout',60),**kw)
@@ -56,7 +56,12 @@ class RunPodBackend:
         if len(json.dumps({'input':{'graph':graph,'files':files}}))>PAYLOAD_LIMIT:
             self.put_files(rels,on_status,cancelled);files={};volume=rels
         output=self.call({'graph':graph,'files':files,'volume_files':volume},on_status,cancelled)
-        self.received=output.get('files') or {};self.on_volume=output.get('volume_outputs') or {}
+        # Several requests can run at once (the assistant calls find_people in parallel): keep every reply's files
+        # instead of the last one only. Output names are per job (henge/<job>/...), so keys do not collide.
+        with self.lock:
+            self.received.update(output.get('files') or {});self.on_volume.update(output.get('volume_outputs') or {})
+            for d in (self.received,self.on_volume):
+                while len(d)>64:d.pop(next(iter(d)))
         return output.get('outputs') or {}
 
     def put_files(self,rels,on_status,cancelled):
