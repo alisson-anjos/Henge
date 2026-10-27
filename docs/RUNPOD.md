@@ -1,6 +1,6 @@
 # Run Henge on RunPod
 
-**Video tutorial (4 min):** [both RunPod options step by step](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-runpod-tutorial.mp4), from the network volume to a job on
+**Video tutorial (4 min):** [both RunPod options step by step](https://www.youtube.com/watch?v=sthVq1_jPtM) ([download](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-runpod-tutorial.mp4)), from the network volume to a job on
 Serverless.
 
 One container runs everything: the web UI (port 8188), the bridge and ComfyUI.
