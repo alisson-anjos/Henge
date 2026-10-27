@@ -35,6 +35,40 @@ class HengeLoadShot:
         return read_frames(input_path(video),width,height,length),refs
 
 
+def scene_cuts(images,threshold=.18):
+    """Frame indexes where a camera cut starts (a big jump between consecutive small grey thumbnails)."""
+    small=torch.nn.functional.interpolate(images.mean(-1,keepdim=True).permute(0,3,1,2),size=(18,32),mode='area')[:,0]
+    diff=(small[1:]-small[:-1]).abs().mean((1,2))
+    if len(diff)==0:return []
+    floor=max(threshold,float(diff.median())*4)
+    cuts,last=[],0
+    for i,d in enumerate(diff.tolist(),1):
+        if d>floor and i-last>=6:cuts.append(i);last=i
+    return cuts
+
+def track_scenes(images,sam,cond,threshold,per_scene=6,total=16,min_frames=3):
+    """SAM 3.1 people tracks for a shot, tracked scene by scene. One tracking pass over a whole shot gives up once its
+    track slots are used: a blurry opening or a cut can spend them all on detections that last a frame, and the people
+    seen later never get a track. Each scene between camera cuts gets its own pass; short-lived tracks are dropped.
+    Returns N,tracks,h,w (bool) or None when nobody is found."""
+    from comfy_extras.nodes_sam3 import SAM3_VideoTrack
+    from comfy.ldm.sam3.tracker import unpack_masks
+    n,h,w=images.shape[:3];bounds=[0,*scene_cuts(images),n];kept=[]
+    for a,b in zip(bounds[:-1],bounds[1:]):
+        if b-a<2:continue
+        packed=SAM3_VideoTrack.execute(images=images[a:b],model=sam,conditioning=cond,detection_threshold=threshold,max_objects=8,detect_interval=1)[0].get('packed_masks')
+        if packed is None or packed.shape[1]==0:continue
+        m=unpack_masks(packed).cpu().bool()
+        if tuple(m.shape[-2:])!=(h,w):m=torch.nn.functional.interpolate(m.float(),size=(h,w),mode='nearest').bool()
+        alive=m.flatten(2).any(2).sum(0) # frames each track is present
+        best=[int(t) for t in alive.argsort(descending=True)[:per_scene] if int(alive[t])>=min(min_frames,b-a)]
+        kept+=[(int(alive[t]),a,m[:,t]) for t in best]
+    if not kept:return None
+    kept=sorted(kept,key=lambda k:-k[0])[:total]
+    masks=torch.zeros((n,len(kept),h,w),dtype=torch.bool)
+    for i,(_,a,m) in enumerate(kept):masks[a:a+len(m),i]=m
+    return masks
+
 class HengeGuide:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'representation':(['original','2d','3d','mask'],),'bindings':('STRING',{'default':'[]'}),'source_kind':(['human','animal','other'],),'segment_start':('FLOAT',{'default':0}),'sam_checkpoint':('STRING',{'default':'sam3.1_multiplex_fp16.safetensors'}),'body_model':('STRING',{'default':'sam_3d_body_dinov3_bf16.safetensors'}),'preserve_objects':('STRING',{'default':'[]'})},'optional':{'mask_settings':('STRING',{'default':'{}'})}}
@@ -52,14 +86,11 @@ class HengeGuide:
         sam,clip=loaded[:2]
         cond=clip.encode_from_tokens_scheduled(clip.tokenize('person' if source_kind=='human' else 'animal'))
         # Track identity before choosing colors; coordinates are normalized source-image coordinates.
-        tracks=SAM3_VideoTrack.execute(images=images,model=sam,conditioning=cond,detection_threshold=float(spec['threshold']) if representation=='mask' else .4,max_objects=8,detect_interval=1)[0]
-        packed=tracks.get('packed_masks')
-        if packed is None or packed.shape[1]==0:
+        masks=track_scenes(images,sam,cond,float(spec['threshold']) if representation=='mask' else .4) # N,tracks,h,w
+        if masks is None:
             # Nobody in this shot (a cutaway, an empty room): it goes through unmarked instead of failing the job.
             del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
             return {'ui':ui_report({'henge_tracks':[json.dumps({'warnings':['Nobody found in this shot; it was left unmarked'],'subjects':[]})]}),'result':(images,empty)}
-        masks=unpack_masks(packed).cpu().bool() # N,objects,h,w
-        if tuple(masks.shape[-2:])!=tuple(images.shape[1:3]):masks=torch.nn.functional.interpolate(masks.float(),size=images.shape[1:3],mode='nearest').bool()
         n,h,w=images.shape[:3]
         # Marks, continuity from the previous shot and recognition by look (follow.py): never guessed by position.
         picked,warnings=follow.choose(subjects,masks,images,segment_start)
