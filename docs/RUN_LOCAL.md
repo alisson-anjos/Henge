@@ -49,30 +49,28 @@ ComfyUI's `custom_nodes/bfsnodes`. Copy or symlink this repository's
 Install BFSNodes' requirements using **the Python environment that runs ComfyUI**.
 Restart ComfyUI after installing/updating either custom-node package.
 
-Install the files from [the model guide](models-and-downloads.md), or configure
-the manifest and run the downloader with your ComfyUI Python:
+Download the models with your ComfyUI Python (or by hand from [the model guide](models-and-downloads.md)):
 
 ```sh
-cp config/model-repos.example.json config/model-repos.json
-python scripts/download_models.py --manifest config/model-repos.json --models-dir /absolute/path/to/ComfyUI/models --profiles character --dry-run
-python scripts/download_models.py --manifest config/model-repos.json --models-dir /absolute/path/to/ComfyUI/models --profiles character
+python scripts/download_models.py --manifest config/model-repos.example.json \
+  --models-dir /absolute/path/to/ComfyUI/models --profiles character,motion,headswap,sharpness,fibo,sam2d,audio
 ```
 
-The `character`, `motion`, `headswap` and `sharpness` profiles download their published weights automatically. Only
-the experimental `ffp` profile currently needs a Hugging Face token with access.
-Optional FIBO, audio and SAM profiles
-are documented in the Docker/model guides. The downloader never uploads models.
+Models you already have are reused, even under an older name or in another subfolder (for example
+`vae/minimax/…`): they are skipped and never renamed. Everything is public except the experimental `ffp` profile, which
+needs a Hugging Face token (`HF_TOKEN`). Add `--dry-run` to only list the files. The downloader never uploads models.
 
 ## 3. Start ComfyUI
 
 From the ComfyUI folder, using its Python:
 
 ```sh
-python main.py --listen 127.0.0.1 --port 8189 --lowvram --preview-method taesd
+python main.py --listen 127.0.0.1 --port 8189 --preview-method taesd --fast-disk
 ```
 
 The H3 sampling preview needs `models/vae_approx/taeh3.safetensors`. The UI does
-not need ComfyUI to be publicly exposed. If you use a custom-node whitelist,
+not need ComfyUI to be publicly exposed. A ComfyUI you already run on another port works too: set its address in
+`COMFY_BASE_URL`, or in the studio (gear → Connection). If you use a custom-node whitelist,
 include `henge` and `bfsnodes`. The Sharpness 2K/4K upscalers are henge nodes; the NVIDIA one also needs
 `pip install nvidia-vfx` and an RTX GPU on the ComfyUI machine. Its files come with the `sharpness` model profile.
 

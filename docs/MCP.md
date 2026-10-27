@@ -52,7 +52,7 @@ On Windows use a path like `C:/AI/Henge/mcp/henge_mcp.py`.
 |---|---|
 | `status` | Online or not, the backend in use, installed models, turbos and upscalers |
 | `find_people` | Numbers the people (or animals) in one frame of a local video and shows the frame |
-| `create_job` | Starts a generation from local files: mode, guide video, pictures, prompt, interval, quality, subjects, options |
+| `create_job` | Starts a generation from local files: mode, guide video, pictures, prompt, interval, quality, subjects, options; `generate_audio` keeps the soundtrack H3 generates; `background` (a picture) puts a new background behind the people that follows the camera |
 | `wait_for_job` | Waits until the plan is ready for review (`plan`) or the job finishes (`done`) |
 | `get_job`, `list_jobs` | Status, stage, plan and errors |
 | `approve_job`, `cancel_job`, `retry_job` | Act on a job |
@@ -68,6 +68,13 @@ Jobs also appear in the web UI's history, so you can follow them there too.
 The client calls `find_people` at 2 s, picks the person on the left, calls `create_job` with
 `mode: "swap"`, the picture and `subjects: [{"picture_slots": [1], "x": …, "y": …, "time": 2}]`, waits for the
 plan, shows it to you, then `approve_job`, `wait_for_job` and `download_result`.
+
+More examples you can ask for:
+
+> Make the woman in `~/clips/rooftop.mp4` perform as `~/refs/dancer.png`, on the beach in `~/refs/beach.jpg`
+> (new background), with generated audio.
+
+> Sharpen `~/out/swap.mp4` to 1080p.
 
 The modes:
 

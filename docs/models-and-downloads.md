@@ -53,8 +53,9 @@ work without it, but loading the adapter first (strength 1) and the motion LoRA 
 conditions, which is what Henge does; compare both on your own clips. Do not load a file that already merges the
 adapter (for example an exact Motion Transfer v1.0 + V2 merge) together with the adapter again.
 
-Installs from before 2026-10-27 used short local names (for example `character_v1_1`, `training_adapter_v2`); the
-bridge still finds them, and `download_models.py` renames them to the published names instead of downloading again.
+Models already in your ComfyUI are reused as they are: under an older short name (for example `character_v1_1`,
+`training_adapter_v2`) or in another subfolder (for example `vae/minimax/…`). The bridge finds them by name and
+`download_models.py` skips them without renaming, so your other workflows keep working.
 The experimental FFP model (`ffp`) and the `solar` profile are third-party merges and stay private.
 
 ## Prompt writer / media analysis

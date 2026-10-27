@@ -85,7 +85,7 @@ docker compose start
 docker compose logs -f --tail=100
 ```
 
-The UI's Connection settings can test/save a ComfyUI API URL. The bundled API is
+The UI's settings (gear in the top bar → Connection) can test and save a ComfyUI address. The bundled API is
 `http://127.0.0.1:8189` from inside the container. A separate ComfyUI server works
 too: the bridge sends each graph's input files through `/upload/image` and fetches
 results through `/view`, so no shared folders are needed. That server still needs

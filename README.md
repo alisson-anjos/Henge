@@ -111,10 +111,12 @@ You need a working ComfyUI (PyTorch with CUDA 13, NVIDIA driver 580+), Node.js 2
 2. Download the models into ComfyUI (choose profiles; see the table in [SERVERLESS.md](docs/SERVERLESS.md#what-goes-on-it)):
 
    ```sh
-   HF_TOKEN=<token> /path/to/comfy/python scripts/download_models.py \
+   /path/to/comfy/python scripts/download_models.py \
      --manifest config/model-repos.example.json --models-dir /path/to/ComfyUI/models \
-     --profiles character,motion,headswap,sharpness,fibo,sam2d
+     --profiles character,motion,headswap,sharpness,fibo,sam2d,audio
    ```
+
+   No token needed. Models you already have in ComfyUI are reused, even under another name or subfolder.
 
 3. Start ComfyUI on port 8189 (keep it on localhost):
 
@@ -271,35 +273,48 @@ Automatic prompting in the editor and the backend planner shares `lib/h3-prompt-
 
 ## Architecture and references
 
-Next.js App Router + React + TypeScript, following the standalone client/server organization of [Comfy Cinematic Studio](https://github.com/Comfy-Org/comfy-cinematic-studio) and [Comfy Reshoot](https://github.com/Comfy-Org/comfy-reshoot). This implementation has its own interface and application code. The local bridge submits API workflows to ComfyUI; its address is configured server-side.
-
-See [competition notes](docs/competition.md) and [implementation roadmap](docs/roadmap.md).
+UI (Next.js) → bridge (FastAPI: plans, shots, ffmpeg) → ComfyUI graphs (local, Comfy SDK or RunPod Serverless). How the
+guide reaches H3: [docs/conditioning.md](docs/conditioning.md). Prompt format: [docs/prompt-format.md](docs/prompt-format.md).
+What comes next: [docs/roadmap.md](docs/roadmap.md).
 
 ## License
 
 MIT for this application code. Model weights, LoRAs, datasets and third-party services have their own licenses and are not included or relicensed by this repository. This project is independent of Higgsfield and Comfy Org.
 
-## Audio and long videos
+## Audio
 
-Audio conditioning can be enabled independently of the visual guide. Direction exports record whether guide-video audio should condition generation; the prompt VLM receives sampled visual frames only, not audio.
+Choose one in **Output**:
 
-Selected intervals longer than 15 seconds automatically reveal Context Window controls and record short-segment processing settings: 4.5 seconds requested per shot by default, a configurable timeline FPS (24 by default), and H3's 17n+5 frame grid. The Auto cut card chooses how camera cuts split the shots (shot length ending at cuts, a new shot at every cut, or fixed length), and the approval screen shows every shot before rendering. The backend generates short segments, trims padding and joins the results in order. Context Window has no configured segment-count cap; GPU memory and upload size still have limits. The single guide upload is limited to 500 MB.
+- **Keep original audio** (default): the guide's sound is copied onto the result, unchanged.
+- **Generated audio (H3)**: H3 samples video and audio together; Henge keeps each shot's soundtrack and joins them at the
+  cuts (footsteps, impacts, ambience). Write lines in the prompt as `<d>[Portuguese] text</d>` after the speaking
+  subject. Needs the H3 audio VAE (profile `audio`).
+- **Audio conditioning** (independent): the guide's sound drives the generation, e.g. mouths and rhythm.
 
-The interface applies the supplied Studio + History design: a dark canvas, green Swap and purple Motion accents, locally hosted fonts, responsive layouts and English, Portuguese and Spanish copy. An animated seal indicates actual automatic-prompt processing. Animations respect reduced-motion preferences. Remote development through the configured server IP is supported by `allowedDevOrigins`.
+## New background (moving plate)
 
-## Guide interval selection
+In Character Swap and Motion Transfer, add a picture in **New background** to replace what is behind the people before
+generation. BiRefNet separates the people in every frame; the picture moves with the original camera (tracked on the
+background, per camera shot, with a little parallax and push-in) and is sized so it never runs out. The plated video
+becomes the guide and the original audio is kept. Optional: without a picture nothing changes. Idea and scripts by
+crinklypaper (Banodoco), see [docs/REFERENCES.md](docs/REFERENCES.md).
 
-Uploading a guide opens a modal with video preview, timeline thumbnails, draggable start/end handles, numeric time inputs and selected-range playback. Confirm the interval or choose Use full video. Canceling a new upload removes it; canceling a later edit preserves the previous interval. The scissors button reopens the editor.
+## Long videos and shots
 
-The confirmed interval controls Context Window activation, duration estimates, source-preview playback boundaries and the frames sent to the prompt VLM. Export includes `start_seconds`, `end_seconds`, selected `duration` and `source_duration`. The original media is not re-encoded or physically trimmed in the browser; the workflow adapter must apply these boundaries to video and audio together. Thumbnail generation is local. Crop/reframing is not part of this milestone.
+There is no length limit. Clips longer than 15 s are split into shots — at camera cuts, at every cut or at a fixed
+length (default 4.5 s, on H3's 17n+5 frame grid) — with context frames carried into the next shot, then joined in order.
+The approval screen shows every shot before rendering; a finished shot can be redone alone with a new seed. A guide
+upload can be up to 500 MB.
 
-## Local direction history
+## Guide interval
 
-Exporting a direction saves its prompt, settings and a source thumbnail in this browser (up to 30 entries). History supports reuse, deletion, direction ratings, feedback NDJSON export and shareable JSON presets. Reuse requires reattaching media; reference slot numbers are preserved. Ratings describe directions, not generated outputs. Preset downloads omit media and local filenames. Public Community publishing remains unconnected. Video generation uses the configured local bridge.
+Uploading a guide opens an editor with thumbnails, draggable start/end handles and preview playback; confirm a range or
+use the whole video. The scissors button reopens it. Only the selected interval is analyzed, rendered and joined.
 
-The Keep source audio setting is independent of audio conditioning and is recorded as `output_audio.keep_source`. Curated templates supply prompts for your own media. Uploaded files stay local except for resized previews explicitly sent with Build prompt.
+## History and sharing
 
-Enhance prompt in the generation panel adapts the direction to H3 when enabled. When disabled, the editor text is sent verbatim, including whitespace, without binding text or FIBO annotations appended. The VLM still analyzes routing and reference roles; review the exact H3 prompt in the execution plan before generating.
+**History** lists every generation on this Henge (result, plan, settings, run again). **Export** saves the request and
+settings as JSON (no media) and **Import settings** restores them; reattach your own video and pictures.
 
 ## Development checks
 

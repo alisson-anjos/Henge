@@ -56,10 +56,11 @@ Choose the model profiles (comma list), as on a normal pod:
 |---|---|---|
 | `character` | Character Swap | base H3, text encoder, VAE, VLM planner; always needed |
 | `motion` (or `motion_transfer`, `motion_transfer_tara`) | Motion Transfer | public, BFS Motion Transfer license |
-| `solar` | Motion Transfer (Solar) | ~25 GB |
+| `solar` | Motion Transfer (Solar merges, experimental) | ~25 GB, private: needs the `hf_token` secret |
 | `ffp` | Motion Transfer FFP: propagate an edited first frame (VFX Edit FFP + SolarRenderer 0.5, fro dyn99) | 220 MB, private: needs the `hf_token` secret |
 | `headswap` | Head Swap | |
-| `sharpness` | Sharpness (H3 + Little More Sharpness LoRA; 2K/4K with the H3 or NVIDIA RTX upscaler) | ~1 GB (LoRA + H3 latent upscaler), private LoRA: needs the `hf_token` secret |
+| `sharpness` | Sharpness (H3 + Little More Sharpness LoRA; 2K/4K with the H3 or NVIDIA RTX upscaler) | ~1 GB (LoRA + H3 latent upscaler) |
+| `audio` | Generated audio and audio conditioning (H3 audio VAE) | ~0.3 GB |
 | `omniref` | OmniRef base | +22 GB |
 | `fibo` | Reference adaptation (FIBO 2 edit: animal to human-compatible pose, first-frame edits) | ~14 GB |
 | `sam2d`, `sam3d` | Subject marks: SAM 3.1 tracking (2D colors, Mask, the assistant's find people) and SAM 3D Body + MoGe (3D) | ~4 GB |
@@ -70,7 +71,7 @@ The default, every profile above, needs roughly 125–135 GB: create the volume 
 
 ```sh
 scripts/runpod_volume.sh                                       # new 180 GB volume, every profile
-PROFILES=character,solar scripts/runpod_volume.sh              # only some profiles
+PROFILES=character,motion scripts/runpod_volume.sh             # only some profiles
 VOLUME_ID=<id> scripts/runpod_volume.sh                        # top up an existing volume
 ```
 

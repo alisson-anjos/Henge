@@ -1,17 +1,20 @@
-# Implementation roadmap
+# Roadmap
 
-## Initial interface
+## Done
 
-Implemented: motion-transfer/swap selectors, local guide playback, 11 reference slots, mention insertion, H3 token conversion, manual prompting, server VLM route with an initial template, sampled guide frames, draft text persistence, direction JSON export, responsive UI.
+- Four modes on MiniMax H3, each with its own trained LoRA: Character Swap v1.1, Motion Transfer v1.0 / TARA v1.0 /
+  Combined, Head Swap v1.0 and Little More Sharpness (2K/4K with the H3 latent upscaler or NVIDIA RTX VSR).
+- Guide Latents and TARA-H3; the guide shown to the text encoder can be Latents + CLIP or latents only.
+- Unlimited length: shots at camera cuts or fixed length, context frames between shots, redo one shot.
+- Subject guidance with SAM 3.1 (tracked scene by scene across cuts): 2D color marks, 3D body, latent mask.
+- Generated audio per shot, audio conditioning, new background that follows the camera (moving plate).
+- Backends: local ComfyUI, Comfy SDK (API v2), RunPod pod template and RunPod Serverless; first-run wizard.
+- Studio assistant (Claude, OpenAI, local models) and an MCP server for any AI client.
+- Public LoRAs with their own licenses, AI-guided installation, Docker images.
 
-## Workflow integration
+## Next
 
-Export the validated H3 API workflow and map guide video, ordered reference slots, prompt, LoRA, seed, resolution and duration. The guide must reach Add Guide as latents. Confirm the trained checkpoint's actual multi-reference and mode support. Wire submit, job progress, output retrieval and cancellation to a Comfy Developer Platform deployment. Do not infer inference compatibility from the UI's reference capacity.
-
-## Subsequent milestones
-
-- Finalize and evaluate both VLM prompt templates against the training prompt contract.
-- Persist projects and media, job history, output comparison and reproducible retries.
-- Add explicit in/out clip selection and then optional per-shot planning.
-- Sharpness 2K/4K: compare the H3 upscaler (refine denoise invents fine detail) with NVIDIA RTX VSR on real footage.
-- Prepare reproducible deployment instructions, original demo assets and competition submission.
+- Publish the Henge nodes on the Comfy Registry (`ComfyUI-Henge`) so Comfy Cloud can run them.
+- Several positive and negative points per person when marking, for people standing close together.
+- Moving plate controls per shot (parallax, push-in, particles) in the studio.
+- Login with credits for a hosted version; mobile-friendly studio.
