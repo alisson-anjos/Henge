@@ -227,7 +227,8 @@
       "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/text_encoders/qwen3vl_4b_int8_convrot.safetensors",
       "destination": "text_encoders/qwen3vl_4b_int8_convrot.safetensors",
       "profiles": [
-        "fibo"
+        "fibo",
+        "klein3"
       ]
     },
     {
@@ -236,7 +237,8 @@
       "destination": "vae/flux2-vae.safetensors",
       "profiles": [
         "fibo",
-        "klein"
+        "klein",
+        "klein3"
       ]
     },
     {
@@ -255,6 +257,15 @@
       "profiles": [
         "klein"
       ]
+    },
+    {
+      "id": "klein3_diffusion_models",
+      "url": "https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/resolve/main/diffusion_models/flux3-image-klein-int8-convrot.safetensors",
+      "destination": "diffusion_models/flux3-image-klein-int8-convrot.safetensors",
+      "profiles": [
+        "klein3"
+      ],
+      "note": "Optional FLUX.3 [image klein] (Black Forest Labs, FLUX Kommunity License). Gated: accept the license at https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy and set HF_TOKEN. Used before FLUX.2 [klein] when installed."
     },
     {
       "id": "sam31",

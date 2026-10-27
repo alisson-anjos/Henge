@@ -20,7 +20,7 @@ export async function coverFit(src: string, width: number, height: number): Prom
 /** The guide's first selected frame, edited with FLUX.2 [klein] (or FIBO 2) or replaced by an uploaded image. Paint a
  * mask to edit only that area; Replace, Remove, Add or a free instruction. The result is cropped and resized to the frame's
  * exact size so it can be propagated (Motion Transfer · first-frame propagate). */
-export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse, onClose}: {videoUrl: string; start: number; pictures: Picture[]; lang: Language; onUse: (file: File, edit: {id: string; width: number; height: number} | null) => void; onClose: () => void}) {
+export default function FirstFrameModal({videoUrl, start, image, pictures, lang, onUse, onClose}: {videoUrl?: string; start?: number; image?: File; pictures: Picture[]; lang: Language; onUse: (file: File, edit: {id: string; width: number; height: number} | null) => void; onClose: () => void}) {
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const dialog = useRef<HTMLDialogElement>(null), upload = useRef<HTMLInputElement>(null);
   const [frame, setFrame] = useState<Image & {width: number; height: number} | null>(null);
@@ -46,9 +46,14 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
     const ask = () => fetch('/api/backend/health').then(r => r.json()).then(h => {const e = h.frame_editor ?? (h.fibo_ready ? 'fibo' : null); setEditor(e); if (!e && ++tries < 12) timer = setTimeout(ask, 10000);}).catch(() => {});
     ask();
     fetch('/api/backend/frame-edits').then(r => r.json()).then(rows => {if (Array.isArray(rows)) setEdits(rows);}).catch(() => {});
+    if (image) {
+      // A reference picture: edit it at its own size.
+      load(URL.createObjectURL(image)).then(im => setFrame({blob: image, url: URL.createObjectURL(image), width: im.naturalWidth, height: im.naturalHeight})).catch(() => setError(tr('Could not read the picture.', 'Não foi possível ler a imagem.', 'No se pudo leer la imagen.')));
+      return () => clearTimeout(timer);
+    }
     const video = document.createElement('video');
-    video.muted = true; video.preload = 'auto'; video.src = videoUrl;
-    video.onloadedmetadata = () => {video.currentTime = Math.min(start + .001, Math.max(0, video.duration - .05));};
+    video.muted = true; video.preload = 'auto'; video.src = videoUrl ?? '';
+    video.onloadedmetadata = () => {video.currentTime = Math.min((start ?? 0) + .001, Math.max(0, video.duration - .05));};
     video.onseeked = () => {
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
@@ -58,7 +63,7 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
     video.onerror = () => setError(tr('Could not read the guide video.', 'Não foi possível ler o vídeo guia.', 'No se pudo leer el vídeo guía.'));
     return () => {clearTimeout(timer); video.removeAttribute('src'); video.load();};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoUrl, start]);
+  }, [videoUrl, start, image]);
   useEffect(() => () => {if (frame) URL.revokeObjectURL(frame.url);}, [frame]);
   useEffect(() => () => {if (result) URL.revokeObjectURL(result.url);}, [result]);
 
@@ -100,11 +105,11 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
   const ops: [typeof op, string][] = [['replace', tr('Replace', 'Substituir', 'Reemplazar')], ['remove', tr('Remove', 'Remover', 'Quitar')], ['add', tr('Add', 'Adicionar', 'Añadir')], ['free', tr('Describe', 'Descrever', 'Describir')]];
 
   return <dialog ref={dialog} className="trim-modal first-frame-modal" aria-labelledby="first-frame-heading" onCancel={e => {e.preventDefault(); onClose();}}>
-    <header className="trim-header"><div><span className="eyebrow">{tr('FIRST FRAME', 'PRIMEIRO QUADRO', 'PRIMER FOTOGRAMA')}</span><h2 id="first-frame-heading">{tr('Edit the start, propagate it', 'Edite o início e propague', 'Edita el inicio y propágalo')}</h2>
-      <p>{tr('The edited frame becomes a picture of the edit. Use the "First-frame propagate" model in Motion Transfer.', 'O quadro editado vira uma Picture da edição. Use o modelo "First-frame propagate" no Motion Transfer.', 'El fotograma editado se convierte en una imagen de la edición. Usa el modelo "First-frame propagate" en Motion Transfer.')}</p></div>
+    <header className="trim-header"><div><span className="eyebrow">{image ? tr('PICTURE', 'IMAGEM', 'IMAGEN') : tr('FIRST FRAME', 'PRIMEIRO QUADRO', 'PRIMER FOTOGRAMA')}</span><h2 id="first-frame-heading">{image ? tr('Edit this picture', 'Edite esta imagem', 'Edita esta imagen') : tr('Edit the start, propagate it', 'Edite o início e propague', 'Edita el inicio y propágalo')}</h2>
+      <p>{image ? tr('Replace, remove or add something, or paint the area to change; the result replaces the picture.', 'Substitua, remova ou adicione algo, ou pinte a área a mudar; o resultado substitui a imagem.', 'Reemplaza, quita o añade algo, o pinta el área a cambiar; el resultado sustituye la imagen.') : tr('The edited frame becomes a picture of the edit. Use the "First-frame propagate" model in Motion Transfer.', 'O quadro editado vira uma Picture da edição. Use o modelo "First-frame propagate" no Motion Transfer.', 'El fotograma editado se convierte en una imagen de la edición. Usa el modelo "First-frame propagate" en Motion Transfer.')}</p></div>
       <button type="button" className="trim-close" aria-label={tr('Close', 'Fechar', 'Cerrar')} onClick={onClose}>×</button></header>
     <div className="first-frame-panes">
-      <figure><figcaption className="eyebrow muted">{tr('Guide frame', 'Quadro do guia', 'Fotograma de la guía')}{frame ? ` · ${frame.width}×${frame.height}` : ''}</figcaption>{frame ? <div className="first-frame-paint" style={{aspectRatio: `${frame.width} / ${frame.height}`}}><img src={frame.url} alt=""/>{editor && <canvas ref={paint} aria-label={tr('Paint the area to edit', 'Pinte a área a editar', 'Pinta el área a editar')} onPointerDown={e => {drawing.current = true; e.currentTarget.setPointerCapture(e.pointerId); stroke(e);}} onPointerMove={stroke} onPointerUp={() => {drawing.current = false;}}/>}</div> : <div className="first-frame-empty">{tr('Reading the frame…', 'Lendo o quadro…', 'Leyendo el fotograma…')}</div>}</figure>
+      <figure><figcaption className="eyebrow muted">{image ? tr('Picture', 'Imagem', 'Imagen') : tr('Guide frame', 'Quadro do guia', 'Fotograma de la guía')}{frame ? ` · ${frame.width}×${frame.height}` : ''}</figcaption>{frame ? <div className="first-frame-paint" style={{aspectRatio: `${frame.width} / ${frame.height}`, maxWidth: `min(100%, calc(46dvh * ${(frame.width / frame.height).toFixed(4)}))`}}><img src={frame.url} alt=""/>{editor && <canvas ref={paint} aria-label={tr('Paint the area to edit', 'Pinte a área a editar', 'Pinta el área a editar')} onPointerDown={e => {drawing.current = true; e.currentTarget.setPointerCapture(e.pointerId); stroke(e);}} onPointerMove={stroke} onPointerUp={() => {drawing.current = false;}}/>}</div> : <div className="first-frame-empty">{tr('Reading the frame…', 'Lendo o quadro…', 'Leyendo el fotograma…')}</div>}</figure>
       <figure><figcaption className="eyebrow muted">{tr('Edited', 'Editado', 'Editado')}</figcaption>{result ? <img src={result.url} alt=""/> : <div className="first-frame-empty">{busy ? tr(`${editorName} is editing… (about 1 min)`, `${editorName} está editando… (cerca de 1 min)`, `${editorName} está editando… (alrededor de 1 min)`) : editor ? tr(`Edit with ${editorName} or upload an image`, `Edite com ${editorName} ou envie uma imagem`, `Edita con ${editorName} o sube una imagen`) : tr('Upload an edited image', 'Envie uma imagem editada', 'Sube una imagen editada')}</div>}</figure>
     </div>
     <div className="first-frame-controls">
@@ -124,7 +129,7 @@ export default function FirstFrameModal({videoUrl, start, pictures, lang, onUse,
       <div className="modal-actions">
         <button className="quiet-button" disabled={!frame} onClick={() => upload.current?.click()}>{tr('Upload edited image', 'Enviar imagem editada', 'Subir imagen editada')}</button>
         {editor && <button className="quiet-button" disabled={!frame || !ready || busy} onClick={edit}>{busy ? tr('Editing…', 'Editando…', 'Editando…') : tr(`Edit with ${editorName}`, `Editar com ${editorName}`, `Editar con ${editorName}`)}</button>}
-        <button className="primary" disabled={!frame || !result || busy} onClick={use}>{tr('Use as first frame', 'Usar como primeiro quadro', 'Usar como primer fotograma')}</button>
+        <button className="primary" disabled={!frame || !result || busy} onClick={use}>{image ? tr('Use this picture', 'Usar esta imagem', 'Usar esta imagen') : tr('Use as first frame', 'Usar como primeiro quadro', 'Usar como primer fotograma')}</button>
       </div>
     </div>
   </dialog>;

@@ -95,7 +95,7 @@ def main():
             else:download_url(item['url'],dest,token)
         except Exception as error:
             message=str(error).splitlines()[0]
-            if ('401' in message or '403' in message) and not token:message='Access denied: this model is private and HF_TOKEN is not set.'
+            if '401' in message or '403' in message:message=('Access denied: this model is gated; accept its license on Hugging Face and set HF_TOKEN.' if not token else 'Access denied: accept this model\'s license on Hugging Face with the account of your HF_TOKEN.')+(' '+item.get('note','') if item.get('note') else '')
             elif 'No space left' in message:message=f'No space left on device in {dest.parent}. Attach a larger volume at /workspace.'
             print(f"Failed {item['id']}: {message}",flush=True);status.set(item,'failed',error=message);failed.append(item['id']);continue
         status.set(item,'installed',total=dest.stat().st_size)

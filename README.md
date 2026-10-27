@@ -92,8 +92,10 @@ video with ffmpeg) and **ComfyUI** (runs the MiniMax H3 graphs on a GPU). Pick w
 
 All three need the models: about 125 GB with every profile (H3 base, text encoder, VAE, planner VLM and the
 task LoRAs). [Models and download links](docs/models-and-downloads.md). The Motion Transfer LoRAs are public in [Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI) (BFS Motion Transfer license), and so are the FFP and Solar merges.
-**No Hugging Face token or RunPod secret is needed** for any profile; `HF_TOKEN` only matters if you point a model at
-your own private repository.
+**No Hugging Face token or RunPod secret is needed** for any default profile. The one exception is the optional `klein3`
+profile (FLUX.3 [image klein]), which is gated by Black Forest Labs: accept its license on
+[Hugging Face](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN`. Without it, the
+default FLUX.2 [klein] 4B (Apache-2.0) edits frames and pictures.
 
 ### A. Local, with your own ComfyUI
 

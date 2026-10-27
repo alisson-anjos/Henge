@@ -66,6 +66,7 @@ Choose the model profiles (comma list), as on a normal pod:
 | `omniref` | OmniRef base | +22 GB |
 | `fibo` | Reference adaptation (FIBO 2 edit: animal to human-compatible pose) | ~14 GB |
 | `klein` | First-frame edits with FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0): replace, remove or add, optionally only in a painted area; used before FIBO when installed | ~12 GB |
+| `klein3` | Optional: FLUX.3 [image klein], used instead of FLUX.2 [klein] when installed. **Gated**: accept the FLUX Kommunity License at [black-forest-labs/flux-3-image-klein-comfy](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN` | ~5 GB |
 | `sam2d`, `sam3d` | Subject marks: SAM 3.1 tracking (2D colors, Mask, the assistant's find people) and SAM 3D Body + MoGe (3D) | ~4 GB |
 
 The default, every profile above, needs roughly 125–135 GB: create the volume with 180 GB (`VOLUME_GB=180`).

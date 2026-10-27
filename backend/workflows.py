@@ -204,6 +204,23 @@ def klein_graph(image,refs,instruction,seed,steps=4,prefix=None):
               '46':node('VAEDecode',samples=['45',0],vae=['3',0]),'47':node('SaveImage',images=['46',0],filename_prefix=prefix or image.rsplit('.',1)[0]+'_klein')})
     return g
 
+# FLUX.3 [image klein] (optional, gated: FLUX Kommunity License, accept it on Hugging Face and set HF_TOKEN). Graph from
+# Black Forest Labs' "Multiple image to image" workflow: ModelSamplingFlux shift log(16), ReferenceMultiLatent, 16 steps.
+KLEIN3={'unet':'flux3-image-klein-int8-convrot.safetensors','clip':'qwen3vl_4b_int8_convrot.safetensors','vae':'flux2-vae.safetensors'}
+def klein3_graph(image,refs,instruction,seed,steps=16,prefix=None):
+    shift=math.log(16)
+    g={'1':node('UNETLoader',unet_name=KLEIN3['unet'],weight_dtype='default'),'3':node('CLIPLoader',clip_name=KLEIN3['clip'],type='flux3',device='default'),
+       '4':node('VAELoader',vae_name=KLEIN3['vae']),'5':node('CLIPTextEncode',clip=['3',0],text=instruction),'6':node('CLIPTextEncode',clip=['3',0],text=''),
+       '10':node('LoadImage',image=image),'11':node('ImageScaleToTotalPixels',image=['10',0],upscale_method='lanczos',megapixels=1.,resolution_steps=16),
+       '12':node('GetImageSize',image=['11',0]),
+       '2':node('ModelSamplingFlux',model=['1',0],max_shift=shift,base_shift=shift,width=['12',0],height=['12',1]),
+       '20':node('ReferenceMultiLatent',positive=['5',0],negative=['6',0],vae=['4',0],resolution='resize',**{'resolution.megapixels':1.,'images.image0':['10',0]}),
+       '30':node('EmptyFlux2LatentImage',width=['12',0],height=['12',1],batch_size=1),
+       '31':node('KSampler',model=['2',0],positive=['20',0],negative=['20',1],latent_image=['30',0],seed=seed,steps=steps,cfg=1.,sampler_name='euler',scheduler='simple',denoise=1.),
+       '32':node('VAEDecode',samples=['31',0],vae=['4',0]),'33':node('SaveImage',images=['32',0],filename_prefix=prefix or image.rsplit('.',1)[0]+'_klein3')}
+    for i,r in enumerate(refs,1):g[f'4{i}']=node('LoadImage',image=r);g['20']['inputs'][f'images.image{i}']=[f'4{i}',0]
+    return g
+
 def subject_looks_graph(looks):
     # One node per marked person: the look of the person under the user's click, used to recognise them after cuts.
     g={}

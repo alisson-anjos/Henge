@@ -57,7 +57,7 @@ Environment variables (all optional):
 | Variable | Default | Purpose |
 |---|---|---|
 | `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,fibo,klein,sam2d,sam3d,audio` | Comma list: `character`, `omniref` (+22 GB base), `fibo`, `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0, Combined), `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with Motion Transfer v1.0 and TARA v1.0, and the Solar 4-step turbo), `klein` (FLUX.2 Klein 4B first-frame editor) |
-| `HF_TOKEN` | — | Not needed: every model is public. Only for an override that points at your own private repository |
+| `HF_TOKEN` | — | Not needed for the default profiles. Only for the optional `klein3` profile (FLUX.3 [image klein], gated: accept its license at huggingface.co/black-forest-labs/flux-3-image-klein-comfy) or an override that points at a private repository |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that replaces a model URL or destination from the bundled manifest |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |

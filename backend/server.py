@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageFont,ImageOps
 import workflows
 import moving_plate
-from workflows import klein_graph,KLEIN,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,fixed_plan,head_reference,character_reference
@@ -288,11 +288,19 @@ def klein_available(info=None):
     return all(n in info for n in ('ReferenceLatent','Flux2Scheduler','EmptyFlux2LatentImage')) and KLEIN['unet'] in comfy_choices(info,'UNETLoader','unet_name') \
         and KLEIN['clip'] in comfy_choices(info,'CLIPLoader','clip_name')
 
+def klein3_available(info=None):
+    """FLUX.3 [image klein], optional (gated download): its model and the shared Qwen3-VL 4B text encoder."""
+    try:info=comfy_info() if info is None else info
+    except Exception:return False
+    return 'ReferenceMultiLatent' in info and KLEIN3['unet'] in comfy_choices(info,'UNETLoader','unet_name') \
+        and KLEIN3['clip'] in comfy_choices(info,'CLIPLoader','clip_name')
+
 def frame_editor(info=None):
-    """Which image editor edits the first frame: FLUX.2 [klein] when installed, else FIBO 2, else none."""
+    """Which image editor edits frames and pictures: FLUX.3 [image klein] when its optional download is there, else
+    FLUX.2 [klein] 4B (the default), else FIBO 2, else none."""
     try:info=comfy_info() if info is None else info
     except Exception:return None
-    return 'klein' if klein_available(info) else 'fibo' if fibo_available(info) else None
+    return 'klein3' if klein3_available(info) else 'klein' if klein_available(info) else 'fibo' if fibo_available(info) else None
 
 # First-frame edit instructions per operation; the painted area (when given) is the only part that changes.
 EDIT_OPS={'replace':'Replace {what} with {target}.','remove':'Remove {what} and fill the space naturally with what would be behind it.',
@@ -1044,12 +1052,11 @@ def health():
         cached=LAST_INFO['url']==URL and LAST_INFO['info']
         if cached and time.time()-LAST_INFO['at']<info_ttl():info=LAST_INFO['info'];online=comfy_port_open()
         elif not cached:
-            try:t=time.time();info=api('GET','/object_info',timeout=10);online=True;LAST_INFO.update(url=URL,info=info,at=time.time(),took=time.time()-t)
-            except Exception:
-                # Busy with a long node or slow to list its nodes: if its port answers it is online; the list comes later.
-                online=comfy_port_open()
-                if online:refresh_info_later()
-                info={}
+            # Never wait for it here: a request ComfyUI cannot finish in time still runs to the end on its side, and
+            # polls piling up would keep it busy for good. One background fetch at a time; the list arrives shortly.
+            online=comfy_port_open()
+            if online:refresh_info_later()
+            info={}
         else:
             online=comfy_port_open();info=LAST_INFO['info']
             if online:refresh_info_later()
@@ -1070,7 +1077,7 @@ def health():
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
-    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info) or klein_available(info),'frame_editor':'klein' if klein_available(info) else 'fibo' if fibo_available(info) else None,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info) or klein_available(info),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -1283,7 +1290,7 @@ async def convert_gif(request:Request):
 
 @app.post('/frame-edit')
 async def frame_edit(request:Request):
-    """First-frame edit (the first-frame modal): FLUX.2 [klein] when installed, else FIBO 2; returns the edited PNG.
+    """Frame or picture edit (the edit modal): FLUX.3 / FLUX.2 [klein] when installed, else FIBO 2; returns the edited PNG.
     Optional `mask` (white = paint): only that area is edited, on a crop around it, and pasted back with a soft edge, so
     the rest of the frame stays pixel-exact. `op` is replace, remove, add or free (`what` = the part, `instruction` = the
     new content or the whole request). Runs as a hidden job so it uses the same ComfyUI or serverless path as generation."""
@@ -1316,7 +1323,8 @@ async def frame_edit(request:Request):
     job={'id':jid,'created':time.time(),'status':'running','stage':'frame_edit','progress':0,'request':{'mode':'frame_edit','instruction':instruction or what,'op':op,'editor':editor,'masked':bool(region)},'options':{},'message':'Editing the frame'};save(job)
     try:
         seed=int(time.time())%2**31
-        if editor=='klein':graph=klein_graph(staged[0],staged[1:],text,seed)
+        if editor=='klein3':graph=klein3_graph(staged[0],staged[1:],text,seed)
+        elif editor=='klein':graph=klein_graph(staged[0],staged[1:],text,seed)
         else:
             # FIBO otherwise re-poses the picture (seen with a person swap): pin <image_1>'s composition and poses.
             refs=''.join(f' <image_{i}> is a reference.' for i in range(2,len(staged)+1))
