@@ -303,6 +303,18 @@ npm run build
 
 ## Credits
 
+All task LoRAs Henge runs are by Alisson Anjos ([alissonerdx](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI),
+BFS collection): Character Swap v1.1, Motion Transfer v1.0, Motion Transfer TARA v1.0 and Combined, Head Swap v1.0,
+and Little More Sharpness (LMS) v1.0 — the sharpness LoRA used to push results further, alone in Sharpness mode or as a
+second pass on any generation — plus the H3 latent upscaler LMS v0.1 (initialized from LBH-123-AI's upscaler).
+TARA-H3 is also ours ([technical report](https://github.com/alisson-anjos/ai-toolkit/tree/tara-h3-v0.1.2/research/tara-h3)).
+
+Third-party models: MiniMax H3 ([MiniMaxAI](https://huggingface.co/MiniMaxAI/MiniMax-H3), ComfyUI weights by
+[Comfy-Org](https://huggingface.co/Comfy-Org/MiniMax-H3)), the training adapter V2
+([ostris](https://huggingface.co/ostris/minimax_h3_training_adapter)), the turbo LoRAs
+([drbaph](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI), [Kijai](https://huggingface.co/Kijai/MiniMax-H3-experimental),
+[lightx2v](https://huggingface.co/lightx2v/Minimax-h3-Turbo)), SAM 3.1, BiRefNet, FIBO (Bria) and the Qwen3.5 planner.
+
 The Sharpness 2K/4K H3 upscaler is copied, with small changes, from
 [bbaudio-2025/Comfyui-MMH3-UltimateUpscale](https://github.com/bbaudio-2025/Comfyui-MMH3-UltimateUpscale) (MIT):
 the [LBH-123-AI](https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler) 3D latent upscaler and per-step
