@@ -144,6 +144,8 @@ UPSCALE_ABOVE=720
 def validate_request(r,options,slots):
     if not isinstance(r,dict) or r.get('mode') not in MODES or not isinstance(r.get('prompt'),str) or len(r['prompt'])>16000:raise ValueError('Provide a valid direction and prompt')
     profile,low,high=MODES[r['mode']]
+    # API and MCP calls may omit the model: each mode gets its own default instead of Motion Transfer for everything.
+    if not options.get('profile'):options['profile']={'swap':'character','motion':'motion'}.get(r['mode'],options.get('profile'))
     if r['mode'] in FIXED_RECIPE:
         # Fixed-recipe modes build their own prompt; the profile is implied by the mode.
         r['prompt']=r['prompt'] or r['mode'];options['profile']=profile;options['enhance_prompt']=True
