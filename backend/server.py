@@ -8,7 +8,8 @@ import assistant
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageFont,ImageOps
-from workflows import find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+import workflows
+from workflows import lora_installed,localize_loras,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,fixed_plan,head_reference,character_reference
@@ -291,7 +292,16 @@ def execute_serverless(job,graph,stage):
         if patch:save(job,**patch)
     return REMOTE.run(graph,on_status,lambda:load(job['id'])['status']=='cancelled')
 
+def known_loras():
+    """ComfyUI's LoRA list (local or the serverless inventory), for localize_loras when no health check ran yet."""
+    if not workflows.INSTALLED_LORAS:
+        try:
+            info=REMOTE.object_info() if REMOTE else api('GET','/object_info/LoraLoaderModelOnly',timeout=10)
+            workflows.INSTALLED_LORAS=set(comfy_choices(info,'LoraLoaderModelOnly','lora_name'))
+        except Exception:pass
+
 def execute_graph(job,graph,stage):
+    known_loras();graph=localize_loras(graph)
     if REMOTE:return execute_serverless(job,graph,stage)
     import aiohttp
     async def execute():
@@ -932,8 +942,9 @@ def health():
         setup={'downloading':False,'base_ready':online,'all_ready':online,'free_gb':None,'persistent_volume':None}
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
     unets=comfy_choices(info,'UNETLoader','unet_name')
-    models={key:{**value,'available':unknown or value['lora'] in installed and (not value['adapter'] or value['adapter'] in installed) and (not value.get('unet') or value['unet'] in unets) and mode_ready[key]} for key,value in MODELS.items()}
-    turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or value['lora'] is None or value['lora'] in installed} for key,value in TURBOS.items()}
+    if installed:workflows.INSTALLED_LORAS=set(installed)
+    models={key:{**value,'available':unknown or lora_installed(value['lora'],installed) and lora_installed(value['adapter'],installed) and (not value.get('unet') or value['unet'] in unets) and mode_ready[key]} for key,value in MODELS.items()}
+    turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or lora_installed(value['lora'],installed)} for key,value in TURBOS.items()}
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
@@ -1004,7 +1015,7 @@ def test_connection(cfg):
     missing=[n for n in HENGE_NODES if n not in info]
     if missing:return {'ok':False,'message':'ComfyUI answers, but the Henge nodes are missing: '+', '.join(missing)+'. Link backend/comfy_nodes/henge into custom_nodes and restart ComfyUI.'}
     loras=comfy_choices(info,'LoraLoaderModelOnly','lora_name')
-    ready=[v['label'] for v in MODELS.values() if v['lora'] in loras]
+    ready=[v['label'] for v in MODELS.values() if lora_installed(v['lora'],set(loras))]
     via=' through the Comfy SDK (comfy-api-proxy is started by Henge)' if cfg['provider']=='comfy_sdk' else ''
     return {'ok':True,'message':f'ComfyUI answers{via} · {len(ready)} of {len(MODELS)} Henge models installed','models_ready':ready}
 

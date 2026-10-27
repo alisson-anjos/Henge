@@ -55,7 +55,7 @@ Choose the model profiles (comma list), as on a normal pod:
 | Profile | Mode | Notes |
 |---|---|---|
 | `character` | Character Swap | base H3, text encoder, VAE, VLM planner; always needed |
-| `motion10500`, `motion4500` (or `motion`) | Motion Transfer | public, BFS Motion Transfer license |
+| `motion` (or `motion_transfer`, `motion_transfer_tara`) | Motion Transfer | public, BFS Motion Transfer license |
 | `solar` | Motion Transfer (Solar) | ~25 GB |
 | `ffp` | Motion Transfer FFP: propagate an edited first frame (VFX Edit FFP + SolarRenderer 0.5, fro dyn99) | 220 MB, private: needs the `hf_token` secret |
 | `headswap` | Head Swap | |

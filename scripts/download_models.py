@@ -27,8 +27,15 @@ def download_url(url,dest,token=None):
             for chunk in response.iter_content(8<<20):handle.write(chunk)
     part.replace(dest)
 
+# Old short local names of the published LoRAs (the same files). Sharpness is not here: the old file was a compressed
+# variant, the published r64 is downloaded instead.
+import json as _json
+LEGACY={k:v for k,v in _json.loads(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','backend','legacy_loras.json')).read()).items() if '_lms_' not in k}
+
 # Mode names expand to the profiles that hold their LoRAs, so "motion" gets every Motion Transfer model.
-ALIASES={'motion':['motion10500','motion4500','ffp'],'swap':['character'],'masks':['sam2d']}
+ALIASES={'motion':['motion_transfer','motion_transfer_tara','ffp'],'swap':['character'],'masks':['sam2d'],
+         # names used before 2026-10-27
+         'motion10500':['motion_transfer'],'motion4500':['motion_transfer_tara']}
 
 def selected_models(manifest,profiles):
     profiles={q for p in profiles if p.strip() for q in ALIASES.get(p.strip(),[p.strip()])}
@@ -43,7 +50,7 @@ def selected_models(manifest,profiles):
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--manifest',default=os.environ.get('HENGE_MODEL_MANIFEST','config/model-repos.example.json'));parser.add_argument('--models-dir',default=os.environ.get('HENGE_MODELS_DIR','/opt/ComfyUI/models'));parser.add_argument('--profiles',default=os.environ.get('HENGE_MODEL_PROFILES','character'));parser.add_argument('--dry-run',action='store_true');args=parser.parse_args()
     manifest=json.loads(Path(args.manifest).read_text());root=Path(args.models_dir)
-    # HENGE_MODEL_OVERRIDES='{"motion10500":{"repo_id":"user/repo","filename":"x.safetensors"}}'
+    # HENGE_MODEL_OVERRIDES='{"motion_transfer_v1":{"repo_id":"user/repo","filename":"x.safetensors"}}'
     # fills or replaces entries without editing the manifest (handy for RunPod env vars).
     overrides=json.loads(os.environ.get('HENGE_MODEL_OVERRIDES') or '{}')
     for item in manifest['models']:item.update(overrides.get(item['id'],{}))
@@ -58,6 +65,9 @@ def main():
     failed=[]
     for item in items:
         dest=root/item['destination'];dest.parent.mkdir(parents=True,exist_ok=True)
+        # Installs from before 2026-10-27 stored the same files under short names: rename instead of downloading again.
+        old=root/'loras'/LEGACY.get(item['destination'].removeprefix('loras/'),'-')
+        if not dest.exists() and old.is_file() and old.stat().st_size>0:old.rename(dest);print('Renamed:',old.name,'->',dest.name,flush=True)
         if dest.is_file() and dest.stat().st_size>0:
             if has_keys(dest,item.get('require_keys')):print('Already installed:',item['id'],flush=True);status.set(item,'installed',total=dest.stat().st_size);continue
             print(f"Replacing {item['id']}: {dest.name} is an incompatible format",flush=True);dest.unlink()

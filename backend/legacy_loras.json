@@ -1,0 +1,16 @@
+{
+ "henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors": "henge/motion_10500.safetensors",
+ "henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors": "henge/motion_tara_4500.safetensors",
+ "henge/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors": "henge/motion_10500_tara03_fro_dyn95.safetensors",
+ "henge/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors": "henge/motion_10500_tara03_fro_dyn99.safetensors",
+ "henge/minimax_h3_ref2va_training_adapter_v2.safetensors": "henge/training_adapter_v2.safetensors",
+ "henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors": "henge/character_v1_1.safetensors",
+ "henge/minimax_h3_head_swap_v1.0_r32.safetensors": "henge/head_swap_v1_0_r32.safetensors",
+ "henge/minimax_h3_lms_v1.0_r64.safetensors": "henge/lms_v1_fro_dyn95.safetensors",
+ "henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors": "henge/dmd_ref2va_8step.safetensors",
+ "henge/minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors": "henge/turbo_dmad_4step.safetensors",
+ "henge/minimax_h3_pdmd_4step_lora_avg_rank_57_bf16.safetensors": "henge/turbo_pdmd_4step.safetensors",
+ "henge/minimax_h3_pdmd_2step_lora_avg_rank_38_bf16.safetensors": "henge/turbo_pdmd_2step.safetensors",
+ "henge/minimax_h3_ref2v_turbo_8step_v1.1_768p_comfyui_bf16.safetensors": "henge/turbo_lightx2v_8step_v1_1.safetensors",
+ "henge/minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors": "henge/turbo_lightx2v_4step_v1_0.safetensors"
+}

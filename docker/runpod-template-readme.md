@@ -40,7 +40,7 @@ The prompt planner / VLM is Qwen3.5 9B (W4A8 GPTQ), running inside ComfyUI.
 |---|---|---|
 | `HF_TOKEN` | — | Hugging Face token. Only needed for the experimental `ffp` profile |
 | `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d` | `motion` = every Motion Transfer LoRA; also `audio`, `solar` |
-| `HENGE_MODEL_OVERRIDES` | — | JSON to replace a model URL, e.g. `{"motion4500":{"url":"https://…"}}` |
+| `HENGE_MODEL_OVERRIDES` | — | JSON to replace a model URL, e.g. `{"motion_transfer_tara_v1":{"url":"https://…"}}` |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |
 | `HENGE_EXPOSE_COMFY` | — | `1` also serves ComfyUI on port 8189 |
 

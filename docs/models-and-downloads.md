@@ -10,7 +10,7 @@ ComfyUI directory configured by `COMFY_ROOT`, or expose them with ComfyUI's
 | Task | LoRA | Method |
 | --- | --- | --- |
 | Character Swap | Character Swap v1.1, selected automatically | Guide Latents (default) or TARA (experimental) |
-| Motion Transfer | Original 10500 or TARA-trained 4500 | Guide Latents (default) or TARA (experimental), in the main generation panel |
+| Motion Transfer | Motion Transfer v1.0 or Motion Transfer TARA v1.0 | Guide Latents (default) or TARA (experimental), in the main generation panel |
 
 The motion model and method are independent. A guide-trained LoRA may be used
 with TARA; a TARA-trained LoRA may be selected with Guide Latents. Wiring support
@@ -25,30 +25,37 @@ Download the exact files below. The last column is relative to ComfyUI.
 | [H3 ref2va pruned INT8 ConvRot](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors) | `models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors` |
 | [H3 Qwen3-VL 32B text encoder](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors) | `models/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors` |
 | [H3 video VAE FP16](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors) | `models/vae/minimax_h3_video_vae_fp16.safetensors` |
-| [Character Swap v1.1](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors) | Rename to `models/loras/henge/character_v1_1.safetensors` |
-| [Character profile's 8-step DMD adapter](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors) | Rename to `models/loras/henge/dmd_ref2va_8step.safetensors` |
-| [Motion profiles' training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors) | Rename to `models/loras/henge/training_adapter_v2.safetensors` |
+| [Character Swap v1.1](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors) | `models/loras/henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors` |
+| [Character profile's 8-step DMD adapter](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors) | `models/loras/henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors` |
+| [Motion profiles' training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors) | `models/loras/henge/minimax_h3_ref2va_training_adapter_v2.safetensors` |
 | [H3 audio VAE](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors), optional for audio conditioning | `models/vae/minimax_h3_audio_vae_fp32.safetensors` |
 
 H3 conditioning uses the 32B H3 encoder even when a smaller VLM is used for prompt
 writing. The writer does not replace that encoder.
 
-### Private motion checkpoints
+### Henge LoRAs (BFS collection)
 
-The Original 10500 and TARA 4500 checkpoints are private project artifacts. They
-have **not** been published by this application update. Authorized project
-maintainers can retrieve them from the legacy private recovery repository
-`Alissonerdx/Kagemage-Backups`, under `pod_20261024T000050Z`. This historical
-backup name predates the Henge rename.
-Use these exact local names:
+Every file keeps its published name under `models/loras/henge/`; no renaming. All are public on
+[Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI) (`download_models.py`
+profiles in brackets).
 
-- Original 10500: `models/loras/henge/motion_10500.safetensors`.
-- TARA 4500: `models/loras/henge/motion_tara_4500.safetensors`.
+| Mode | File |
+| --- | --- |
+| Motion Transfer v1.0 (`motion`) | [`minimax_h3_motion_transfer_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_ref2va.safetensors) |
+| Motion Transfer TARA v1.0 (`motion`) | [`minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors) |
+| Motion Transfer Combined, test (`motion`) | [`…combined_v1.0_dyn95`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors), [`…combined_v1.0_dyn99`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors) |
+| Head Swap v1.0 (`headswap`) | [`minimax_h3_head_swap_v1.0_r32.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_head_swap_v1.0_r32.safetensors) |
+| Little More Sharpness v1.0 (`sharpness`) | [`minimax_h3_lms_v1.0_r64.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_lms_v1.0_r64.safetensors) |
 
-The 4500 save is under `training/tara_h3_motion_r64_multiscale_v2/step_4500/`.
-The recovery upload includes a matched optimizer for training recovery; inference
-only needs the LoRA and the configured adapter. Do not load an already merged
-10500+V2 file alongside V2 again. Do not commit weights or access tokens to GitHub.
+**Training adapter V2 with the motion LoRAs.** The Motion Transfer LoRAs were trained on top of
+[ostris' training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter) kept frozen. They will usually
+work without it, but loading the adapter first (strength 1) and the motion LoRA after it reproduces the training
+conditions, which is what Henge does; compare both on your own clips. Do not load a file that already merges the
+adapter (for example an exact Motion Transfer v1.0 + V2 merge) together with the adapter again.
+
+Installs from before 2026-10-27 used short local names (for example `character_v1_1`, `training_adapter_v2`); the
+bridge still finds them, and `download_models.py` renames them to the published names instead of downloading again.
+The experimental FFP model (`ffp`) and the `solar` profile are third-party merges and stay private.
 
 ## Prompt writer / media analysis
 

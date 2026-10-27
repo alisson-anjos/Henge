@@ -32,8 +32,9 @@ Fight footage: TEKKEN DADDY (YouTube), Tekken 8 © Bandai Namco — used here as
 - **Guide-latent training**, a method inherited from LTX's guide-latent IC-LoRAs and brought to MiniMax H3: the
   guide's VAE latents share the output's frame grid, so frame N is built on frame N of the guide. Pose, camera and
   timing stay locked, with no desync ([how the guide reaches H3](docs/conditioning.md)).
-- **TARA (Native Temporal Alignment)**, our method: keeps the guide as a native video reference and biases each output
-  moment to attend to the matching guide moment, with no extra trained layers.
+- **TARA-H3 (Temporally Aligned Reference Attention)**, our method: keeps the guide as a native video reference, puts it
+  on the generated video's temporal clock and biases each output moment to attend to the matching guide moment, with no
+  extra trained layers ([technical report](https://github.com/alisson-anjos/ai-toolkit/tree/tara-h3-v0.1.2/research/tara-h3)).
 - **Any length, shot by shot**: long clips are split at camera cuts or at a fixed length, with context frames carried
   between shots; each shot can be previewed, redone alone and downloaded.
 - **Subject guidance**: mark people (SAM 3.1 tracking) and bind each to its pictures, as 2D color marks, a 3D body or a
@@ -52,7 +53,7 @@ Demo footage: [Pexels](https://www.pexels.com/license/) videos and original AI-g
 | Mode | What it does | Recipe |
 |---|---|---|
 | Character Swap | Replace the person in a video with a character picture | Character Swap v1.1 LoRA + turbo; v1.1 one-line `body_swap:` prompt; reference background removed (BiRefNet, #808080, 0.5 MP) |
-| Motion transfer | Drive a new character with the guide's performance | Motion Transfer v1.0 LoRA (10500 steps) + training adapter V2; Guide Latents or TARA (experimental) |
+| Motion transfer | Drive a new character with the guide's performance | Motion Transfer v1.0 or TARA v1.0 LoRA + training adapter V2; Guide Latents or TARA (experimental) |
 | Head Swap | Replace only the head with a face picture | Head Swap v1.0 r32 + turbo; published `head_swap:` template |
 | Sharpness | Sharpen an upload or one of your generations, optionally up to 2K/4K | MiniMax H3 + Little More Sharpness LoRA; for 2K/4K it sharpens at half size and doubles it with the H3 latent upscaler + a short H3 refine (tiled at 4K) or NVIDIA RTX Video Super Resolution; source video only |
 

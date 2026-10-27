@@ -4,34 +4,46 @@ Only branches selected in a validated plan are added: unused loaders never execu
 import json,math
 from pathlib import Path
 MODELS={
- 'motion':{'label':'Motion Transfer v1.0','task':'motion','lora':'henge/motion_10500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
- # Motion Transfer TARA v1.0: the TARA-trained LoRA (step 4500); the studio switches to the TARA method with it.
- 'motion_tara':{'label':'Motion Transfer TARA v1.0','task':'motion','lora':'henge/motion_tara_4500.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True,'method':'tara'},
- # Motion Transfer Combined (for testing): 10500 x1.0 + TARA 4500 x0.3, rank concat then per-module SVD keeping 95% /
+ 'motion':{'label':'Motion Transfer v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True},
+ # Motion Transfer TARA v1.0: the LoRA trained for TARA; the studio switches to the TARA method with it.
+ 'motion_tara':{'label':'Motion Transfer TARA v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True,'method':'tara'},
+ # Motion Transfer Combined (for testing): Motion Transfer v1.0 x1.0 + TARA v1.0 x0.3, rank concat then per-module SVD keeping 95% /
  # 99% of the Frobenius energy (tools/henge_session_20261025/merge_fro.py); for Guide Latents and TARA.
- 'motion_mix_dyn95':{'label':'Motion Transfer Combined · dyn95 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn95.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
- 'motion_mix_dyn99':{'label':'Motion Transfer Combined · dyn99 (test)','task':'motion','lora':'henge/motion_10500_tara03_fro_dyn99.safetensors','adapter':'henge/training_adapter_v2.safetensors','clip_context':True},
+ 'motion_mix_dyn95':{'label':'Motion Transfer Combined · dyn95 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True},
+ 'motion_mix_dyn99':{'label':'Motion Transfer Combined · dyn99 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True},
  # First-frame propagate: Alissonerdx VFX Edit FFP (r128) merged with SolarRenderer control at 0.5, Frobenius dyn99.
  # The whole source is the guide; an optional edited first frame enters as a native image reference (prompt: vfx_edit:).
  'motion_ffp':{'label':'Motion Transfer FFP','task':'motion','lora':'henge/vfx_ffp_solar05_fro_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
- 'character':{'task':'swap','label':'Character Swap v1.1 · published','lora':'henge/character_v1_1.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
+ 'character':{'task':'swap','label':'Character Swap v1.1','lora':'henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
- 'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/head_swap_v1_0_r32.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False,'scheduler':'beta'},
- 'sharpness':{'task':'sharpness','label':'LMS Sharpness v1 · fro dyn95','lora':'henge/lms_v1_fro_dyn95.safetensors','adapter':'henge/dmd_ref2va_8step.safetensors','turbo':True,'clip_context':False},
+ 'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/minimax_h3_head_swap_v1.0_r32.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False,'scheduler':'beta'},
+ 'sharpness':{'task':'sharpness','label':'Little More Sharpness v1.0','lora':'henge/minimax_h3_lms_v1.0_r64.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
 }
 # Swappable speed LoRAs. Swap modes load it in place of an adapter; Motion stacks it on training
 # adapter V2 (what the motion LoRAs were trained on).
 TURBOS={
  'none':{'label':'None (for distilled bases such as FastH3 OmniRef)','lora':None,'steps':8},
- 'dmd8':{'label':'DMD 8-step (drbaph)','lora':'henge/dmd_ref2va_8step.safetensors','steps':8},
- 'dmad4':{'label':'DMAD 4-step (Kijai)','lora':'henge/turbo_dmad_4step.safetensors','steps':4},
- 'pdmd4':{'label':'pDMD 4-step (Kijai, experimental)','lora':'henge/turbo_pdmd_4step.safetensors','steps':4},
- 'pdmd2':{'label':'pDMD 2-step (Kijai, experimental)','lora':'henge/turbo_pdmd_2step.safetensors','steps':2},
- 'lightx8':{'label':'lightx2v 8-step v1.1 (768p)','lora':'henge/turbo_lightx2v_8step_v1_1.safetensors','steps':8},
- 'lightx4':{'label':'lightx2v 4-step v1.0 (768p)','lora':'henge/turbo_lightx2v_4step_v1_0.safetensors','steps':4},
+ 'dmd8':{'label':'DMD 8-step (drbaph)','lora':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','steps':8},
+ 'dmad4':{'label':'DMAD 4-step (Kijai)','lora':'henge/minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors','steps':4},
+ 'pdmd4':{'label':'pDMD 4-step (Kijai, experimental)','lora':'henge/minimax_h3_pdmd_4step_lora_avg_rank_57_bf16.safetensors','steps':4},
+ 'pdmd2':{'label':'pDMD 2-step (Kijai, experimental)','lora':'henge/minimax_h3_pdmd_2step_lora_avg_rank_38_bf16.safetensors','steps':2},
+ 'lightx8':{'label':'lightx2v 8-step v1.1 (768p)','lora':'henge/minimax_h3_ref2v_turbo_8step_v1.1_768p_comfyui_bf16.safetensors','steps':8},
+ 'lightx4':{'label':'lightx2v 4-step v1.0 (768p)','lora':'henge/minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors','steps':4},
  'solar4':{'label':'SolarRenderer 4-step (ComfyUI keys)','lora':'henge/turbo_solar_4step.safetensors','steps':4},
 }
+# LoRA files keep their published filenames under loras/henge/. Installs from before 2026-10-27 used short names;
+# localize_loras() falls back to the old name when only that one is installed, so nothing has to be downloaded again.
+LEGACY_LORAS=json.loads((Path(__file__).with_name('legacy_loras.json')).read_text())
+INSTALLED_LORAS=set()  # ComfyUI's LoRA list, refreshed by the bridge
+def lora_installed(name,installed=None):
+    installed=INSTALLED_LORAS if installed is None else installed
+    return not name or name in installed or LEGACY_LORAS.get(name) in installed
+def localize_loras(graph):
+    for n in graph.values():
+        name=n.get('inputs',{}).get('lora_name') if n.get('class_type')=='LoraLoaderModelOnly' else None
+        if name and INSTALLED_LORAS and name not in INSTALLED_LORAS and LEGACY_LORAS.get(name) in INSTALLED_LORAS:n['inputs']['lora_name']=LEGACY_LORAS[name]
+    return graph
 # Base diffusion models. OmniRef (FastVideo) is already distilled to 8 steps: pair it with turbo 'none'.
 BASES={
  'h3':{'label':'MiniMax H3 ref2va','unet':'minimax_h3_ref2va_pruned_int8_convrot.safetensors'},

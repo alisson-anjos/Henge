@@ -33,7 +33,7 @@ Output is silent24fps. No generated dialogue/music is inferred from visible mout
 
 ## Models and switching modes
 
-The example uses the10500+V2 exact merged LoRA at strength1. Do not apply V2 again. Model filenames must be adapted to local inventory. Default prompt VLM is the development environment's generation-capable Qwen3VL4B; it can be replaced with a compatible installed VLM. H3 TE remains its own native encoder.
+The example loads training adapter V2 and then Motion Transfer v1.0, both at strength 1. Model filenames must be adapted to local inventory. Default prompt VLM is the development environment's generation-capable Qwen3VL4B; it can be replaced with a compatible installed VLM. H3 TE remains its own native encoder.
 
 TARA does not load LoRAs or perform conditioning by itself. The wrapper retains native reference video latents; no Add Guide is present. Bypassing the TARA patch gives native-reference inference without temporal alignment, not Guide Latents. For Guide Latents, use the separate guide workflow; do not silently change contracts.
 

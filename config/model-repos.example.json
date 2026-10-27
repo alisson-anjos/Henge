@@ -57,7 +57,7 @@
     {
       "id": "character",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors",
-      "destination": "loras/henge/character_v1_1.safetensors",
+      "destination": "loras/henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors",
       "profiles": [
         "character"
       ]
@@ -65,7 +65,7 @@
     {
       "id": "character_adapter",
       "url": "https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
-      "destination": "loras/henge/dmd_ref2va_8step.safetensors",
+      "destination": "loras/henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
       "profiles": [
         "character",
         "headswap",
@@ -75,7 +75,7 @@
     {
       "id": "turbo_dmad4",
       "url": "https://huggingface.co/Kijai/MiniMax-H3-experimental/resolve/main/loras/minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
-      "destination": "loras/henge/turbo_dmad_4step.safetensors",
+      "destination": "loras/henge/minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
       "profiles": [
         "character",
         "headswap",
@@ -86,7 +86,7 @@
     {
       "id": "turbo_pdmd4",
       "url": "https://huggingface.co/Kijai/MiniMax-H3-experimental/resolve/main/loras/minimax_h3_pdmd_4step_lora_avg_rank_57_bf16.safetensors",
-      "destination": "loras/henge/turbo_pdmd_4step.safetensors",
+      "destination": "loras/henge/minimax_h3_pdmd_4step_lora_avg_rank_57_bf16.safetensors",
       "profiles": [
         "character",
         "headswap",
@@ -97,7 +97,7 @@
     {
       "id": "turbo_pdmd2",
       "url": "https://huggingface.co/Kijai/MiniMax-H3-experimental/resolve/main/loras/minimax_h3_pdmd_2step_lora_avg_rank_38_bf16.safetensors",
-      "destination": "loras/henge/turbo_pdmd_2step.safetensors",
+      "destination": "loras/henge/minimax_h3_pdmd_2step_lora_avg_rank_38_bf16.safetensors",
       "profiles": [
         "character",
         "headswap",
@@ -108,7 +108,7 @@
     {
       "id": "turbo_lightx8",
       "url": "https://huggingface.co/lightx2v/Minimax-h3-Turbo/resolve/main/minimax_h3_ref2v_turbo_8step_v1.1_768p_comfyui_bf16.safetensors",
-      "destination": "loras/henge/turbo_lightx2v_8step_v1_1.safetensors",
+      "destination": "loras/henge/minimax_h3_ref2v_turbo_8step_v1.1_768p_comfyui_bf16.safetensors",
       "profiles": [
         "character",
         "headswap",
@@ -119,7 +119,7 @@
     {
       "id": "turbo_lightx4",
       "url": "https://huggingface.co/lightx2v/Minimax-h3-Turbo/resolve/main/minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
-      "destination": "loras/henge/turbo_lightx2v_4step_v1_0.safetensors",
+      "destination": "loras/henge/minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
       "profiles": [
         "character",
         "headswap",
@@ -130,7 +130,7 @@
     {
       "id": "headswap",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_head_swap_v1.0_r32.safetensors",
-      "destination": "loras/henge/head_swap_v1_0_r32.safetensors",
+      "destination": "loras/henge/minimax_h3_head_swap_v1.0_r32.safetensors",
       "profiles": [
         "headswap"
       ]
@@ -138,63 +138,63 @@
     {
       "id": "motion_adapter",
       "url": "https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors",
-      "destination": "loras/henge/training_adapter_v2.safetensors",
+      "destination": "loras/henge/minimax_h3_ref2va_training_adapter_v2.safetensors",
       "profiles": [
-        "motion10500",
-        "motion4500",
+        "motion_transfer",
+        "motion_transfer_tara",
         "solar"
       ],
-      "note": "Loaded separately before motion10500 and motion4500. Same sha256 as ostris/minimax_h3_training_adapter v2."
+      "note": "Loaded before the Motion Transfer LoRAs (they were trained on it, frozen). Same sha256 as ostris/minimax_h3_training_adapter v2."
     },
     {
-      "id": "motion10500",
+      "id": "motion_transfer_v1",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_ref2va.safetensors",
-      "destination": "loras/henge/motion_10500.safetensors",
+      "destination": "loras/henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors",
       "profiles": [
-        "motion10500"
+        "motion_transfer"
       ]
     },
     {
-      "id": "motion_mix_dyn99",
+      "id": "motion_transfer_combined_dyn99",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors",
-      "destination": "loras/henge/motion_10500_tara03_fro_dyn99.safetensors",
+      "destination": "loras/henge/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors",
       "profiles": [
-        "motion10500"
+        "motion_transfer"
       ]
     },
     {
-      "id": "motion_mix_dyn95",
+      "id": "motion_transfer_combined_dyn95",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors",
-      "destination": "loras/henge/motion_10500_tara03_fro_dyn95.safetensors",
+      "destination": "loras/henge/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors",
       "profiles": [
-        "motion10500"
+        "motion_transfer"
       ]
     },
     {
-      "id": "motion4500",
+      "id": "motion_transfer_tara_v1",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors",
-      "destination": "loras/henge/motion_tara_4500.safetensors",
+      "destination": "loras/henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors",
       "profiles": [
-        "motion4500"
+        "motion_transfer_tara"
       ]
     },
     {
-      "id": "solar_motion4500",
+      "id": "solar_motion_transfer_tara",
       "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/motion_tara_4500_solar05.safetensors",
       "destination": "loras/henge/motion_tara_4500_solar05.safetensors",
       "profiles": [
         "solar"
       ],
-      "note": "TARA 4500 + SolarRenderer control 0.5 (rank-concat merge). Loaded after adapter V2."
+      "note": "Motion Transfer TARA v1.0 + SolarRenderer control 0.5 (rank-concat merge). Loaded after adapter V2."
     },
     {
-      "id": "solar_motion10500",
+      "id": "solar_motion_transfer",
       "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/motion10500_plus_adapter_v2_solar05.safetensors",
       "destination": "loras/henge/motion10500_plus_adapter_v2_solar05.safetensors",
       "profiles": [
         "solar"
       ],
-      "note": "Motion 10500 + adapter V2 + SolarRenderer control 0.5; no separate adapter."
+      "note": "Motion Transfer v1.0 + adapter V2 + SolarRenderer control 0.5; no separate adapter."
     },
     {
       "id": "solar_control",
@@ -291,8 +291,8 @@
     },
     {
       "id": "sharpness",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/lms_v1_fro_dyn95.safetensors",
-      "destination": "loras/henge/lms_v1_fro_dyn95.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_lms_v1.0_r64.safetensors",
+      "destination": "loras/henge/minimax_h3_lms_v1.0_r64.safetensors",
       "profiles": [
         "sharpness"
       ],

@@ -48,7 +48,7 @@ Environment variables (all optional):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HENGE_MODEL_PROFILES` | `character,motion10500,motion4500,ffp,headswap,sharpness,omniref,fibo,sam2d,sam3d` | Comma list: `character`, `omniref` (+22 GB base), `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500`, `motion4500`, `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with motion 10500/4500, and the Solar 4-step turbo) |
+| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d` | Comma list: `character`, `omniref` (+22 GB base), `fibo`, `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0, Combined), `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with Motion Transfer v1.0 and TARA v1.0, and the Solar 4-step turbo; private) |
 | `HF_TOKEN` | — | Only for the experimental `ffp` profile (the Motion Transfer LoRAs are public). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
@@ -60,12 +60,12 @@ Environment variables (all optional):
 
 The motion LoRAs live in the private dataset `Alissonerdx/Kagemage-Backups`
 until they are published, so the default profiles
-(`character,motion10500,motion4500,ffp,headswap,sharpness,omniref,fibo,sam2d,sam3d`) need `HF_TOKEN` with read access. Without
+(`character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d`) need `HF_TOKEN` with read access. Without
 it, Character Swap still installs and the motion modes show as unavailable.
 
 To point an entry at another link without rebuilding, set
 `HENGE_MODEL_OVERRIDES`, e.g.
-`{"motion4500":{"url":"https://huggingface.co/USER/REPO/resolve/main/file.safetensors"}}`.
+`{"motion_transfer_tara_v1":{"url":"https://huggingface.co/USER/REPO/resolve/main/file.safetensors"}}`.
 You can also drop a complete manifest at `/workspace/henge/model-repos.json`;
 it replaces the bundled one.
 

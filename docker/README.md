@@ -2,7 +2,8 @@
 
 This image starts the web UI, bridge and ComfyUI. **Models download on the first
 start into a persistent volume**, not into the public image layers. The image
-does not publish or contain the private 10500/4500 LoRAs or an HF token.
+does not contain model weights or an HF token; the Motion Transfer LoRAs download from the public
+Alissonerdx/Minimax-H3-ComfyUI repository.
 
 Requirements: Docker Engine/Desktop with Compose v2 and NVIDIA GPU support.
 The default PyTorch CUDA 13.0 image needs a compatible host NVIDIA driver.
@@ -50,8 +51,8 @@ reproducible downloads. Existing files are reused; changing the manifest does
 not silently replace installed weights. Remove/move the specific installed file
 or use a new destination when deliberately changing versions.
 
-Optional profiles are `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500` and
-`motion4500`. Set `HENGE_MODEL_PROFILES` in an untracked `.env` beside Compose:
+Optional profiles are `fibo`, `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0 and
+Combined). Set `HENGE_MODEL_PROFILES` in an untracked `.env` beside Compose:
 
 ```dotenv
 HENGE_MODEL_PROFILES=character,fibo,sam2d,audio

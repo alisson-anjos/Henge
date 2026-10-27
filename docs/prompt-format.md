@@ -105,7 +105,7 @@ appearance aid, not a guarantee of anatomical or temporal alignment.
 ### Tasks and motion models
 
 **Character Swap** uses the published v1.1 LoRA without a model selector.
-**Motion Transfer** offers Original 10500 and TARA-trained 4500. Either motion
+**Motion Transfer** offers Motion Transfer v1.0 and Motion Transfer TARA v1.0. Either motion
 LoRA can use Guide Latents (default) or TARA (experimental), independently of how
 it was trained. The method selector is visible for both tasks. Reference scale, seed and
 sampling controls are under Advanced. These combinations are wired and covered by CPU contracts; visual

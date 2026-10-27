@@ -60,7 +60,7 @@ python scripts/download_models.py --manifest config/model-repos.json --models-di
 
 The default `character` profile downloads public weights. The private motion
 profiles need configured repository/file entries or your local LoRA files.
-No 4500 weight is made public by this setup. Optional FIBO, audio and SAM profiles
+Optional FIBO, audio and SAM profiles
 are documented in the Docker/model guides. The downloader never uploads models.
 
 ## 3. Start ComfyUI
@@ -144,7 +144,7 @@ TARA node is registered; it is not proof a GPU kernel was benchmarked.
 
 1. Select Character Swap or Motion Transfer, then attach a guide and references.
 2. Select model/method in the sidebar. Character Swap uses v1.1; motion offers
-   Original 10500 and TARA 4500 when those weights are installed. Both tasks can
+   Motion Transfer v1.0 and Motion Transfer TARA v1.0 when installed. Both tasks can
    select Guide Latents or TARA; Guide remains the default.
 3. Write the requested edit. Click **Generate** beside the prompt to analyze it,
    review the plan and approve generation. Anatomy adaptation is explained and
@@ -159,8 +159,8 @@ in the JSON. Community contains the prompt templates, rather than Studio.
 
 ## Validation and limitations
 
-The existing native services completed short UI-to-backend renders using 10500
-with Guide Latents and 4500 with TARA. These were two-step integration smokes,
+The existing native services completed short UI-to-backend renders using Motion Transfer
+v1.0 with Guide Latents and Motion Transfer TARA v1.0 with TARA. These were two-step integration smokes,
 not quality comparisons. Optional FIBO/2D/3D branches, full Docker startup and the
 new live preview still need their own real GPU validation. CPU and build checks
 must not be reported as full visual validation.
