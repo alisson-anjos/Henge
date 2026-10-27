@@ -24,7 +24,10 @@ DEFAULTS = {'provider': 'anthropic', 'model': 'claude-opus-5-5', 'base_url': '',
             'image_enabled': False, 'image_model': 'gpt-image-2.5-flare', 'image_quality': 'medium', 'image_api_key': '',
             # Who marks people: 'sam' = SAM 3.1 detects and numbers them (find_people); 'vision' = the assistant points at
             # them with its own vision. Either way SAM segments and tracks from those points in every frame at generation.
-            'marking': 'sam'}
+            'marking': 'sam',
+            # Who writes the prompts (picture descriptions, the plan, the H3 prompt): 'local' = the Qwen planner in
+            # ComfyUI; 'assistant' = this provider and model.
+            'planner': 'local'}
 PROVIDERS = ('anthropic', 'openai')
 
 SYSTEM = """You are the Henge studio assistant. Henge turns a guide video plus reference pictures into a new video with MiniMax H3. You operate the studio for the user: you see its state, look at frames, mark people, set options and start generations. The user watches the screen change as you work.
@@ -202,6 +205,8 @@ def save_config(path: Path, update: dict) -> dict:
         cfg['image_api_key'] = ''
     if update.get('marking') in ('sam', 'vision'):
         cfg['marking'] = update['marking']
+    if update.get('planner') in ('local', 'assistant'):
+        cfg['planner'] = update['planner']
     if cfg['provider'] not in PROVIDERS:
         raise ValueError('Unknown provider')
     if isinstance(update.get('api_key'), str) and update['api_key'].strip() and key_hint(cfg['provider'], cfg['api_key']):
@@ -410,6 +415,37 @@ def _call_openai(cfg: dict, messages: list) -> dict:
             args = {'_invalid_json': c['function'].get('arguments')}
         calls.append({'id': c['id'], 'name': c['function']['name'], 'input': args})
     return {'text': (msg.get('content') or '').strip(), 'tool_calls': calls, 'native': None}
+
+
+def complete(cfg: dict, instruction: str, image: Path | None = None, max_tokens: int = 2048) -> str:
+    """One planner request (no tools): an instruction and an optional image, answered with plain text. Used when the
+    assistant's model writes the prompts instead of the local planner."""
+    data = None
+    if image is not None:
+        mime = 'image/png' if image.suffix.lower() == '.png' else 'image/webp' if image.suffix.lower() == '.webp' else 'image/jpeg'
+        data = (mime, base64.b64encode(image.read_bytes()).decode())
+    # Reasoning models spend part of the budget thinking: never give them less than 4096 tokens.
+    budget = max(max_tokens, 4096)
+    if cfg['provider'] == 'anthropic':
+        import anthropic
+        client = anthropic.Anthropic(api_key=cfg['api_key'] or None, **({'base_url': cfg['base_url']} if cfg['base_url'] else {}))
+        content = ([{'type': 'image', 'source': {'type': 'base64', 'media_type': data[0], 'data': data[1]}}] if data else []) + [{'type': 'text', 'text': instruction}]
+        response = client.messages.create(model=cfg['model'], max_tokens=budget, messages=[{'role': 'user', 'content': content}])
+        if response.stop_reason == 'refusal':
+            raise RuntimeError('The assistant model declined this planning request')
+        return '\n'.join(b.text for b in response.content if b.type == 'text').strip()
+    base = (cfg['base_url'] or 'https://api.openai.com/v1').rstrip('/')
+    headers = {'Authorization': f"Bearer {cfg['api_key']}"} if cfg['api_key'] else {}
+    content = [{'type': 'text', 'text': instruction}] + ([{'type': 'image_url', 'image_url': {'url': f'data:{data[0]};base64,{data[1]}'}}] if data else [])
+    body = {'model': cfg['model'], 'messages': [{'role': 'user', 'content': content}]}
+    limits = ['max_completion_tokens', 'max_tokens'] if 'api.openai.com' in base else ['max_tokens', 'max_completion_tokens']
+    for i, name in enumerate(limits):
+        r = requests.post(base + '/chat/completions', headers=headers, timeout=300, json={**body, name: budget})
+        if r.ok or i or r.status_code != 400 or name not in r.text:
+            break
+    if not r.ok:
+        raise RuntimeError(f'{base} HTTP {r.status_code}: {r.text[:400]}')
+    return (r.json()['choices'][0]['message'].get('content') or '').strip()
 
 
 def call_model(cfg: dict, messages: list) -> dict:

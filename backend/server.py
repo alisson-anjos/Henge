@@ -578,7 +578,9 @@ def planning(job):
                'Writing the final H3 prompt' if stage=='vlm_prompt' else
                'Checking the references for real public figures' if stage.startswith('vlm_likeness_') else 'Planning runtime options')
         save(job,stage=stage,message=label)
-        if os.environ.get('VLM_CHAT_URL') and os.environ.get('VLM_MODEL'):
+        planner_cfg=assistant_planner()
+        if planner_cfg:raw=assistant.complete(planner_cfg,instruction,image,tokens)
+        elif os.environ.get('VLM_CHAT_URL') and os.environ.get('VLM_MODEL'):
             content=[{'type':'text','text':instruction}]
             if image is not None:
                 data='data:image/jpeg;base64,'+base64.b64encode(image.read_bytes()).decode()
@@ -1084,7 +1086,7 @@ def health():
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
-    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -1642,6 +1644,15 @@ def run_job_tool(name,args):
     except HTTPException as e:raise ValueError(e.detail)
     raise ValueError(f'Unknown job tool {name}')
 
+def assistant_planner():
+    """The assistant's config when the user chose it to write the prompts and analyses (and it has a key or a
+    local server), else None: the Qwen planner in ComfyUI (or VLM_CHAT_URL) does it."""
+    cfg=assistant.load_config(ASSISTANT_CONFIG)
+    if cfg.get('planner')!='assistant':return None
+    if cfg['provider']=='anthropic' and not (cfg['api_key'] or os.environ.get('ANTHROPIC_API_KEY')):return None
+    if cfg['provider']=='openai' and not (cfg['api_key'] or cfg['base_url']):return None
+    return cfg
+
 @app.get('/assistant/config')
 def get_assistant_config():return assistant.public_config(assistant.load_config(ASSISTANT_CONFIG))
 
@@ -1699,6 +1710,10 @@ async def translate_prompt(request:Request):
     instruction=(f'Translate this video-generation prompt into {LANGUAGES[lang]} so a person can read and understand it. '
                  'Keep the section names (subject_definitions:, summary:, ...), the tags such as <Picture 1>, <Subject 1>, '
                  '<Video 1> and [Shot 1], and the line breaks exactly as they are. Return only the translation.\n\n'+text)
+    planner_cfg=assistant_planner()
+    if planner_cfg:
+        try:return {'text':await asyncio.to_thread(assistant.complete,planner_cfg,instruction,None,4096)}
+        except Exception as e:raise HTTPException(502,f'Translation failed: {str(e)[:300]}')
     if os.environ.get('VLM_CHAT_URL') and os.environ.get('VLM_MODEL'):
         r=await asyncio.to_thread(requests.post,os.environ['VLM_CHAT_URL'],headers={'Authorization':'Bearer '+os.environ.get('VLM_API_KEY','')},
             json={'model':os.environ['VLM_MODEL'],'messages':[{'role':'user','content':instruction}],'temperature':.1,'max_tokens':4096},timeout=180)
