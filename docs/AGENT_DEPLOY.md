@@ -42,8 +42,8 @@ runpodctl datacenter list        # which GPUs each datacenter has in stock
 Ask the user for:
 
 - which option: **B** (one pod, everything inside) or **C** (UI on their computer, GPU on Serverless);
-- whether the RunPod secret `hf_token` exists (*Settings → Secrets*). Without it the private motion,
-  Head Swap FFP and Sharpness LoRAs are skipped and those modes show as not installed;
+- whether the RunPod secret `hf_token` exists (*Settings → Secrets*). Without it only the experimental Motion
+  Transfer FFP model is skipped (every other model is public);
 - the datacenter (default `EU-RO-1`; it must have RTX 5090 in stock) and which model profiles they need
   (default: all of `character,motion10500,motion4500,ffp,headswap,sharpness,omniref,fibo,sam2d,sam3d`).
 

@@ -44,7 +44,7 @@ ComfyUI and where, and whether they have a RunPod account (if not, give them htt
 | **C. Local UI + RunPod Serverless** | no suitable GPU, occasional use, pay per second | RunPod account, `runpodctl`; Docker or Node+Python locally |
 
 Models are about 125 GB with every profile; fewer profiles download less (step A2). The motion LoRAs need a
-Hugging Face token with read access (`HF_TOKEN`); ask the user for one if they want Motion Transfer.
+Hugging Face token only for the experimental `ffp` profile; every other model, Motion Transfer included, is public.
 
 ## A. Local
 
@@ -112,4 +112,4 @@ step can be skipped. Then run one short test with the user: Character Swap, a 3â
 | A mode shows "not installed" | Its model profile is missing: run `download_models.py` with that profile. |
 | "the Henge nodes are missing" when testing the connection | The `henge` / `bfsnodes` folders are not in `custom_nodes`, or ComfyUI was not restarted, or a node whitelist excludes them. |
 | Out of memory | Close other GPU apps; keep 480p for the first tests; don't use `--highvram`. |
-| Motion Transfer missing | No `HF_TOKEN` with access to the motion LoRAs when downloading. |
+| Motion Transfer missing | The `motion` profile was not downloaded: run `download_models.py --profiles motion`. |

@@ -137,7 +137,7 @@
     },
     {
       "id": "motion_adapter",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/training_adapter_v2.safetensors",
+      "url": "https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors",
       "destination": "loras/henge/training_adapter_v2.safetensors",
       "profiles": [
         "motion10500",
@@ -148,7 +148,7 @@
     },
     {
       "id": "motion10500",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/motion10500_original.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_ref2va.safetensors",
       "destination": "loras/henge/motion_10500.safetensors",
       "profiles": [
         "motion10500"
@@ -156,7 +156,7 @@
     },
     {
       "id": "motion_mix_dyn99",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_merge/motion_10500_tara03_fro_dyn99.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors",
       "destination": "loras/henge/motion_10500_tara03_fro_dyn99.safetensors",
       "profiles": [
         "motion10500"
@@ -164,7 +164,7 @@
     },
     {
       "id": "motion_mix_dyn95",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_merge/motion_10500_tara03_fro_dyn95.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors",
       "destination": "loras/henge/motion_10500_tara03_fro_dyn95.safetensors",
       "profiles": [
         "motion10500"
@@ -172,7 +172,7 @@
     },
     {
       "id": "motion4500",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/pod_20261024T000050Z/models/tara_h3_motion_r64_multiscale_v2_000004500.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors",
       "destination": "loras/henge/motion_tara_4500.safetensors",
       "profiles": [
         "motion4500"

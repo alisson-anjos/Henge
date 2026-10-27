@@ -49,7 +49,7 @@ Environment variables (all optional):
 | Variable | Default | Purpose |
 |---|---|---|
 | `HENGE_MODEL_PROFILES` | `character,motion10500,motion4500,ffp,headswap,sharpness,omniref,fibo,sam2d,sam3d` | Comma list: `character`, `omniref` (+22 GB base), `fibo`, `sam2d`, `sam3d`, `audio`, `motion10500`, `motion4500`, `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with motion 10500/4500, and the Solar 4-step turbo) |
-| `HF_TOKEN` | — | **Required for the motion LoRAs** (private for now). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
+| `HF_TOKEN` | — | Only for the experimental `ffp` profile (the Motion Transfer LoRAs are public). Use a RunPod secret: `{{ RUNPOD_SECRET_hf_token }}` |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that fills manifest entries, e.g. the private motion LoRAs (below) |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |

@@ -33,7 +33,7 @@ The default setup is unchanged: one pod running UI, bridge and ComfyUI together
 
 - A RunPod account with credit and an API key (*Settings → API Keys*). New to RunPod? [Create your account with our link](https://runpod.io?ref=8t518hht).
 - [`runpodctl`](https://github.com/runpod/runpodctl) configured (`runpodctl doctor`).
-- A Hugging Face token with read access while the motion LoRAs are private, stored as the RunPod
+- Only for the experimental `ffp` profile: a Hugging Face token with read access, stored as the RunPod
   secret `hf_token` (*Settings → Secrets*); the volume fill pod reads it.
 - Docker on your computer for the UI.
 
@@ -55,7 +55,7 @@ Choose the model profiles (comma list), as on a normal pod:
 | Profile | Mode | Notes |
 |---|---|---|
 | `character` | Character Swap | base H3, text encoder, VAE, VLM planner; always needed |
-| `motion10500`, `motion4500` | Motion Transfer | private LoRAs: need the `hf_token` secret |
+| `motion10500`, `motion4500` (or `motion`) | Motion Transfer | public, BFS Motion Transfer license |
 | `solar` | Motion Transfer (Solar) | ~25 GB |
 | `ffp` | Motion Transfer FFP: propagate an edited first frame (VFX Edit FFP + SolarRenderer 0.5, fro dyn99) | 220 MB, private: needs the `hf_token` secret |
 | `headswap` | Head Swap | |
