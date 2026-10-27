@@ -21,7 +21,10 @@ from pathlib import Path
 import requests
 
 DEFAULTS = {'provider': 'anthropic', 'model': 'claude-opus-5-5', 'base_url': '', 'api_key': '', 'effort': 'medium',
-            'image_enabled': False, 'image_model': 'gpt-image-2.5-flare', 'image_quality': 'medium', 'image_api_key': ''}
+            'image_enabled': False, 'image_model': 'gpt-image-2.5-flare', 'image_quality': 'medium', 'image_api_key': '',
+            # Who marks people: 'sam' = SAM 3.1 detects and numbers them (find_people); 'vision' = the assistant points at
+            # them with its own vision. Either way SAM segments and tracks from those points in every frame at generation.
+            'marking': 'sam'}
 PROVIDERS = ('anthropic', 'openai')
 
 SYSTEM = """You are the Henge studio assistant. Henge turns a guide video plus reference pictures into a new video with MiniMax H3. You operate the studio for the user: you see its state, look at frames, mark people, set options and start generations. The user watches the screen change as you work.
@@ -36,7 +39,7 @@ Guide representation (how marked people reach the model):
 TARA (method) was trained without color marks: with TARA use only original or mask, never 2d/3d.
 
 How to work:
-1. Read the studio state. If the guide video or the pictures are missing, ask the user to attach them in the chat or in the studio. Chat videos are automatically loaded as the guide and chat images as reference Pictures in attachment order.
+1. Read the studio state. If the guide video or the pictures are missing, ask the user to attach them in the chat or in the studio. Chat videos are automatically loaded as the guide and chat images marked as generation references as reference Pictures in attachment order. Images the user marks as explanation (a frame with people numbered or circled, a sketch) are for you only: they are never Pictures; use them to understand who is who and where, then mark the real guide frames yourself.
 2. Look before you act: view_pictures to see the references, view_frame or find_people to see the video.
 3. To bind people: first view_frame at a few times (start, middle, end) to learn who appears when, then call find_people at a time where everyone you need is visible and check that each number really is the person you mean (not a background figure) before marking; when the video has camera cuts, run find_people once per moment (after each cut) and mark each performer there too; before generating, read get_studio_state and confirm every subject has one mark per moment it appears and no performer has two subjects; it returns the frame with numbered people. Then mark_subject each person you need, with the matching picture slots. Marks must be inside the selected interval.
 4. Choose the guide: several people -> 2d (or mask to keep the scene untouched); one person -> original is fine, mask keeps the scene. If find_people fails with two or more people, do not fall back to original silently: say so and ask the user to mark them with 'Mark in video' (or retry), because with original the model can swap who becomes whom.
@@ -61,8 +64,8 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
     {'name': 'view_pictures', 'description': 'See the attached reference pictures (Picture 1, Picture 2...).',
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
-    {'name': 'view_frame', 'description': 'See one frame of the guide video at a time in seconds (within the selected interval).',
-     'input_schema': {'type': 'object', 'properties': {'time': {'type': 'number'}}, 'required': ['time'], 'additionalProperties': False}},
+    {'name': 'view_frame', 'description': 'See one frame of the guide video at a time in seconds (within the selected interval). grid=true draws a coordinate grid (x and y from 0 to 1, a line every 0.1) to read positions for mark_subject.',
+     'input_schema': {'type': 'object', 'properties': {'time': {'type': 'number'}, 'grid': {'type': 'boolean'}}, 'required': ['time'], 'additionalProperties': False}},
     {'name': 'find_people', 'description': 'Detect and number every person (or animal) in the guide frame at a time. Returns the frame with numbers drawn on each one; use the numbers with mark_subject.',
      'input_schema': {'type': 'object', 'properties': {'time': {'type': 'number'}, 'kind': {'type': 'string', 'enum': ['person', 'animal']}}, 'required': ['time'], 'additionalProperties': False}},
     {'name': 'set_mode', 'description': 'Switch the studio mode.',
@@ -136,6 +139,31 @@ JOB_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
 ]
 TOOLS = STUDIO_TOOLS + JOB_TOOLS
+VISION_MARKING = """
+Marking mode: you mark people yourself (the user turned off SAM detection for marking). There is no find_people.
+To bind people: view_frame with grid=true at a few times (one per scene after each camera cut), decide who is who
+from the frames, the reference Pictures and any explanation images the user sent, then mark_subject with x and y
+(0-1, read on the grid) on the middle of that person's torso, clear of other people. mark_subject answers with the
+frame and your point drawn on it: check that the dot sits on the right person and mark again if not. SAM then
+segments and tracks each person from your points in every frame at generation. Mark only the people the user wants
+changed; leave everyone else unmarked. A Picture whose person does not appear in the selected interval stays
+unmarked: say so instead of binding it to someone else."""
+
+def system_for(cfg: dict) -> str:
+    return SYSTEM + (VISION_MARKING if cfg.get('marking') == 'vision' else '')
+
+def tools_for(cfg: dict) -> list:
+    if cfg.get('marking') != 'vision':
+        return list(TOOLS)
+    out = []
+    for t in TOOLS:
+        if t['name'] == 'find_people':
+            continue
+        if t['name'] == 'mark_subject':
+            t = {**t, 'description': 'Mark a performer with x and y (0-1 of the frame, read on the view_frame grid) on their torso at a time. Returns the frame with your point drawn: check it. SAM segments and tracks from that point. One subject per performer: marking again with the same picture_slots (or with subject) adds a mark to that subject, e.g. the same person after a camera cut.'}
+        out.append(t)
+    return out
+
 STUDIO_NAMES = {t['name'] for t in STUDIO_TOOLS}
 JOB_NAMES = {t['name'] for t in JOB_TOOLS}
 
@@ -172,6 +200,8 @@ def save_config(path: Path, update: dict) -> dict:
         cfg['image_api_key'] = update['image_api_key'].strip()
     if update.get('clear_image_key'):
         cfg['image_api_key'] = ''
+    if update.get('marking') in ('sam', 'vision'):
+        cfg['marking'] = update['marking']
     if cfg['provider'] not in PROVIDERS:
         raise ValueError('Unknown provider')
     if isinstance(update.get('api_key'), str) and update['api_key'].strip() and key_hint(cfg['provider'], cfg['api_key']):
@@ -273,9 +303,9 @@ def _to_anthropic(messages: list) -> list:
 def _call_anthropic(cfg: dict, messages: list) -> dict:
     import anthropic
     client = anthropic.Anthropic(api_key=cfg['api_key'] or None, **({'base_url': cfg['base_url']} if cfg['base_url'] else {}))
-    tools = list(TOOLS)
+    tools = tools_for(cfg)
     tools[-1] = {**tools[-1], 'cache_control': {'type': 'ephemeral'}}   # tools + system are the stable prefix
-    kwargs = dict(model=cfg['model'], max_tokens=16000, system=[{'type': 'text', 'text': SYSTEM}], tools=tools,
+    kwargs = dict(model=cfg['model'], max_tokens=16000, system=[{'type': 'text', 'text': system_for(cfg)}], tools=tools,
                   messages=_to_anthropic(messages), **({'output_config': {'effort': cfg['effort']}} if cfg['effort'] else {}))
     try:
         # Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1: if a safety classifier declines, the API reruns on a fallback model.
@@ -294,8 +324,8 @@ def _call_anthropic(cfg: dict, messages: list) -> dict:
 
 # --- OpenAI-compatible chat completions (OpenAI, LM Studio, Ollama, vLLM...) ---
 
-def _to_openai(messages: list) -> list:
-    out = [{'role': 'system', 'content': SYSTEM}]
+def _to_openai(messages: list, system: str = SYSTEM) -> list:
+    out = [{'role': 'system', 'content': system}]
     for m in messages:
         if m['role'] == 'user':
             parts = [{'type': 'text', 'text': m.get('text') or '…'}] + [{'type': 'image_url', 'image_url': {'url': u}} for u in m.get('images') or []]
@@ -359,9 +389,9 @@ def list_models(saved: dict, draft: dict) -> list:
 
 def _call_openai(cfg: dict, messages: list) -> dict:
     base = (cfg['base_url'] or 'https://api.openai.com/v1').rstrip('/')
-    tools = [{'type': 'function', 'function': {'name': t['name'], 'description': t['description'], 'parameters': t['input_schema']}} for t in TOOLS]
+    tools = [{'type': 'function', 'function': {'name': t['name'], 'description': t['description'], 'parameters': t['input_schema']}} for t in tools_for(cfg)]
     headers = {'Authorization': f"Bearer {cfg['api_key']}"} if cfg['api_key'] else {}
-    body = {'model': cfg['model'], 'messages': _to_openai(messages), 'tools': tools}
+    body = {'model': cfg['model'], 'messages': _to_openai(messages, system_for(cfg)), 'tools': tools}
     # OpenAI's current models take max_completion_tokens and reject max_tokens; local servers (LM Studio, Ollama,
     # vLLM) still read max_tokens. Start with the one the server is likely to take, switch once if it refuses.
     limits = ['max_completion_tokens', 'max_tokens'] if 'api.openai.com' in base else ['max_tokens', 'max_completion_tokens']

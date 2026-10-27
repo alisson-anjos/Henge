@@ -14,9 +14,11 @@ type Message =
   | {role: 'user'; text: string; images?: string[]}
   | {role: 'assistant'; text: string; tool_calls?: StudioCall[]; native?: unknown; native_provider?: string}
   | {role: 'tool'; results: Result[]};
-type Config = {provider: 'anthropic' | 'openai'; model: string; base_url: string; effort: string; has_key: boolean; key_hint: string};
+type Config = {provider: 'anthropic' | 'openai'; model: string; base_url: string; effort: string; has_key: boolean; key_hint: string; marking?: 'sam' | 'vision'};
 type JobMention = {id: string; project?: string; mode?: string; status: string; created: number};
-type PendingAttachment = {id: string; name: string; kind: 'image' | 'video'; images: string[]; detail: string};
+// An image is a generation reference (loaded as a Picture) or only explains something to the assistant (a marked
+// screenshot, a sketch): those stay in the chat and never reach the studio.
+type PendingAttachment = {id: string; name: string; kind: 'image' | 'video'; images: string[]; detail: string; file: File; role: 'reference' | 'explain'};
 type PendingApproval = {question: string; approve: string; decline: string; resolve: (approved: boolean) => void};
 
 const PRESETS: Record<string, {provider: Config['provider']; model: string; base_url: string}> = {
@@ -151,7 +153,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
     const id = crypto.randomUUID();
     if (file.type.startsWith('image/')) {
       const bitmap = await createImageBitmap(file);
-      try {return {id, name: file.name, kind: 'image', images: [canvasFrame(bitmap, bitmap.width, bitmap.height)], detail: `${bitmap.width}x${bitmap.height}`};}
+      try {return {id, name: file.name, kind: 'image', images: [canvasFrame(bitmap, bitmap.width, bitmap.height)], detail: `${bitmap.width}x${bitmap.height}`, file, role: 'reference'};}
       finally {bitmap.close();}
     }
     if (!file.type.startsWith('video/')) throw Error(tr('Use an image or video file.', 'Use um arquivo de imagem ou vídeo.', 'Usa un archivo de imagen o vídeo.'));
@@ -160,13 +162,13 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
       await new Promise<void>((resolve, reject) => {video.onloadedmetadata = () => resolve(); video.onerror = () => reject(Error(tr('Could not read this video.', 'Não foi possível ler este vídeo.', 'No se pudo leer este vídeo.')));});
       const duration = video.duration, times = [.08, .35, .65, .92].map(f => Math.min(Math.max(0, duration * f), Math.max(0, duration - .05))), images: string[] = [];
       for (const time of times) {video.currentTime = time; await new Promise<void>((resolve, reject) => {video.onseeked = () => resolve(); video.onerror = () => reject(Error('Video seek failed'));}); images.push(canvasFrame(video, video.videoWidth, video.videoHeight));}
-      return {id, name: file.name, kind: 'video', images, detail: `${duration.toFixed(1)}s · ${video.videoWidth}x${video.videoHeight} · ${images.length} frames`};
+      return {id, name: file.name, kind: 'video', images, detail: `${duration.toFixed(1)}s · ${video.videoWidth}x${video.videoHeight} · ${images.length} frames`, file, role: 'reference'};
     } finally {URL.revokeObjectURL(url); video.removeAttribute('src'); video.load();}
   }
   async function addAttachments(files: FileList | File[]) {
     const incoming = Array.from(files).slice(0, Math.max(0, 6 - attachments.length)); if (!incoming.length) return;
     setBusy(tr('Preparing attachments…', 'Preparando anexos…', 'Preparando adjuntos…')); setError('');
-    try {const prepared = await Promise.all(incoming.map(prepareAttachment)); await controller.ingest(incoming); setAttachments(current => [...current, ...prepared].slice(0, 6));}
+    try {const prepared = await Promise.all(incoming.map(prepareAttachment)); setAttachments(current => [...current, ...prepared].slice(0, 6));}
     catch (e) {setError(e instanceof Error ? e.message : String(e));}
     finally {setBusy(''); if (attachmentInput.current) attachmentInput.current.value = '';}
   }
@@ -187,7 +189,11 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   async function send() {
     const text = input.trim(); if (!text && !attachments.length) return;
     const attached = attachments; setInput(''); setAttachments([]); setError('');
-    const attachmentNote = attached.length ? `\n\n[attachments already loaded into the studio in this order] ${attached.map((a, i) => `${i + 1}. ${a.kind}: ${a.name} (${a.detail})`).join('; ')}` : '';
+    // Only generation references reach the studio, when the message is sent (removing one before that loads nothing).
+    const loaded = attached.filter(a => a.role === 'reference'), explain = attached.filter(a => a.role === 'explain');
+    if (loaded.length) {try {await controller.ingest(loaded.map(a => a.file));} catch (e) {setError(e instanceof Error ? e.message : String(e));}}
+    const attachmentNote = (loaded.length ? `\n\n[attachments already loaded into the studio in this order] ${loaded.map((a, i) => `${i + 1}. ${a.kind}: ${a.name} (${a.detail})`).join('; ')}` : '')
+      + (explain.length ? `\n\n[explanation images, for you only: NOT loaded into the studio and never a reference Picture; read them as the user's instructions, e.g. people numbered or circled on a frame] ${explain.map(a => `${a.name} (${a.detail})`).join('; ')}` : '');
     const item: Pending = {text: text || tr('Look at these attachments.', 'Veja estes anexos.', 'Mira estos adjuntos.'), images: attached.flatMap(a => a.images), note: attachmentNote};
     if (busy) {setPending([...pendingRef.current, item]); return;}
     stop.current = false;
@@ -251,6 +257,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         {draft.provider === 'openai' && <label>Base URL<input value={draft.base_url || ''} placeholder="https://api.openai.com/v1" onChange={e => setDraft(d => ({...d, base_url: e.target.value}))}/></label>}
         <label>{tr('API key', 'Chave da API', 'Clave de la API')}<input type="password" autoComplete="off" value={draft.api_key || ''} placeholder={config.has_key ? `${tr('saved', 'salva', 'guardada')} ${config.key_hint}` : draft.provider === 'openai' ? tr('not needed for local servers', 'não precisa para servidores locais', 'no hace falta en servidores locales') : 'sk-ant-…'} onChange={e => setDraft(d => ({...d, api_key: e.target.value}))} onBlur={() => {if (draft.api_key) void loadModels();}}/></label>
         {draft.provider === 'anthropic' && <label>{tr('Effort', 'Esforço', 'Esfuerzo')}<Select value={draft.effort ?? 'medium'} onChange={e => setDraft(d => ({...d, effort: e.target.value}))}>{['low', 'medium', 'high'].map(v => <option key={v} value={v}>{v}</option>)}<option value="">{tr('model default', 'padrão do modelo', 'predeterminado')}</option></Select></label>}
+        <label>{tr('Who marks the people', 'Quem marca as pessoas', 'Quién marca a las personas')}<Select value={draft.marking ?? 'sam'} onChange={e => setDraft(d => ({...d, marking: e.target.value as 'sam' | 'vision'}))}><option value="sam">{tr('SAM 3.1 detects and numbers them', 'O SAM 3.1 detecta e numera', 'SAM 3.1 las detecta y numera')}</option><option value="vision">{tr('The assistant, with its own vision', 'O assistente, com a própria visão', 'El asistente, con su propia visión')}</option></Select><small className="muted">{tr('With the assistant, it points at each person (checking the dot on the frame); SAM 3.1 still cuts out and tracks them in every frame when generating.', 'Com o assistente, ele aponta cada pessoa (conferindo o ponto no quadro); o SAM 3.1 continua recortando e seguindo cada uma em todos os quadros na geração.', 'Con el asistente, señala a cada persona (comprobando el punto en el fotograma); SAM 3.1 sigue recortándolas y siguiéndolas en todos los fotogramas al generar.')}</small></label>
         <small className="muted">{tr('The key stays on the bridge (assistant.json in its data folder); the browser never receives it. The model needs vision and tool calling.', 'A chave fica no bridge (assistant.json na pasta de dados); o navegador nunca a recebe. O modelo precisa de visão e de chamada de ferramentas.', 'La clave queda en el bridge (assistant.json en su carpeta de datos); el navegador nunca la recibe. El modelo necesita visión y llamadas a herramientas.')}</small>
         <div className="plan-actions"><button type="button" className="primary" onClick={saveSettings}>{tr('Save', 'Salvar', 'Guardar')}</button></div>
       </div>}
@@ -266,7 +273,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
       </div>
       <form className="assistant-input" onSubmit={e => {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}>
         {mentionJobs.length > 0 && <div className="assistant-job-mentions" role="listbox" aria-label={tr('Recent generations', 'Gerações recentes', 'Generaciones recientes')}>{mentionJobs.map(j => <button key={j.id} type="button" role="option" onClick={() => insertJob(j.id)}><span className="mono">#{j.id.slice(0, 8)}</span><strong>{j.project || 'Henge'}</strong><small>{j.mode || ''} · {j.status}</small></button>)}</div>}
-        {attachments.length > 0 && <div className="assistant-attachments">{attachments.map(a => <div key={a.id}>{a.images[0] && <img src={a.images[0]} alt=""/>}<span><strong>{a.name}</strong><small>{a.detail}</small></span><button type="button" aria-label={tr('Remove attachment', 'Remover anexo', 'Quitar adjunto')} onClick={() => setAttachments(current => current.filter(x => x.id !== a.id))}>×</button></div>)}</div>}
+        {attachments.length > 0 && <div className="assistant-attachments">{attachments.map(a => <div key={a.id}>{a.images[0] && <img src={a.images[0]} alt=""/>}<span><strong>{a.name}</strong><small>{a.detail}</small>{a.kind === 'image' && <button type="button" className={'attachment-role' + (a.role === 'explain' ? ' explain' : '')} aria-pressed={a.role === 'explain'} title={tr('Generation references become Pictures; explanation images (marked screenshots, sketches) only go to the assistant.', 'Referências da geração viram Pictures; imagens de explicação (prints marcados, esboços) vão só para o assistente.', 'Las referencias de la generación se vuelven Pictures; las imágenes de explicación (capturas marcadas, bocetos) solo van al asistente.')} onClick={() => setAttachments(current => current.map(x => x.id === a.id ? {...x, role: x.role === 'explain' ? 'reference' : 'explain'} : x))}>{a.role === 'explain' ? tr('Only to explain', 'Só para explicar', 'Solo para explicar') : tr('Generation reference', 'Referência da geração', 'Referencia de la generación')}</button>}</span><button type="button" aria-label={tr('Remove attachment', 'Remover anexo', 'Quitar adjunto')} onClick={() => setAttachments(current => current.filter(x => x.id !== a.id))}>×</button></div>)}</div>}
         <input ref={attachmentInput} type="file" hidden multiple accept="image/*,video/*" onChange={e => {if (e.target.files) void addAttachments(e.target.files);}}/>
         <button type="button" className="assistant-attach quiet-button" aria-label={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} title={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} disabled={!!busy || attachments.length >= 6} onClick={() => attachmentInput.current?.click()}>＋</button>
         <textarea value={input} rows={2} placeholder={tr('What do you want to make?', 'O que você quer fazer?', '¿Qué quieres hacer?')} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Escape' && mention) {e.preventDefault(); setInput(input.slice(0, mention.index));} else if (e.key === 'Enter' && !e.shiftKey) {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}}/>

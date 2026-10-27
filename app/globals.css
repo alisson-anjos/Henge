@@ -902,3 +902,4 @@ img{display:block;max-width:100%}
 .first-frame-controls label.prompt-assist-row{display:flex}
 .history-card{position:relative}.history-delete{position:absolute;top:8px;right:8px;z-index:2;background:rgb(0 0 0 / .55);color:#fff;border-radius:999px}.history-delete:hover{background:#c0392b}.danger-text{color:#e5534b}
 .history-card:has(.history-delete) .duration-badge{right:46px}
+.attachment-role{align-self:flex-start;margin-top:3px;padding:2px 8px;border-radius:999px;border:1px solid var(--accent,#d7ff3a);background:transparent;color:var(--accent,#d7ff3a);font:inherit;font-size:10px;cursor:pointer}.attachment-role.explain{border-color:var(--muted);color:var(--muted);border-style:dashed}

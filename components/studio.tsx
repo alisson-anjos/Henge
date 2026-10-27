@@ -12,7 +12,7 @@ import FirstFrameModal, {coverFit} from './first-frame-modal';
 const FIRST_FRAME_KEY = 'henge-first-frame';
 import GenerationPanel, {type GenerationJob, type PanelControls} from './generation-panel';
 import AssistantPanel, {type StudioCall, type StudioController, type StudioResult} from './assistant-panel';
-import {captureFrame, thumbnail} from '../lib/frame-capture';
+import {annotated, captureFrame, drawGrid, drawPoint, thumbnail} from '../lib/frame-capture';
 import {readableError} from '../lib/job-error';
 import JobProgress from './job-progress';
 import {readJson} from '../lib/http';
@@ -289,7 +289,7 @@ export default function Studio() {
       }
       case 'view_frame': {
         const t = inRange(num('time')); const frame = await captureFrame(c.video!.url, t);
-        return {text: `Guide frame at ${t.toFixed(2)} s (${frame.width}x${frame.height}).`, images: [await thumbnail(frame.blob, 960)]};
+        return {text: `Guide frame at ${t.toFixed(2)} s (${frame.width}x${frame.height})${input.grid ? ', with a 0-1 grid' : ''}.`, images: [input.grid ? await annotated(frame.blob, 960, drawGrid) : await thumbnail(frame.blob, 960)]};
       }
       case 'find_people': {
         const t = inRange(num('time')); const frame = await captureFrame(c.video!.url, t);
@@ -305,8 +305,14 @@ export default function Studio() {
       }
       case 'set_prompt': setPrompt(String(input.text ?? '')); await settle(); return {text: 'Prompt updated.'};
       case 'mark_subject': {
-        const t = num('time'), hit = found.current.get(t.toFixed(2));
-        if (!hit) throw Error(`Call find_people at ${t} first`);
+        const t = num('time'); let hit = found.current.get(t.toFixed(2));
+        if (!hit) {
+          // Marking by the assistant's own vision: a point needs only the frame's size, not find_people.
+          if (input.x === undefined || input.y === undefined) throw Error(`Call find_people at ${t} first, or give x and y`);
+          const f = await captureFrame(c.video!.url, inRange(t)); hit = {width: f.width, height: f.height, people: []}; found.current.set(t.toFixed(2), hit);
+        }
+        // The frame with the marked point, so the assistant can check it landed on the right person.
+        const shown = async (color: string, label: string) => [await annotated((await captureFrame(c.video!.url, inRange(t))).blob, 960, (g, w, h) => drawPoint(g, w, h, point.x, point.y, SUBJECT_COLORS.find(x => x.name === color)?.hex ?? '#fff', label))];
         // A numbered person from find_people, or a point (0-1) on someone it missed: SAM segments from that point.
         let point: {x: number; y: number}, who: string;
         if (input.person !== undefined) {
@@ -324,7 +330,7 @@ export default function Studio() {
           const target = c.subjects[index]; if (!target) throw Error(`No subject ${input.subject}`);
           setSubjects(current => current.map(s => s.id === target.id ? {...s, anchors: [...s.anchors.filter(a => Math.abs(a.time_seconds - t) > .05), anchor].sort((p, q) => p.time_seconds - q.time_seconds)} : s)); await settle();
           const times = [...target.anchors.filter(a => Math.abs(a.time_seconds - t) > .05).map(a => a.time_seconds), t].sort((p, q) => p - q);
-          return {text: `Subject ${index + 1} (${target.color}, Picture ${target.picture_slots.join(', ')}) is ${who} at ${t.toFixed(2)} s. Its marks: ${times.map(x => x.toFixed(2) + ' s').join(', ')}.`};
+          return {text: `Subject ${index + 1} (${target.color}, Picture ${target.picture_slots.join(', ')}) is ${who} at ${t.toFixed(2)} s. Its marks: ${times.map(x => x.toFixed(2) + ' s').join(', ')}.`, images: await shown(target.color, `Subject ${index + 1}`)};
         }
         if (!slots.length) throw Error('A new subject needs picture_slots. To mark the same person again (another time or after a cut), pass subject with its number instead.');
         if (slots.some(n => !c.pictures.some(p => p.slot === n))) throw Error('Use attached picture slots');
@@ -332,7 +338,7 @@ export default function Studio() {
         if (!color) throw Error('Every color is in use');
         const subject: SubjectBinding = {id: crypto.randomUUID(), label: String(input.label || `Subject ${c.subjects.length + 1}`), color: color.name, picture_slots: slots, anchors: [anchor]};
         setSubjects(current => [...current, subject]); await settle();
-        return {text: `Subject ${c.subjects.length + 1} (${color.name}) = ${who} at ${t.toFixed(2)} s → Picture ${slots.join(', ')}.`};
+        return {text: `Subject ${c.subjects.length + 1} (${color.name}) = ${who} at ${t.toFixed(2)} s → Picture ${slots.join(', ')}.`, images: await shown(color.name, `Subject ${c.subjects.length + 1}`)};
       }
       case 'clear_subjects': setSubjects([]); await settle(); return {text: 'All subjects removed.'};
       case 'remove_subject': {const target = c.subjects[num('subject') - 1]; if (!target) throw Error(`No subject ${input.subject}`); setSubjects(current => current.filter(s => s.id !== target.id)); await settle(); return {text: `Subject ${input.subject} removed.`};}
