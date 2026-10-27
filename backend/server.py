@@ -896,7 +896,8 @@ def finalize(job,pieces,guide_pieces,W,H):
     output=work/'result.mp4';args=['ffmpeg','-v','error','-i',str(joined)]
     sounds=[work/f"audio_{p.stem.split('_')[-1]}.wav" for p in pieces]
     if r.get('output_audio',{}).get('generate') and sounds and all(x.is_file() for x in sounds):
-        # Generated audio: each shot's H3 soundtrack in shot order, exactly as long as its piece (cf. shot_soundtrack.py).
+        # Generated audio: each shot's H3 soundtrack in shot order, exactly as long as its piece (after crinklypaper's
+        # shot_soundtrack.py, Banodoco Discord).
         sl=work/'audio_concat.txt';sl.write_text(''.join(f"file '{x.name}'\n" for x in sounds));track=work/'soundtrack.wav'
         run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(sl),'-c','copy','-y',str(track)])
         args+=['-i',str(track),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k']

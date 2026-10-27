@@ -1,6 +1,6 @@
 """Moving plate: put a new background picture behind the people of a guide video, moving it with the original camera.
 
-Adapted from the community `moving_plate.py` (Anime Recast with H3): camera motion is tracked on the original
+Adapted from `moving_plate.py` shared by crinklypaper on the Banodoco Discord (Anime Recast with H3): camera motion is tracked on the original
 background only (Lucas-Kanade on corners outside the dilated people mask, a RANSAC similarity per frame, chained
 through each shot) and applied to the picture, with a slow push-in so a locked-off shot still breathes. Henge runs it
 automatically per camera shot (cuts detected from the frames) instead of hand-tuned shot tables.
