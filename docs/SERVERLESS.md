@@ -27,15 +27,16 @@ The default setup is unchanged: one pod running UI, bridge and ComfyUI together
 | First result after idle | immediate | cold start, about 3 min |
 | Clip length | any | any (large media go through the volume in chunks) |
 | Live sampling preview | yes | progress only |
-| Setup | template, one click | volume + endpoint, two scripts |
+| Setup | template, one click | volume + endpoint: in the console (about 10 min) or two scripts |
 
 ## Requirements
 
 - A RunPod account with credit and an API key (*Settings → API Keys*). New to RunPod? [Create your account with our link](https://runpod.io?ref=8t518hht).
-- [`runpodctl`](https://github.com/runpod/runpodctl) configured (`runpodctl doctor`).
+- For the scripts only: [`runpodctl`](https://github.com/runpod/runpodctl) configured (`runpodctl doctor`).
+  Everything can also be done in the RunPod console (option B of each step).
 - Only for the experimental `ffp` profile: a Hugging Face token with read access, stored as the RunPod
   secret `hf_token` (*Settings → Secrets*); the volume fill pod reads it.
-- Docker on your computer for the UI.
+- For the UI: Docker, or Node + Python (step 3).
 
 ## 1. Put the models on a network volume (once)
 
@@ -87,14 +88,15 @@ open its setup screen; delete it with `runpodctl pod delete <pod id>` when done.
 
 ### Option B: RunPod console
 
-1. *Storage* → *New Network Volume*: pick the datacenter (see below) and 180 GB.
-2. *Pods* → *Deploy*, in the same datacenter, any GPU with CUDA 13 (it only downloads). Under the network
-   volume, select the new volume. Use the image `ghcr.io/alisson-anjos/henge:latest`, mount path
-   `/workspace`, HTTP port `8188`, and the environment variables
-   `HENGE_MODEL_PROFILES=<profiles>` and `HF_TOKEN={{ RUNPOD_SECRET_hf_token }}`.
-3. Open the pod's port 8188: the Henge setup screen shows each model's download progress.
-4. When every model is installed and the pod log says `model downloads finished`, **terminate the pod**.
-   The volume keeps the files.
+1. *Storage* → *New volume*: pick the datacenter (see below), a name and 180 GB → *Create network volume*.
+2. Open the [Henge pod template](https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht). Under
+   *Region*, choose *Network volume* and select the new volume; pick a GPU with more than 32 GB of RAM in that
+   datacenter (it is a normal Henge pod, so you can also use it right away) → *Deploy Pod*. To download only some
+   profiles, set `HENGE_MODEL_PROFILES` in *Set overrides*.
+3. *Connect* → *HTTP 8188*: the Henge setup screen shows each model's download progress (about 10 minutes on
+   RunPod's network) and opens the studio when the models are ready.
+4. **Stop or terminate the pod**. The volume keeps the files; the same volume serves the endpoint below and
+   any later pod.
 
 ### Datacenter
 
@@ -126,6 +128,19 @@ idle timeout short.
 
 It prints the endpoint id. To change settings later (new image, more workers):
 `ENDPOINT_ID=<id> TEMPLATE_ID=<id> scripts/runpod_serverless.sh`.
+
+### Or in the RunPod console
+
+RunPod does not allow public serverless templates, so the endpoint is created from the image:
+
+1. *Serverless* → *New endpoint* → *Deploy from a Docker image*.
+2. Container image `ghcr.io/alisson-anjos/henge:latest`; *Container configuration* → container disk 40 GB;
+   *Environment variables* → `HENGE_ROLE=worker` and `HENGE_COMFY_ARGS=--fast-disk` → *Next*.
+3. Name the endpoint, tick the **32 GB** (RTX 5090) and **96 GB** (RTX PRO 6000) GPU tiers, max workers 2.
+4. *Advanced settings*: idle timeout 15 s, execution timeout 3600 s, *Network volumes* → your volume, *Allowed
+   CUDA versions* → 13.0 and newer → *Deploy*.
+5. On the endpoint page, copy the **Endpoint ID** and, under *Quick start*, *Generate key*: the API key is shown
+   only once (or create one in *Settings → API Keys*).
 
 ## 3. Run the UI on your computer
 
@@ -177,7 +192,13 @@ scripts/local_stack.sh status
 scripts/local_stack.sh stop
 ```
 
-Open http://localhost:8188. Logs are in `.runtime/logs/`.
+Open http://localhost:8188. Logs are in `.runtime/logs/`. If 8188 or 8766 are taken (another Henge), pick other
+ports: `UI_PORT=8288 BRIDGE_PORT=8866 PYTHON=.venv/bin/python scripts/local_stack.sh start` (use the same
+variables for `status` and `stop`).
+
+You can leave `RUNPOD_API_KEY` out of `.env.local` and paste it in the first-run screen instead (*RunPod
+Serverless* → API key → *Test connection* → *Save and use*); the bridge stores it and never sends it back to the
+browser.
 
 **Windows (PowerShell):** install the tools with
 `winget install OpenJS.NodeJS.LTS Python.Python.3.12 Gyan.FFmpeg Git.Git`, open a new PowerShell, then:

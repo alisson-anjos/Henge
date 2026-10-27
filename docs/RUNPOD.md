@@ -33,6 +33,11 @@ A public package needs no credential.
 **Use the Henge template: [Deploy on RunPod](https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht).** It has the image, disks, ports and environment below
 already set. New to RunPod? [Create your account with our link](https://runpod.io?ref=8t518hht).
 
+In the deploy screen pick a GPU with more than 32 GB and *Deploy Pod*; no variable needs changing. To keep the models
+when the pod is deleted (and share them with a [Serverless](SERVERLESS.md) endpoint), first create a network volume
+(*Storage → New volume*, 180 GB, in the datacenter of the GPU you want) and select it under *Region → Network
+volume*. Without one, the models live on the pod's own volume and go away with the pod.
+
 To build your own template instead, RunPod → **My Templates → New Template** (type *Pod*):
 
 | Field | Value |
@@ -79,7 +84,8 @@ The image uses PyTorch 2.14 + CUDA 13.0, so the host driver must support CUDA 13
 
 ## 4. First boot
 
-Watch **Logs**. The first boot downloads ≈ 125 GB with the default profiles (H3 21 GB + H3 text encoder 27 GB + VAE
+Open **Connect → HTTP 8188**: the Henge setup screen lists every model with its progress and opens the studio by
+itself when they are ready (about 10 minutes on RunPod's network). The first boot downloads ≈ 125 GB with the default profiles (H3 21 GB + H3 text encoder 27 GB + VAE
 5 GB + Qwen3.5 planner 7 GB + OmniRef 22 GB + FIBO 14 GB + SAM ≈ 4 GB + the task, turbo and Motion Transfer LoRAs);
 fewer profiles download less. When ComfyUI and the UI are up, open **Connect → HTTP 8188**
 (`https://<pod-id>-8188.proxy.runpod.net`).
@@ -119,8 +125,10 @@ reference prep, every shot) becomes one request, a worker starts when needed and
 1. **Models on a network volume** (once): `scripts/runpod_volume.sh` creates a volume
    (`DATACENTER`, default `EU-RO-1`; `VOLUME_GB`, default 180) and fills it with a temporary pod from the
    Henge template, deleted when every model is installed. Workers read it at `/runpod-volume/henge/models`.
+   Or in the console: deploy this template on a network volume, wait for the models, stop the pod.
 2. **Endpoint**: `VOLUME_ID=<id> scripts/runpod_serverless.sh` creates the worker template (the full image
-   with `HENGE_ROLE=worker`) and the endpoint (0 to 2 workers, RTX 5090, idle timeout 15 s).
+   with `HENGE_ROLE=worker`) and the endpoint (0 to 2 workers, RTX 5090, idle timeout 15 s), or follow the
+   console steps in [SERVERLESS.md](SERVERLESS.md#or-in-the-runpod-console).
 3. **UI**: `docker run -p 8188:8188 -v henge-state:/state -e HENGE_BACKEND=runpod -e RUNPOD_ENDPOINT_ID=<id>
    -e RUNPOD_API_KEY=<key> ghcr.io/alisson-anjos/henge-ui:latest`, then open http://localhost:8188.
 

@@ -10,9 +10,12 @@ New to RunPod? Create your account with our link: https://runpod.io?ref=8t518hht
 ## First boot
 
 The pod downloads the models into your volume at `/workspace/henge/models`
-(≈ 125 GB with the default profiles). This takes a while the first time only;
-later boots, or a new pod on the same network volume, start straight away.
-Follow progress in **Logs** (`Downloading: …` / `Installed: …`).
+(≈ 125 GB with the default profiles, about 10 minutes). Open *Connect → HTTP 8188*:
+the setup screen shows each model's progress and opens the studio when they are ready.
+
+To keep the models when the pod is deleted (or to feed a Serverless endpoint), create a
+network volume first (*Storage → New volume*, 180 GB) and pick it under *Region → Network
+volume*; later pods on that volume start straight away. Pick a GPU with more than 32 GB.
 
 ## Modes
 
