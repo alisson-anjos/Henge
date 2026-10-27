@@ -313,4 +313,4 @@ npm run build
 All task LoRAs (Character Swap, Motion Transfer, TARA, Head Swap, Little More Sharpness) and TARA-H3 are by Alisson Anjos
 ([alissonerdx](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI)). The moving plate and per-shot generated audio
 come from scripts shared by **crinklypaper** on the Banodoco Discord. Every model, library, idea and media source:
-[CREDITS.md](CREDITS.md); license texts: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[docs/REFERENCES.md](docs/REFERENCES.md); license texts: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
