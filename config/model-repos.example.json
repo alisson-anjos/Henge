@@ -235,7 +235,25 @@
       "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/vae/flux2-vae.safetensors",
       "destination": "vae/flux2-vae.safetensors",
       "profiles": [
-        "fibo"
+        "fibo",
+        "klein"
+      ]
+    },
+    {
+      "id": "klein_diffusion_models",
+      "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4b-fp8/resolve/main/flux-2-klein-4b-fp8.safetensors",
+      "destination": "diffusion_models/flux-2-klein-4b-fp8.safetensors",
+      "profiles": [
+        "klein"
+      ],
+      "note": "FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0): first-frame edits (replace, remove, add, painted area)."
+    },
+    {
+      "id": "klein_text_encoder",
+      "url": "https://huggingface.co/Comfy-Org/Flux-2-Klein-4B/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors",
+      "destination": "text_encoders/qwen_3_4b.safetensors",
+      "profiles": [
+        "klein"
       ]
     },
     {

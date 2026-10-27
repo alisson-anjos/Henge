@@ -45,7 +45,7 @@ Ask the user for:
 - whether the RunPod secret `hf_token` exists (*Settings → Secrets*). Without it only the experimental Motion
   Transfer FFP model is skipped (every other model is public);
 - the datacenter (default `EU-RO-1`; it must have RTX 5090 in stock) and which model profiles they need
-  (default: all of `character,motion,headswap,sharpness,omniref,fibo,sam2d,sam3d,audio`).
+  (default: all of `character,motion,headswap,sharpness,omniref,fibo,klein,sam2d,sam3d,audio`).
 
 ## Option B: one pod
 

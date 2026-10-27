@@ -494,6 +494,12 @@ img{display:block;max-width:100%}
 .first-frame-panes img,.first-frame-empty{width:100%;aspect-ratio:9/16;max-height:52vh;object-fit:contain;border-radius:12px;background:var(--n-13131b);border:1px solid var(--n-2a2a36)}
 .first-frame-empty{display:grid;place-items:center;padding:16px;text-align:center;color:var(--muted);font-size:12px}
 .first-frame-controls{display:grid;gap:10px}
+.first-frame-paint{position:relative;width:100%;max-height:52vh;margin:0 auto;border-radius:12px;overflow:hidden;background:var(--n-13131b);border:1px solid var(--n-2a2a36)}
+.first-frame-paint img{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;max-height:none;object-fit:fill;border:0;border-radius:0}
+.first-frame-paint canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;opacity:.45;touch-action:none;filter:drop-shadow(0 0 0 var(--accent,#d7ff3a))}
+.edit-ops{display:flex;gap:6px;flex-wrap:wrap}.edit-ops button{padding:6px 12px;border-radius:999px;border:1px solid var(--n-2a2a36);background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer}.edit-ops button.chosen{border-color:var(--accent,#d7ff3a);color:var(--accent,#d7ff3a)}
+.paint-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px}.paint-tools label{display:flex;align-items:center;gap:6px}
+.first-frame-controls input:not([type]){padding:8px 10px;border-radius:8px;border:1px solid var(--n-2a2a36);background:var(--n-13131b);color:inherit;font:inherit}
 .first-frame-controls label{display:grid;gap:6px;font-size:12px;color:var(--muted)}
 .first-frame-controls textarea{min-height:70px;padding:10px;background:var(--n-13131b);color:var(--text);border:1px solid var(--n-2a2a36);border-radius:10px;font:inherit}
 @media(max-width:600px){.first-frame-panes{gap:8px;margin:12px 0}.first-frame-panes img,.first-frame-empty{max-height:36vh}.first-frame-modal{padding:16px}.first-frame-modal .modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.first-frame-modal .modal-actions>*{width:100%}.first-frame-modal .modal-actions .primary{grid-column:1/-1}}

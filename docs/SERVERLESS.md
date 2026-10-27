@@ -66,7 +66,8 @@ Choose the model profiles (comma list), as on a normal pod:
 | `sharpness` | Sharpness (H3 + Little More Sharpness LoRA; 2K/4K with the H3 or NVIDIA RTX upscaler) | ~1 GB (LoRA + H3 latent upscaler) |
 | `audio` | Generated audio and audio conditioning (H3 audio VAE) | ~0.3 GB |
 | `omniref` | OmniRef base | +22 GB |
-| `fibo` | Reference adaptation (FIBO 2 edit: animal to human-compatible pose, first-frame edits) | ~14 GB |
+| `fibo` | Reference adaptation (FIBO 2 edit: animal to human-compatible pose) | ~14 GB |
+| `klein` | First-frame edits with FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0): replace, remove or add, optionally only in a painted area; used before FIBO when installed | ~12 GB |
 | `sam2d`, `sam3d` | Subject marks: SAM 3.1 tracking (2D colors, Mask, the assistant's find people) and SAM 3D Body + MoGe (3D) | ~4 GB |
 
 The default, every profile above, needs roughly 125–135 GB: create the volume with 180 GB (`VOLUME_GB=180`).

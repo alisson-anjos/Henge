@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageFont,ImageOps
 import workflows
 import moving_plate
-from workflows import lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import klein_graph,KLEIN,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,fixed_plan,head_reference,character_reference
@@ -280,6 +280,37 @@ def fibo_available(info=None):
     try:info=comfy_info() if info is None else info
     except Exception:return False
     return 'TextEncodeFibo2' in info and FIBO_UNET in comfy_choices(info,'UNETLoader','unet_name')
+
+def klein_available(info=None):
+    """FLUX.2 [klein] 4B: native Flux 2 nodes plus its model, text encoder and VAE."""
+    try:info=comfy_info() if info is None else info
+    except Exception:return False
+    return all(n in info for n in ('ReferenceLatent','Flux2Scheduler','EmptyFlux2LatentImage')) and KLEIN['unet'] in comfy_choices(info,'UNETLoader','unet_name') \
+        and KLEIN['clip'] in comfy_choices(info,'CLIPLoader','clip_name')
+
+def frame_editor(info=None):
+    """Which image editor edits the first frame: FLUX.2 [klein] when installed, else FIBO 2, else none."""
+    try:info=comfy_info() if info is None else info
+    except Exception:return None
+    return 'klein' if klein_available(info) else 'fibo' if fibo_available(info) else None
+
+# First-frame edit instructions per operation; the painted area (when given) is the only part that changes.
+EDIT_OPS={'replace':'Replace {what} with {target}.','remove':'Remove {what} and fill the space naturally with what would be behind it.',
+          'add':'Add {target}.','free':'{target}'}
+def edit_instruction(op,what,target,refs):
+    text=EDIT_OPS.get(op,'{target}').format(what=what or 'the marked part',target=target or what or '')
+    if refs:text+=' '+' '.join(f'Use image {i} as the reference for its look.' for i in range(2,refs+2))
+    return text+' Keep everything else exactly the same: composition, poses, camera angle, framing, lighting and style.'
+
+def masked_region(frame,mask,margin=.25,minimum=512):
+    """The box around the painted pixels, grown by `margin` and to at least `minimum` px a side (clamped to the frame)."""
+    box=mask.getbbox()
+    if not box:return None
+    x0,y0,x1,y1=box;w,h=x1-x0,y1-y0;W,H=frame.size
+    side_w=min(W,max(minimum,int(w*(1+2*margin))));side_h=min(H,max(minimum,int(h*(1+2*margin))))
+    cx,cy=(x0+x1)//2,(y0+y1)//2
+    left=min(max(0,cx-side_w//2),W-side_w);top=min(max(0,cy-side_h//2),H-side_h)
+    return left,top,left+side_w,top+side_h
 
 def execute_serverless(job,graph,stage):
     (job_path(job['id'])/(stage+'.api.json')).write_text(json.dumps(graph,indent=2))
@@ -1031,7 +1062,7 @@ def health():
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
-    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info),'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'fibo_ready':fibo_available(info) or klein_available(info),'frame_editor':'klein' if klein_available(info) else 'fibo' if fibo_available(info) else None,'guides':['original','2d','3d','mask'],'planner':'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -1244,32 +1275,60 @@ async def convert_gif(request:Request):
 
 @app.post('/frame-edit')
 async def frame_edit(request:Request):
-    """FIBO 2 edit of one frame (the first-frame modal): returns the edited PNG. Runs as a hidden job so it uses the same
-    ComfyUI or serverless path as generation."""
-    if not fibo_available():raise HTTPException(409,'Reference adaptation (FIBO) is not installed on this ComfyUI')
-    form=await request.form(max_files=12,max_fields=2,max_part_size=32*1024*1024)
-    instruction=str(form.get('instruction') or '').strip()
-    if not instruction or len(instruction)>4000:raise HTTPException(400,'Describe the edit')
+    """First-frame edit (the first-frame modal): FLUX.2 [klein] when installed, else FIBO 2; returns the edited PNG.
+    Optional `mask` (white = paint): only that area is edited, on a crop around it, and pasted back with a soft edge, so
+    the rest of the frame stays pixel-exact. `op` is replace, remove, add or free (`what` = the part, `instruction` = the
+    new content or the whole request). Runs as a hidden job so it uses the same ComfyUI or serverless path as generation."""
+    editor=frame_editor()
+    if not editor:raise HTTPException(409,'No image editor is installed on this ComfyUI (FLUX.2 Klein or FIBO)')
+    form=await request.form(max_files=13,max_fields=6,max_part_size=32*1024*1024)
+    op=str(form.get('op') or 'free');what=str(form.get('what') or '').strip()[:400];instruction=str(form.get('instruction') or '').strip()
+    if op not in EDIT_OPS:raise HTTPException(400,'Unknown edit')
+    if (op in ('free','add') and not instruction) or (op=='replace' and not (what or form.get('mask')) ) or len(instruction)>4000:raise HTTPException(400,'Describe the edit')
     jid=uuid.uuid4().hex;inp=INPUT/'henge'/jid;inp.mkdir(parents=True);job_path(jid).mkdir(parents=True)
     files=[('frame',form.get('frame'))]+sorted(((k,v) for k,v in form.multi_items() if k.startswith('picture_')),key=lambda kv:kv[0])
-    staged=[]
+    images=[]
     for name,upload in files:
         if not hasattr(upload,'read'):raise HTTPException(400,'Attach the frame as an image')
         try:
-            with Image.open(io.BytesIO(await upload.read())) as im:dest=inp/f'{name}.png';im.convert('RGB').save(dest)
+            with Image.open(io.BytesIO(await upload.read())) as im:images.append((name,im.convert('RGB')))
         except OSError:raise HTTPException(400,f'{name} is not an image')
-        staged.append(str(dest.relative_to(INPUT)))
-    job={'id':jid,'created':time.time(),'status':'running','stage':'fibo_edit','progress':0,'request':{'mode':'frame_edit','instruction':instruction},'options':{},'message':'Editing the frame'};save(job)
+    frame=images[0][1];mask=None
+    if hasattr(form.get('mask'),'read'):
+        try:
+            with Image.open(io.BytesIO(await form.get('mask').read())) as m:mask=m.convert('L').resize(frame.size)
+        except OSError:raise HTTPException(400,'The mask is not an image')
+        if not mask.getbbox():mask=None
+    region=masked_region(frame,mask) if mask else None
+    staged=[]
+    for i,(name,im) in enumerate(images):
+        if i==0 and region:im=im.crop(region)
+        dest=inp/f'{name}.png';im.save(dest);staged.append(str(dest.relative_to(INPUT)))
+    text=edit_instruction(op,what,instruction,len(staged)-1)
+    job={'id':jid,'created':time.time(),'status':'running','stage':'frame_edit','progress':0,'request':{'mode':'frame_edit','instruction':instruction or what,'op':op,'editor':editor,'masked':bool(region)},'options':{},'message':'Editing the frame'};save(job)
     try:
-        # FIBO otherwise re-poses the picture (seen with a person swap): pin <image_1>'s composition and poses.
-        refs=''.join(f' <image_{i}> is a reference.' for i in range(2,len(staged)+1))
-        prompt=f'Edit <image_1>: {instruction}. Keep everything else in <image_1> exactly as it is: composition, every pose, camera angle, framing and lighting.{refs}'
-        outputs=await asyncio.to_thread(execute_graph,job,fibo_graph(staged[0],staged[1:],prompt,int(time.time())%2**31),'fibo_edit')
-        result=await asyncio.to_thread(image_from_output,outputs,inp/'edited.png')
+        seed=int(time.time())%2**31
+        if editor=='klein':graph=klein_graph(staged[0],staged[1:],text,seed)
+        else:
+            # FIBO otherwise re-poses the picture (seen with a person swap): pin <image_1>'s composition and poses.
+            refs=''.join(f' <image_{i}> is a reference.' for i in range(2,len(staged)+1))
+            graph=fibo_graph(staged[0],staged[1:],f'Edit <image_1>: {text}{refs}',seed)
+        outputs=await asyncio.to_thread(execute_graph,job,graph,'frame_edit')
+        edited=await asyncio.to_thread(image_from_output,outputs,inp/'edited_raw.png')
+        with Image.open(edited) as out:
+            out=out.convert('RGB')
+            if region:
+                # Paste the edited crop back through the painted area, feathered so the seam does not show.
+                from PIL import ImageFilter
+                x0,y0,x1,y1=region;patch=out.resize((x1-x0,y1-y0),Image.LANCZOS)
+                soft=mask.crop(region).filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(max(4,(x1-x0)//60)))
+                result=frame.copy();result.paste(patch,(x0,y0),soft)
+            else:result=out.resize(frame.size,Image.LANCZOS) if out.size!=frame.size else out
+            result.save(inp/'edited.png')
         save(job,status='completed',stage='complete',progress=1)
     except Exception as e:
         save(job,status='failed',error=str(e)[:1800]);raise HTTPException(500,f'Frame edit failed: {str(e)[:600]}')
-    return FileResponse(result,media_type='image/png',headers={'X-Henge-Edit':jid})
+    return FileResponse(inp/'edited.png',media_type='image/png',headers={'X-Henge-Edit':jid})
 
 @app.get('/frame-edits')
 def frame_edits():

@@ -181,6 +181,27 @@ def fibo_graph(image,refs,instruction,seed):
     for i,p in enumerate(refs,2):g[str(20+i)]=node('LoadImage',image=p);g['5']['inputs'][f'images.image_{i}']=[str(20+i),0]
     return g
 
+# FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0): first-frame edits. Same graph as ComfyUI's "Image Edit (FLUX.2 Klein
+# 4B Distilled)" template: every picture is a ReferenceLatent, 4 steps, CFG 1. The output keeps the first image's size.
+KLEIN={'unet':'flux-2-klein-4b-fp8.safetensors','clip':'qwen_3_4b.safetensors','vae':'flux2-vae.safetensors'}
+def klein_graph(image,refs,instruction,seed,steps=4,prefix=None):
+    g={'1':node('UNETLoader',unet_name=KLEIN['unet'],weight_dtype='default'),'2':node('CLIPLoader',clip_name=KLEIN['clip'],type='flux2',device='default'),
+       '3':node('VAELoader',vae_name=KLEIN['vae']),'4':node('CLIPTextEncode',clip=['2',0],text=instruction),'5':node('ConditioningZeroOut',conditioning=['4',0]),
+       '10':node('LoadImage',image=image),'11':node('ImageScaleToTotalPixels',image=['10',0],upscale_method='lanczos',megapixels=1.,resolution_steps=16),
+       '12':node('GetImageSize',image=['11',0])}
+    pos,neg=['4',0],['5',0]
+    for i,p in enumerate([image]+list(refs)):
+        if i:g[f'2{i}0']=node('LoadImage',image=p);g[f'2{i}1']=node('ImageScaleToTotalPixels',image=[f'2{i}0',0],upscale_method='lanczos',megapixels=1.,resolution_steps=16)
+        src=['11',0] if i==0 else [f'2{i}1',0]
+        g[f'3{i}0']=node('VAEEncode',pixels=src,vae=['3',0])
+        g[f'3{i}1']=node('ReferenceLatent',conditioning=pos,latent=[f'3{i}0',0]);g[f'3{i}2']=node('ReferenceLatent',conditioning=neg,latent=[f'3{i}0',0])
+        pos,neg=[f'3{i}1',0],[f'3{i}2',0]
+    g.update({'40':node('EmptyFlux2LatentImage',width=['12',0],height=['12',1],batch_size=1),'41':node('Flux2Scheduler',steps=steps,width=['12',0],height=['12',1]),
+              '42':node('CFGGuider',model=['1',0],positive=pos,negative=neg,cfg=1.),'43':node('KSamplerSelect',sampler_name='euler'),'44':node('RandomNoise',noise_seed=seed),
+              '45':node('SamplerCustomAdvanced',noise=['44',0],guider=['42',0],sampler=['43',0],sigmas=['41',0],latent_image=['40',0]),
+              '46':node('VAEDecode',samples=['45',0],vae=['3',0]),'47':node('SaveImage',images=['46',0],filename_prefix=prefix or image.rsplit('.',1)[0]+'_klein')})
+    return g
+
 def subject_looks_graph(looks):
     # One node per marked person: the look of the person under the user's click, used to recognise them after cuts.
     g={}

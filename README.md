@@ -116,7 +116,7 @@ You need a working ComfyUI (PyTorch with CUDA 13, NVIDIA driver 580+), Node.js 2
    ```sh
    /path/to/comfy/python scripts/download_models.py \
      --manifest config/model-repos.example.json --models-dir /path/to/ComfyUI/models \
-     --profiles character,motion,headswap,sharpness,fibo,sam2d,audio
+     --profiles character,motion,headswap,sharpness,fibo,klein,sam2d,audio
    ```
 
    No token needed. Models you already have in ComfyUI are reused, even under another name or subfolder.
