@@ -72,11 +72,11 @@ def track_scenes(images,sam,cond,threshold,per_scene=6,total=16,min_frames=3):
 class HengeGuide:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'representation':(['original','2d','3d','mask'],),'bindings':('STRING',{'default':'[]'}),'source_kind':(['human','animal','other'],),'segment_start':('FLOAT',{'default':0}),'sam_checkpoint':('STRING',{'default':'sam3.1_multiplex_fp16.safetensors'}),'body_model':('STRING',{'default':'sam_3d_body_dinov3_bf16.safetensors'}),'preserve_objects':('STRING',{'default':'[]'})},'optional':{'mask_settings':('STRING',{'default':'{}'})}}
-    RETURN_TYPES=('IMAGE','MASK');FUNCTION='prepare';CATEGORY='Henge'
+    RETURN_TYPES=('IMAGE','MASK','HENGE_REGIONS');FUNCTION='prepare';CATEGORY='Henge'
     def prepare(self,images,representation,bindings,source_kind,segment_start,sam_checkpoint,body_model,preserve_objects="[]",mask_settings='{}'):
         spec={**DEFAULT_MASK,**json.loads(mask_settings or '{}')}
         empty=torch.zeros(images.shape[:3])
-        if representation=='original':return (images,empty)
+        if representation=='original':return (images,empty,{})
         subjects=json.loads(bindings)
         if not subjects:raise ValueError('Color guides need a selected subject and its reference binding')
         if representation=='3d' and source_kind!='human':raise ValueError('SAM 3D Body supports human sources. Use a 2D color guide for animals.')
@@ -90,12 +90,16 @@ class HengeGuide:
         if masks is None:
             # Nobody in this shot (a cutaway, an empty room): it goes through unmarked instead of failing the job.
             del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
-            return {'ui':ui_report({'henge_tracks':[json.dumps({'warnings':['Nobody found in this shot; it was left unmarked'],'subjects':[]})]}),'result':(images,empty)}
+            return {'ui':ui_report({'henge_tracks':[json.dumps({'warnings':['Nobody found in this shot; it was left unmarked'],'subjects':[]})]}),'result':(images,empty,{})}
         n,h,w=images.shape[:3]
         # Marks, continuity from the previous shot and recognition by look (follow.py): never guessed by position.
         picked,warnings=follow.choose(subjects,masks,images,segment_start)
         chosen=[(t,s,tuple(int(s['hex'].lstrip('#')[i:i+2],16) for i in [0,2,4])) for t,s,_ in picked]
         tracking={'ui':ui_report({'henge_tracks':[json.dumps(follow.report(picked,masks,images,warnings))]})}
+        attention_regions={}
+        for idx,subject,_ in chosen:
+            for slot in subject.get('picture_slots',[]):
+                attention_regions[slot]=torch.maximum(attention_regions.get(slot,torch.zeros_like(masks[:,idx],dtype=torch.float32)),masks[:,idx].float())
         object_mask=torch.zeros((n,h,w),dtype=torch.bool)
         for noun in json.loads(preserve_objects):
             if noun not in ['phone','microphone','guitar','ukulele','cup','bottle','bicycle','torch','piano','keyboard']:continue
@@ -115,7 +119,7 @@ class HengeGuide:
             # Held props (guitar, microphone...) stay as in the source instead of being regenerated with the person.
             region=mask_region(shape_mask(selected,spec),spec)
             if bool(object_mask.any()):region=region*(~object_mask).float()
-            return {**tracking,'result':(images,region)}
+            return {**tracking,'result':(images,region,attention_regions)}
         result=images.clone();del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
         # 2D marks can be translucent (mark_opacity < 1, the BFS Colored Mark look): the guide person stays visible
         # under the tint, so the face and expression come through. 3D always paints the body solid.
@@ -126,7 +130,7 @@ class HengeGuide:
         if representation=='2d':
             result[object_mask]=images[object_mask]
             if spec.get('labels'):result=draw_labels(result,chosen,masks)
-            return {**tracking,'result':(result,selected.float())}
+            return {**tracking,'result':(result,selected.float(),attention_regions)}
         from comfy_extras.nodes_sam3d_body import SAM3DBody_Loader,SAM3DBody_Predict,SAM3DBody_FaceExpression,SAM3DBody_Smooth
         from .mesh_renderer import render
         # DINOv3's sparse body regression requires FP32 on this checkpoint.
@@ -160,7 +164,7 @@ class HengeGuide:
             # None of the marked people is in this shot (a cut to someone else): like 2D, it goes through unmarked
             # instead of failing the job.
             note='None of the marked people is visible in this shot; it was left unmarked'
-            return {'ui':ui_report({'henge_tracks':[json.dumps(follow.report(picked,masks,images,warnings+[note]))]}),'result':(images,selected.float())}
+            return {'ui':ui_report({'henge_tracks':[json.dumps(follow.report(picked,masks,images,warnings+[note]))]}),'result':(images,selected.float(),attention_regions)}
         output=[]
         for k in range(n):
             background=(images[k].clamp(0,1).numpy()*255).astype(np.uint8)
@@ -169,7 +173,7 @@ class HengeGuide:
         mm.unload_all_models();mm.soft_empty_cache()
         result=torch.from_numpy(np.stack(output)).float()/255
         result[object_mask]=images[object_mask]
-        return {**tracking,'result':(result,selected.float())}
+        return {**tracking,'result':(result,selected.float(),attention_regions)}
 
 
 class HengeH3Conditioning:
@@ -358,3 +362,6 @@ async def validate_henge_graph(request):
     return web.json_response({'valid':result[0],'error':result[1],'outputs':result[2],'node_errors':result[3]})
 from .upscale import NODE_CLASS_MAPPINGS as UPSCALE_NODES
 NODE_CLASS_MAPPINGS.update(UPSCALE_NODES)
+
+from .regional_attention import HengeRegionalAttention
+NODE_CLASS_MAPPINGS['HengeRegionalAttention']=HengeRegionalAttention

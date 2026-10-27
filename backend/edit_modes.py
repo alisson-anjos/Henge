@@ -194,3 +194,19 @@ def multi_swap_prompt(subjects,representation='2d',labels=False):
             f"each one follows its own marked person through position changes, occlusion and cuts. {remove}"
             f"Keep the framing of the guide: do not widen the shot or add people who are not in the guide; no inset, no small full-body figure, no picture-in-picture. "
             f"Preserve the background, lighting and camera. Prevent identity drift, clothing changes, texture crawling and flicker.")
+
+
+def shot_swap_plan(bindings, references, roles, representation, labels=False):
+    """Bind only tracked identities; renumber Pictures to match this shot's reference list."""
+    slots=sorted({slot for subject in bindings for slot in subject['picture_slots']})
+    mapping={slot:i for i,slot in enumerate(slots,1)}
+    descriptions={int(role['slot']):role.get('description','') for role in roles}
+    local=[{**subject,'picture_slots':[mapping[slot] for slot in subject['picture_slots']]} for subject in bindings]
+    subjects=[(subject['color'],subject['picture_slots'],descriptions.get(original['picture_slots'][0],'the character in the reference'))
+              for subject,original in zip(local,bindings)]
+    if len(subjects)==1:
+        color,pictures,details=subjects[0]
+        prompt=character_swap_prompt(details or 'the character shown in Picture 1')
+        prompt+=f' Replace only the {color}-marked person; keep every other person unchanged. Remove all temporary color markers and text tags. Do not add people, insets or duplicate characters.'
+    else:prompt=multi_swap_prompt(subjects,representation,labels)
+    return local,[references[slot-1] for slot in slots],prompt

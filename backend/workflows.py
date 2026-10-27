@@ -86,7 +86,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None,gen_audio=False):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None,gen_audio=False,regional_attention=None):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
@@ -169,6 +169,13 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             g['30']=node('HengeRTXUpscale',images=['16',0],width=W,height=H,quality='ULTRA')
             g['17']['inputs']['images']=['30',0]
         else:raise ValueError('Unknown upscale method')
+    if regional_attention and regional_attention.get('enabled'):
+        if representation not in ('2d','3d') or conditioning_mode!='guide' or causal or upscale:
+            raise ValueError('Regional attention experiment needs a 2D/3D Guide Latents shot without causal sampling or upscale')
+        g['60']=node('HengeRegionalAttention',model=g['10']['inputs']['model'],regions=['8',2],
+                     strength=float(regional_attention.get('strength',.5)),reference_budget=float(regional_attention.get('reference_budget',.35)),
+                     layers=regional_attention.get('layers','10,25,40'))
+        g['10']['inputs']['model']=['60',0];g['13']['inputs']['model']=['60',0]
     if gen_audio:
         # H3 always samples a joint video+audio latent; keep its soundtrack (32 kHz stereo) instead of dropping it.
         if '19' not in g:g['19']=node('VAELoader',vae_name='minimax_h3_audio_vae_fp32.safetensors')

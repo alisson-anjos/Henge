@@ -13,7 +13,7 @@ import moving_plate
 from workflows import klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
-from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,fixed_plan,head_reference,character_reference
+from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -170,6 +170,15 @@ def validate_request(r,options,slots):
     if r.get('processing',{}).get('mode')=='causal':
         if options.get('conditioning_mode','guide')!='guide':raise ValueError('Causal rendering uses Guide Latents; switch the method from TARA')
         if r['mode']=='motion':raise ValueError('Causal rendering is for Character Swap, Head Swap and Sharpness')
+    regional=options.get('regional_attention') or {}
+    if not isinstance(regional,dict) or set(regional)-{'enabled','strength','reference_budget','layers'}:raise ValueError('Invalid regional attention settings')
+    if not isinstance(regional.get('enabled',False),bool):raise ValueError('Regional attention enabled must be boolean')
+    clamp_float(regional.get('strength',.5),0,1,'regional attention strength')
+    clamp_float(regional.get('reference_budget',.35),.01,.95,'regional reference budget')
+    if regional.get('enabled'):
+        if r['mode']!='swap' or r.get('subject_guidance',{}).get('representation') not in ('2d','3d') or not r.get('subject_guidance',{}).get('bindings'):raise ValueError('Regional attention needs marked people in a 2D/3D Character Swap')
+        if options.get('conditioning_mode','guide')!='guide' or r['processing'].get('mode')=='causal':raise ValueError('Regional attention needs Guide Latents and shot sampling')
+        if not re.fullmatch(r'\d+(?:\s*,\s*\d+)*',str(regional.get('layers','10,25,40'))):raise ValueError('Regional attention layers must be comma-separated indices')
     mask=options.get('mask') or {}
     if not isinstance(mask,dict) or set(mask)-{'threshold','shape','padding','expand','fill_holes','temporal_expand','blockify','invert','strength'}:raise ValueError('Invalid latent mask settings')
     if mask.get('shape','box') not in ['box','silhouette']:raise ValueError('Unknown mask shape')
@@ -863,7 +872,7 @@ def generate(job):
     if plan['adapt_reference'] and not swap_figure:
         figure=adapt_request(job)['figure'];adapted_ref=adapt_prepare(job,job);refs.append(adapted_ref.relative_to(INPUT).as_posix())
         if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> shows that character in humanoid form, in the starting pose of the guide; use it for body shape, limb proportions and appearance only, it does not supply motion or a background." if figure else f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
-    pieces=[];guide_pieces=[];previous=None;save(job,shot_urls=[])
+    pieces=[];guide_pieces=[];previous=None;save(job,shot_urls=[],shot_plans=[])
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         if shot.get('reset_context'):previous=None
@@ -878,9 +887,42 @@ def generate(job):
         skip=shot['overlap'] if shot['frames']-shot['overlap']>=context else 0
         shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
                         **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.),'labels':bool(r.get('subject_guidance',{}).get('mark_labels'))} if plan['representation']=='2d' else options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')));result_node,guide_node='17','18'
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.),'labels':bool(r.get('subject_guidance',{}).get('mark_labels'))} if plan['representation']=='2d' else options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')),regional_attention=options.get('regional_attention'));result_node,guide_node='17','18'
+        if r['mode']=='swap' and bindings and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True):
+            # Run the exact guide node first: absence must be known before H3 sees any references.
+            preflight={'7':graph['7'],'8':graph['8'],'18':graph['18']}
+            save(job,message=f'Tracking subjects in shot {i+1}/{len(shots)}')
+            tracked=execute_graph(job,preflight,f'track_segment_{i:03d}')
+            reports=tracked.get('8',{}).get('henge_tracks')
+            if not reports:raise ValueError('Worker did not return shot tracking; refusing to generate with unverified identities')
+            report=json.loads(reports[0]);seen={subject['id'] for subject in report.get('subjects',[])}
+            active=[subject for subject in shot_bindings if subject['id'] in seen]
+            nxt=shots[i+1] if i+1<len(shots) else None
+            shot_warnings += [f'Shot {i+1}: {warning}' for warning in follow_update(follow,reports,nxt['start']-shot['start'] if nxt else None)]
+            shot_plans=list(job.get('shot_plans') or [])
+            if not active:
+                piece=work/f'piece_{i:03d}.mp4'
+                run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(path),'-an','-c:v','libx264','-threads','2','-crf','17','-y',str(piece)])
+                if r.get('output_audio',{}).get('generate'):
+                    audio_path=work/f'audio_{i:03d}.wav'
+                    if meta.get('audio'):
+                        run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(path),'-vn','-ar','48000','-ac','2','-y',str(audio_path)])
+                    else:
+                        run(['ffmpeg','-v','error','-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-t',str((shot['frames']-shot['overlap'])/24),'-y',str(audio_path)])
+                gpiece=work/f'guide_{i:03d}.mp4';shutil.copyfile(piece,gpiece)
+                pieces.append(piece);guide_pieces.append(gpiece);previous=None
+                shot_plans.append({'shot':i+1,'subjects':[],'prompt':'','action':'keep_original'})
+                save(job,shot_plans=shot_plans,shot_warnings=shot_warnings,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
+                continue
+            local_bindings,local_refs,local_prompt=shot_swap_plan(active,refs,plan.get('picture_roles',[]),plan['representation'],bool(r.get('subject_guidance',{}).get('mark_labels')))
+            graph['7']['inputs']['pictures']=json.dumps(local_refs)
+            graph['8']['inputs']['bindings']=json.dumps(local_bindings)
+            graph['9']['inputs']['prompt']=local_prompt
+            # HengeGuide runs again only when reference numbering changed, preserving label correctness.
+            shot_plans.append({'shot':i+1,'subjects':[subject['id'] for subject in active],'prompt':local_prompt,'action':'generate'})
+            save(job,shot_plans=shot_plans,shot_warnings=shot_warnings)
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
-        if bindings and plan['representation']!='original':
+        if bindings and plan['representation']!='original' and not (r['mode']=='swap' and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True)):
             nxt=shots[i+1] if i+1<len(shots) else None
             shot_warnings+=[f'Shot {i+1}: {w}' for w in follow_update(follow,outputs.get('8',{}).get('henge_tracks'),nxt['start']-shot['start'] if nxt else None)]
             save(job,shot_warnings=shot_warnings)
