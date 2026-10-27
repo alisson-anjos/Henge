@@ -1379,6 +1379,28 @@ def retry(jid:str):
         p=job_path(jid)/'job.json';tmp=p.with_suffix('.tmp');tmp.write_text(json.dumps(job,ensure_ascii=False,indent=2));tmp.replace(p)
     return public(job)
 
+def delete_job_files(jid):
+    """A finished job's record, results and staged inputs."""
+    shutil.rmtree(JOBS/jid,ignore_errors=True);shutil.rmtree(INPUT/'henge'/jid,ignore_errors=True)
+
+@app.delete('/jobs/{jid}')
+def delete_job(jid:str):
+    """Delete one generation from the history. A job still running or queued must be cancelled first."""
+    job=load(jid)
+    if job['status'] not in TERMINAL:raise HTTPException(409,'Cancel this generation before deleting it')
+    delete_job_files(job['id']);return {'deleted':[job['id']]}
+
+@app.delete('/jobs')
+def clear_jobs():
+    """Clear the history: every finished generation (completed, failed, cancelled); running ones stay."""
+    deleted=[]
+    for f in JOBS.glob('*/job.json'):
+        try:job=json.loads(f.read_text())
+        except (OSError,ValueError):continue
+        if job.get('status') in TERMINAL and (job.get('request') or {}).get('mode') not in ('frame_edit',):
+            delete_job_files(f.parent.name);deleted.append(f.parent.name)
+    return {'deleted':deleted}
+
 @app.post('/jobs/{jid}/cancel')
 def cancel(jid:str):
     job=load(jid)
