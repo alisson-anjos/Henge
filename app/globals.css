@@ -881,3 +881,4 @@ img{display:block;max-width:100%}
 .connection-open{width:100%;justify-content:space-between}
 @media(max-width:700px){.provider-cards{grid-template-columns:1fr}.settings-center{max-height:92vh;border-radius:16px 16px 12px 12px}.settings-head{flex-wrap:wrap}.settings-tabs{order:3;width:100%;margin:0}}
 .runpod-links a{color:var(--accent);text-decoration:none}.runpod-links a:hover{text-decoration:underline}
+.background-card .background-thumb{width:160px}.background-card .background-thumb img{aspect-ratio:16/9;object-fit:cover;width:100%;border-radius:10px}

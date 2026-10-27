@@ -20,7 +20,7 @@ export type DirectionRequest = {
     cut_mode?: 'fit' | 'every' | 'off';
   };
   audio_conditioning: {enabled: boolean; source: string | null};
-  output_audio: {keep_source: boolean};
+  output_audio: {keep_source: boolean; generate?: boolean};
   prompt: string;
   editor_prompt: string;
   subject_guidance?: {representation: GuideRepresentation; bindings: SubjectBinding[]; status: 'selection_only'; marker_colors_are_output_appearance: false; mark_opacity?: number};

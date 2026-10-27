@@ -9,7 +9,8 @@ from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageFont,ImageOps
 import workflows
-from workflows import lora_installed,localize_loras,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+import moving_plate
+from workflows import lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,fixed_plan,head_reference,character_reference
@@ -183,6 +184,8 @@ def validate_request(r,options,slots):
     if r['mode'] not in FIXED_RECIPE and options.get('profile','motion') in ('headswap','sharpness'):raise ValueError('This model belongs to another mode')
     if options.get('conditioning_mode','guide') not in ['guide','tara']:raise ValueError('Unknown conditioning mode')
     if options.get('guide_clip','auto') not in ['auto','on','off']:raise ValueError('Guide for CLIP must be auto, on or off')
+    if not isinstance(r.get('output_audio',{}).get('generate',False),bool):raise ValueError('Generated audio must be a boolean')
+    if r.get('output_audio',{}).get('generate') and r.get('processing',{}).get('mode')=='causal':raise ValueError('Generated audio needs shot rendering, not causal')
     if options.get('conditioning_mode','guide')=='tara' and (r.get('subject_guidance') or {}).get('representation') in ('2d','3d') and (r.get('subject_guidance') or {}).get('bindings') and r['mode']!='sharpness':
         # TARA reads the guide as a native video reference and was trained on plain footage: a tinted 2D/3D guide is
         # outside what it learned. Mask leaves the guide untouched (it only bounds the regenerated latent area).
@@ -594,7 +597,7 @@ def planning(job):
         plan=fixed_plan('motion',ffp_prompt(sentence,first),'Edit the guide video as requested'+(f'; Picture {first} is the edited first frame to propagate.' if first else '.'))
         plan['picture_roles']=[{'slot':s,'role':'style' if s==first else 'identity','description':'Edited first frame' if s==first else ''} for s in slots]
         save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the edit prompt before generating.',step=None,step_total=None);return
-    evidence=prompt_pipeline(ask,r['prompt'],r['mode'],pictures,guide,metadata,job['options'].get('enhance_prompt',True))
+    evidence=prompt_pipeline(ask,r['prompt'],r['mode'],pictures,guide,metadata,job['options'].get('enhance_prompt',True),generate_audio=bool(r.get('output_audio',{}).get('generate')))
     (work/'vlm_evidence.json').write_text(json.dumps(evidence,indent=2,ensure_ascii=False))
     routing=dict(mode=r['mode'],request=r['prompt'],bindings=r.get('subject_guidance',{}),options=job['options'],
                  picture_slots=slots,reference_inventory=evidence['reference_inventory'],guide_observations=evidence['guide_analysis'])
@@ -818,7 +821,7 @@ def generate(job):
         skip=shot['overlap'] if shot['frames']-shot['overlap']>=context else 0
         shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
                         **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.)} if plan['representation']=='2d' else options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')));result_node,guide_node='17','18'
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.)} if plan['representation']=='2d' else options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')));result_node,guide_node='17','18'
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
         if bindings and plan['representation']!='original':
             nxt=shots[i+1] if i+1<len(shots) else None
@@ -832,6 +835,7 @@ def generate(job):
         else:
             # Overlap still in the file (no overlap to drop, or an older worker that ignores skip_frames).
             run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','17','-movflags','+faststart','-y',str(piece)])
+        shot_audio(job,outputs,i,shot,piece)
         pieces.append(piece);previous=rendered
         # Each finished shot is viewable and downloadable while the next ones render.
         save(job,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
@@ -846,6 +850,43 @@ def generate(job):
     save(job,render_size=[W,H])
     finalize(job,pieces,guide_pieces,W,H)
 
+def make_plate(job):
+    """Moving plate: the selected interval with its background replaced by the uploaded picture, moving with the
+    original camera (backend/moving_plate.py). It becomes the job's guide video; the source audio is kept."""
+    r=job['request'];assets=job['assets'];meta=job['video_info'];inp=INPUT/'henge'/job['id']
+    start,end=r['video']['start_seconds'],r['video']['end_seconds'];opts=r.get('background') or {}
+    clip=inp/'plate_source.mp4';h=min(720,meta['height']//2*2)
+    save(job,stage='plate',message='Separating the people for the new background')
+    run(['ffmpeg','-v','error','-ss',str(start),'-t',str(end-start),'-i',str(INPUT/assets['video']),'-vf',f'fps=24,scale=-2:{h}','-an','-c:v','libx264','-crf','14','-y',str(clip)])
+    info=probe(clip);n=frame_count(clip);w32,h32=max(32,info['width']//32*32),max(32,info['height']//32*32)
+    outputs=execute_graph(job,plate_mask_graph(str(clip.relative_to(INPUT)),w32,h32,n,str((inp/'plate_masks.mp4').relative_to(INPUT))),'plate')
+    videos=output_files(outputs,'5','videos')
+    if not videos:raise ValueError('ComfyUI finished without the people masks for the new background')
+    masks=FILES.download(videos[0],inp/'plate_masks_dl.mp4')
+    save(job,message='Moving the new background with the camera')
+    plate=inp/'plate_video.mp4'
+    result=moving_plate.render(clip,masks,INPUT/assets['background'],plate,zoom=float(opts.get('zoom',1.3)),follow=float(opts.get('follow',.5)),
+                               push=float(opts.get('push',.05)),fireflies=int(opts.get('fireflies',0)),log=lambda m:print('[henge plate]',m,flush=True))
+    final=inp/'plate.mp4'
+    if meta['audio']:run(['ffmpeg','-v','error','-i',str(plate),'-ss',str(start),'-t',str(end-start),'-i',str(INPUT/assets['video']),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-shortest','-y',str(final)])
+    else:shutil.copyfile(plate,final)
+    r=json.loads(json.dumps(r));dur=frame_count(final)/24
+    r['video'].update(start_seconds=0,end_seconds=dur,duration=dur,source_duration=dur)
+    # Marks were placed on the source timeline: move them onto the plate's.
+    for b in (r.get('subject_guidance') or {}).get('bindings') or []:
+        for a in b.get('anchors') or []:a['time_seconds']=max(0.,a['time_seconds']-start)
+    save(job,request=r,assets={**assets,'video':str(final.relative_to(INPUT)),'original_video':assets['video']},video_info=probe(final),
+         plate={'shots':result['shots'],'frames':result['frames']},plate_url=f"/api/backend/jobs/{job['id']}/source/video")
+
+def shot_audio(job,outputs,i,shot,piece):
+    """Generated audio: the shot's own H3 soundtrack, cut like its video (from the end of the context overlap, for the
+    piece's length) so finalize can lay the shots end to end."""
+    if not job['request'].get('output_audio',{}).get('generate'):return
+    sound=output_files(outputs,'51','audio')
+    if not sound:return
+    raw=FILES.download(sound[0],INPUT/'henge'/job['id']/f'audio_{i:03d}_raw.flac')
+    run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(raw),'-t',str(frame_count(piece)/24),'-af','apad','-ar','48000','-ac','2','-y',str(job_path(job['id'])/f'audio_{i:03d}.wav')])
+
 def finalize(job,pieces,guide_pieces,W,H):
     """Join the shot pieces into result.mp4 (with the source audio when kept), the guide video and the comparison.
     Used at the end of a render and after a shot is redone."""
@@ -853,7 +894,13 @@ def finalize(job,pieces,guide_pieces,W,H):
     start,end=r['video']['start_seconds'],r['video']['end_seconds']
     concat=work/'concat.txt';concat.write_text(''.join(f"file '{p.name}'\n" for p in pieces));joined=work/'joined.mp4';run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(concat),'-c','copy','-y',str(joined)])
     output=work/'result.mp4';args=['ffmpeg','-v','error','-i',str(joined)]
-    if r.get('output_audio',{}).get('keep_source') and meta['audio']:args+=['-ss',str(start),'-i',str(INPUT/assets['video']),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac']
+    sounds=[work/f"audio_{p.stem.split('_')[-1]}.wav" for p in pieces]
+    if r.get('output_audio',{}).get('generate') and sounds and all(x.is_file() for x in sounds):
+        # Generated audio: each shot's H3 soundtrack in shot order, exactly as long as its piece (cf. shot_soundtrack.py).
+        sl=work/'audio_concat.txt';sl.write_text(''.join(f"file '{x.name}'\n" for x in sounds));track=work/'soundtrack.wav'
+        run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(sl),'-c','copy','-y',str(track)])
+        args+=['-i',str(track),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k']
+    elif r.get('output_audio',{}).get('keep_source') and meta['audio']:args+=['-ss',str(start),'-i',str(INPUT/assets['video']),'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac']
     else:args+=['-map','0:v:0','-c:v','copy','-an']
     output_fps=r['processing'].get('timeline_fps',24)
     clamp_float(output_fps,1,120,'output FPS')
@@ -895,6 +942,7 @@ def worker():
                     mask_preview(job);save(job,status='awaiting_approval',stage='plan_ready',message='Mask preview updated. Review it, then generate.')
                     continue
                 if status=='queued_plan':
+                    if job['assets'].get('background') and not job.get('plate'):make_plate(job);job=load(job['id'])
                     planning(job)
                     # Auto-approve keeps the plan's own recommendation for reference preparation.
                     if job['options'].get('auto_approve') is True and job['status']=='awaiting_approval':
@@ -1054,7 +1102,7 @@ def list_jobs():
 
 @app.post('/jobs')
 async def create_job(request:Request):
-    form=await request.form(max_files=12,max_fields=4,max_part_size=32*1024*1024)
+    form=await request.form(max_files=13,max_fields=4,max_part_size=32*1024*1024)
     try:
         r=json.loads(str(form.get('direction','{}')));options=json.loads(str(form.get('options','{}')))
         pictures={int(k.split('_')[1]):v for k,v in form.items() if re.fullmatch(r'picture_\d+',k)}
@@ -1074,6 +1122,12 @@ async def create_job(request:Request):
         if r['video']['end_seconds']>meta['duration']+.1:raise ValueError('Selected interval exceeds the uploaded video')
         if r.get('audio_conditioning',{}).get('enabled') and not meta['audio']:raise ValueError('The guide contains no audio track')
         assets={'video':str(source.relative_to(INPUT)),'pictures':{}}
+        background=form.get('background')
+        if hasattr(background,'read'):
+            # Moving plate: a new background that follows the guide's camera (built before planning).
+            temp=inp/'upload_background';await upload(background,temp,25*1024*1024)
+            with Image.open(temp) as im:im.convert('RGB').save(inp/'background.png')
+            temp.unlink();assets['background']=str((inp/'background.png').relative_to(INPUT))
         for slot,file in sorted(pictures.items()):
             dest=inp/f'picture_{slot}.png';temp=inp/f'upload_{slot}';await upload(file,temp,25*1024*1024)
             with Image.open(temp) as im:im.convert('RGB').save(dest)
@@ -1594,6 +1648,7 @@ def redo_shot(job):
     piece=work/f'piece_{i:03d}.mp4';skip=graph['17']['inputs'].get('skip_frames',0)
     if skip and frame_count(rendered)==shot['frames']-skip:shutil.copyfile(rendered,piece)
     else:run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','17','-movflags','+faststart','-y',str(piece)])
+    shot_audio(job,outputs,i,shot,piece)
     pieces=sorted(work.glob('piece_*.mp4'));guide_pieces=sorted(work.glob('guide_[0-9][0-9][0-9].mp4'))
     W,H=job.get('render_size') or (probe(pieces[0])['width'],probe(pieces[0])['height'])
     finalize(job,pieces,guide_pieces,W,H)

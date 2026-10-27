@@ -69,7 +69,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None,gen_audio=False):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
@@ -152,6 +152,11 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             g['30']=node('HengeRTXUpscale',images=['16',0],width=W,height=H,quality='ULTRA')
             g['17']['inputs']['images']=['30',0]
         else:raise ValueError('Unknown upscale method')
+    if gen_audio:
+        # H3 always samples a joint video+audio latent; keep its soundtrack (32 kHz stereo) instead of dropping it.
+        if '19' not in g:g['19']=node('VAELoader',vae_name='minimax_h3_audio_vae_fp32.safetensors')
+        g['50']=node('VAEDecodeAudio',samples=['37',0] if '37' in g else ['14',0],vae=['19',0])
+        g['51']=node('SaveAudio',audio=['50',0],filename_prefix=video.replace('.mp4','_audio'))
     if causal:
         # One render for the whole interval, chunk by chunk against a key/value cache (no shot seams).
         if conditioning_mode!='guide' or representation=='mask' or upscale:raise ValueError('Causal rendering needs Guide Latents, no latent mask and no upscale')
@@ -172,6 +177,13 @@ def subject_looks_graph(looks):
         g[str(2*i+1)]=node('LoadImage',image=image)
         g[str(2*i+2)]=node('HengeSubjectLook',image=[str(2*i+1),0],subject_id=sid,x=float(x),y=float(y),sam_checkpoint='sam3.1_multiplex_fp16.safetensors')
     return g
+
+def plate_mask_graph(video,width,height,length,filename):
+    # People masks for the moving plate: native BiRefNet on every frame, saved as a grey video (white = people).
+    return {'1':node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length),
+            '2':node('LoadBackgroundRemovalModel',bg_removal_name='birefnet.safetensors'),
+            '3':node('RemoveBackground',bg_removal_model=['2',0],image=['1',0]),'4':node('MaskToImage',mask=['3',0]),
+            '5':node('HengeSaveVideo',images=['4',0],filename=filename,trim_frames=length,fps=24.)}
 
 def find_people_graph(image,kind='person'):
     # One frame: SAM 3.1 finds and numbers every person (or animal) for the studio assistant.

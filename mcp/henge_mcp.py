@@ -87,7 +87,7 @@ def find_people(video: str, time: float, kind: str = 'person') -> list:
 @mcp.tool()
 def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | None = None, start: float = 0, end: float | None = None,
                quality: str = '480p', project: str = 'Henge', subjects: list[dict] | None = None, auto_approve: bool = False,
-               keep_audio: bool = True, seconds_per_shot: float = 4.5, options: dict | None = None) -> dict:
+               keep_audio: bool = True, generate_audio: bool = False, background: str | None = None, seconds_per_shot: float = 4.5, options: dict | None = None) -> dict:
     """Start a generation from local files.
     mode: 'swap' | 'motion' | 'headswap' | 'sharpness'. video: path of the guide video. pictures: paths, in order Picture 1, 2...
     (swap/motion 1-11, headswap exactly 1 face, sharpness none). prompt: the request, naming pictures as @Picture1, @Picture2
@@ -95,6 +95,10 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
     quality: '480p' | '720p' | '1080p' ('1440p' | '2160p' only for sharpness).
     subjects (swap with several people): [{"picture_slots": [1], "x": 0.42, "y": 0.35, "time": 2.0, "label": "driver"}], x/y from find_people.
     auto_approve: render straight after planning instead of stopping at the plan for review.
+    background: optional path of a picture that replaces what is behind the people, moving with the guide's camera
+    (moving plate, built before planning; swap and motion).
+    generate_audio: keep the soundtrack H3 generates per shot (joined at the cuts) instead of the guide's sound; write spoken
+    lines in the prompt as <d>[language] text</d>. Needs the H3 audio VAE on the backend (profile audio).
     options: generation options, e.g. {"profile": "character", "conditioning_mode": "guide"|"tara", "turbo": "dmd8", "seed": 42, "upscale": "h3"|"nvidia"|"none"}.
     Returns the job; follow it with wait_for_job."""
     pictures = [Path(p).expanduser() for p in pictures or []]
@@ -111,7 +115,7 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
     direction = {'schema_version': 2, 'project': project, 'mode': mode, 'quality': quality,
                  'processing': {'mode': 'context_window' if duration > 15 else 'single', 'max_shots': 0, 'requested_seconds_per_shot': seconds_per_shot, 'frames_per_shot': frames,
                                 'timeline_fps': 24, 'frame_grid': '17n+5', 'trim_to_source_length': True, 'join': 'ordered', 'execution_status': 'comfy_backend', 'context_frames': 22, 'cut_mode': 'fit'},
-                 'audio_conditioning': {'enabled': False, 'source': None}, 'output_audio': {'keep_source': keep_audio},
+                 'audio_conditioning': {'enabled': False, 'source': None}, 'output_audio': {'keep_source': keep_audio and not generate_audio, 'generate': generate_audio},
                  'prompt': '' if fixed else native.strip(), 'editor_prompt': '' if fixed else prompt,
                  'subject_guidance': {'representation': 'original', 'bindings': [] if mode == 'sharpness' else bindings, 'status': 'selection_only', 'marker_colors_are_output_appearance': False},
                  'video': {'name': source.name, 'source_signature': f'{source.name}:{source.stat().st_size}', 'conditioning': 'guide_latents', 'source_duration': meta['duration'],
@@ -119,6 +123,7 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
                  'pictures': [{'slot': i + 1, 'token': f'<Picture {i + 1}>', 'name': p.name} for i, p in enumerate(pictures)], 'generation_status': 'not_submitted'}
     opts = {'auto_approve': auto_approve, 'enhance_prompt': True, **(options or {})}
     files = [('video', (source.name, source.open('rb'), 'video/mp4'))] + [(f'picture_{i + 1}', (p.name, p.open('rb'), 'application/octet-stream')) for i, p in enumerate(pictures)]
+    if background: files.append(('background', (Path(background).name, Path(background).expanduser().open('rb'), 'application/octet-stream')))
     try: job = api('POST', '/jobs', data={'direction': json.dumps(direction), 'options': json.dumps(opts)}, files=files, timeout=1800).json()
     finally:
         for _, (_, f, _) in files: f.close()

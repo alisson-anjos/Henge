@@ -48,7 +48,13 @@ def performance_only(observation):
 def reference_instruction(slot,request):return fill(STAGES['reference_instruction'],picture=slot,request=request)
 
 
-def composition_instruction(mode,request,slots,inventory,guide_analysis,metadata):
+GENERATED_AUDIO=('\nGENERATED AUDIO: the result keeps the soundtrack H3 generates, so this overrides the N/A audio rule. In '
+  'overall_soundscape, describe the diegetic sound that matches the visible action in playback order: footsteps, impacts, '
+  'cloth, objects, voices as effort sounds, and the ambience of the target scene. Write spoken lines only when the user request '
+  'gives them, as <d>[language] text</d> after the speaking subject. non_diegetic_music: N/A unless the user asks for music.')
+
+
+def composition_instruction(mode,request,slots,inventory,guide_analysis,metadata,generate_audio=False):
     trigger='motion_transfer' if mode=='motion' else 'body_swap'
     labels=', '.join(f'<Picture {slot}>' for slot in slots)
     return (f'Task mode: {trigger}. Begin exactly with {trigger}:\n'
@@ -56,10 +62,10 @@ def composition_instruction(mode,request,slots,inventory,guide_analysis,metadata
             'Use only these concrete Picture labels; do not output generic Picture N or invent another image. '
             '<Video 1> is the guide, not an extra Picture.\n'+H3_POLICY+'\n'+
             fill(STAGES['composition_context'],request=request,inventory=inventory,guide_analysis=guide_analysis,metadata=json.dumps(metadata,ensure_ascii=False))+
-            '\n'+STAGES['final_audit'])
+            (GENERATED_AUDIO if generate_audio else '')+'\n'+STAGES['final_audit'])
 
 
-def prompt_pipeline(ask,request,mode,pictures,guide,metadata,enhance=True):
+def prompt_pipeline(ask,request,mode,pictures,guide,metadata,enhance=True,generate_audio=False):
     """ask(instruction, image, stage, tokens) is local Comfy or external VLM.
 
     Pictures is an ordered list of (exact slot, isolated analysis image). The
@@ -75,5 +81,5 @@ def prompt_pipeline(ask,request,mode,pictures,guide,metadata,enhance=True):
     observation=ask(fill(STAGES['guide_instruction'],request=request),guide,'vlm_guide',1024)
     prompt=request
     if enhance:
-        prompt=ask(composition_instruction(mode,request,slots,inventory,performance_only(observation) if slots else observation,metadata),None,'vlm_prompt',3072)
+        prompt=ask(composition_instruction(mode,request,slots,inventory,performance_only(observation) if slots else observation,metadata,generate_audio),None,'vlm_prompt',3072)
     return dict(prompt=prompt,reference_inventory=inventory,reference_descriptions=descriptions,guide_analysis=observation,metadata=metadata,pipeline_version=STAGES['version'])
