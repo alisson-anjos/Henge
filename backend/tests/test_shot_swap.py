@@ -20,10 +20,43 @@ class ShotSwapTests(unittest.TestCase):
         self.assertNotIn('<Picture 4>',prompt)
         self.assertIn('red coat',prompt);self.assertIn('blue suit',prompt)
 
+    def test_identity_is_not_reassigned_when_third_subject_moves_forward(self):
+        bindings=[{'id':'third','color':'cyan','picture_slots':[3]},
+                  {'id':'first','color':'green','picture_slots':[1]}]
+        local,refs,prompt=shot_swap_plan(bindings,['first.png','second.png','third.png'],
+            [{'slot':1,'description':'gold cap and sunglasses'},
+             {'slot':3,'description':'navy cap and visible eyes'}],'2d',task='motion_transfer')
+        self.assertEqual(refs,['first.png','third.png'])
+        self.assertEqual([(s['id'],s['picture_slots']) for s in local],[('third',[2]),('first',[1])])
+        self.assertEqual(bindings[0]['picture_slots'],[3])
+        self.assertTrue(prompt.startswith('motion_transfer:'))
+        self.assertIn('<Subject 1> is the character shown in <Picture 2>: navy cap',prompt)
+        self.assertIn('regardless of screen position, distance from the camera',prompt)
+        self.assertIn('a back view stays a back view',prompt)
+        self.assertNotIn('front left',prompt)
+
+    def test_only_third_subject_visible_from_behind_keeps_its_identity(self):
+        for task in ('body_swap','motion_transfer'):
+            with self.subTest(task=task):
+                local,refs,prompt=shot_swap_plan([{'id':'third','color':'cyan','picture_slots':[3]}],
+                    ['first.png','second.png','third.png'],[{'slot':3,'description':'navy cap and visible eyes'}],
+                    '2d',task=task)
+                self.assertEqual(refs,['third.png'])
+                self.assertEqual(local[0]['id'],'third')
+                self.assertEqual(local[0]['picture_slots'],[1])
+                self.assertTrue(prompt.startswith(task+':'))
+                self.assertIn('a back view stays a back view',prompt)
+                self.assertIn('navy cap and visible eyes',prompt)
+
 if __name__=='__main__':unittest.main()
 
 class ShotGenerationTests(unittest.TestCase):
     def test_empty_tracking_skips_video_model_and_keeps_original(self):
+        for mode in ('swap','motion'):
+            with self.subTest(mode=mode):
+                self._empty_tracking(mode)
+
+    def _empty_tracking(self,mode):
         import tempfile
         from unittest.mock import patch
         import server
@@ -32,7 +65,7 @@ class ShotGenerationTests(unittest.TestCase):
             (inp/'henge'/'job').mkdir(parents=True)
             binding={'id':'a','label':'A','color':'green','picture_slots':[1],'anchors':[]}
             job={'id':'job','status':'running','options':{'prepare_references':False},
-                 'request':{'mode':'swap','quality':'480p','processing':{},'video':{'start_seconds':0,'end_seconds':1},'subject_guidance':{'bindings':[binding]}},
+                 'request':{'mode':mode,'quality':'480p','processing':{},'video':{'start_seconds':0,'end_seconds':1},'subject_guidance':{'bindings':[binding]}},
                  'assets':{'video':'source.mp4','pictures':{'1':'ref.png'}},'video_info':{'width':640,'height':480,'audio':False},
                  'plan':{'adapt_reference':False,'representation':'2d','source_kind':'human','prompt':'original'}}
             def save(record,**changes):record.update(changes)

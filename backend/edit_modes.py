@@ -165,7 +165,13 @@ def character_figure_instruction(count,description=''):
             'studio lighting.')
 
 
-def multi_swap_prompt(subjects,representation='2d',labels=False):
+TRACK_IDENTITY_PROMPT = ('Each identity follows its marked person, regardless of screen position, distance from the camera, '
+    'crossings or occlusion. Preserve the guide person\'s orientation: a back view stays a back view; transfer only '
+    'the reference features visible from that angle. The reference supplies appearance, while the guide supplies '
+    'pose and facing direction. Keep absent people out of the shot.')
+
+
+def multi_swap_prompt(subjects,representation='2d',labels=False,task='body_swap'):
     """Character Swap with two or more marked people (the BFS two-character recipe, in the v1.1 body_swap format).
     subjects: [(color, picture_slots, details)] in Subject order. Each subject is defined by its picture and the color
     that marks the person it replaces; the tints are named as editing markers to remove; nothing describes the guide
@@ -187,16 +193,16 @@ def multi_swap_prompt(subjects,representation='2d',labels=False):
     replace='Replace '+', '.join(swaps[:-1])+' and '+swaps[-1]
     markers=f'the translucent {colors} {mark}s and the <Picture> text tags written over them are' if labels else f'the translucent {colors} {mark}s are'
     remove='Remove the temporary color markers and text tags completely: no text, letters or labels anywhere in the video. ' if labels else 'Remove the temporary color markers completely. '
-    return (f"body_swap: subject_definitions: {' '.join(defs)} In the guide video, {markers} temporary editing markers, not character appearance. "
+    return (f"{task}: subject_definitions: {' '.join(defs)} In the guide video, {markers} temporary editing markers, not character appearance. "
             f"{replace}. The guide video provides the scene, framing and the complete performance: body pose, gestures, head motion, gaze, speech and facial expressions.  "
             f"summary: [video generation + references] {replace}, preserving the guide's camera, framing, timing and motion exactly.  "
             f"detailed_description: [Shot 1] {', '.join(names[:-1])} and {names[-1]} take the exact places of the marked people and move with the same timing, body pose, gestures, head motion, gaze, speech and facial expressions; "
             f"each one follows its own marked person through position changes, occlusion and cuts. {remove}"
             f"Keep the framing of the guide: do not widen the shot or add people who are not in the guide; no inset, no small full-body figure, no picture-in-picture. "
-            f"Preserve the background, lighting and camera. Prevent identity drift, clothing changes, texture crawling and flicker.")
+            f"{TRACK_IDENTITY_PROMPT} Preserve the background, lighting and camera. Prevent identity drift, clothing changes, texture crawling and flicker.")
 
 
-def shot_swap_plan(bindings, references, roles, representation, labels=False):
+def shot_swap_plan(bindings, references, roles, representation, labels=False,task='body_swap'):
     """Bind only tracked identities; renumber Pictures to match this shot's reference list."""
     slots=sorted({slot for subject in bindings for slot in subject['picture_slots']})
     mapping={slot:i for i,slot in enumerate(slots,1)}
@@ -207,6 +213,7 @@ def shot_swap_plan(bindings, references, roles, representation, labels=False):
     if len(subjects)==1:
         color,pictures,details=subjects[0]
         prompt=character_swap_prompt(details or 'the character shown in Picture 1')
-        prompt+=f' Replace only the {color}-marked person; keep every other person unchanged. Remove all temporary color markers and text tags. Do not add people, insets or duplicate characters.'
-    else:prompt=multi_swap_prompt(subjects,representation,labels)
+        prompt=prompt.replace('body_swap:',task+':',1)
+        prompt+=f' Replace only the {color}-marked person; keep every other person unchanged. Remove all temporary color markers and text tags. {TRACK_IDENTITY_PROMPT} Do not add people, insets or duplicate characters.'
+    else:prompt=multi_swap_prompt(subjects,representation,labels,task)
     return local,[references[slot-1] for slot in slots],prompt

@@ -134,3 +134,18 @@ TypeScript and production build passed. Focused validation checks passed.
 The wider 55-test contracts/conditioning run had 52 passes and three failures concerning animal adaptation,
 a stale history-guide expectation, and reference-preparation mocks. The same three failures were reproduced
 against HEAD before the colour recommendation changes in an isolated source copy.
+
+## Latest local build: seed control and per-shot identities
+
+- Multi-character prompt notice is visible near subject marks and generation settings.
+- Seed moved out of Advanced, with an explicit randomize button; the sampled base seed remains in job options
+  and is displayed with the selected job. Randomizing changes the visible seed; it does not start generation.
+- Automatic per-shot identity filtering now covers marked Motion Transfer/TARA runs as well as Character Swap.
+- Prompts bind identity to the marked person independently of position/depth, preserve back-facing poses,
+  and include only tracked identities with locally renumbered references.
+- Per-shot task trigger follows the selected profile (`motion_transfer` or `body_swap`).
+- These automatic per-shot prompts require prompt enhancement enabled; manual frozen prompts remain unchanged.
+- Five shot-swap tests passed, including a third subject moving forward and being the only visible subject.
+  TypeScript, Python compilation, production build and diff whitespace checks passed.
+- Local UI and bridge restarted with these changes. No new generation started after the user's request
+  to leave the current version for manual testing.

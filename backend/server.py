@@ -930,7 +930,8 @@ def generate(job):
         shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
                         **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
         graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**({**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.),'labels':bool(r.get('subject_guidance',{}).get('mark_labels'))} if plan['representation']=='2d' else options.get('mask') or {}),**source_blur_settings(options)},lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')),regional_attention=options.get('regional_attention'));result_node,guide_node='17','18'
-        if r['mode']=='swap' and bindings and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True):
+        per_shot_identities=r['mode'] in ('swap','motion') and bindings and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True)
+        if per_shot_identities:
             # Run the exact guide node first: absence must be known before H3 sees any references.
             preflight={'7':graph['7'],'8':graph['8'],'18':graph['18']}
             save(job,message=f'Tracking subjects in shot {i+1}/{len(shots)}')
@@ -956,7 +957,8 @@ def generate(job):
                 shot_plans.append({'shot':i+1,'subjects':[],'prompt':'','action':'keep_original'})
                 save(job,shot_plans=shot_plans,shot_warnings=shot_warnings,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
                 continue
-            local_bindings,local_refs,local_prompt=shot_swap_plan(active,refs,plan.get('picture_roles',[]),plan['representation'],bool(r.get('subject_guidance',{}).get('mark_labels')))
+            task='motion_transfer' if options.get('profile','character' if r['mode']=='swap' else 'motion').startswith('motion') else 'body_swap'
+            local_bindings,local_refs,local_prompt=shot_swap_plan(active,refs,plan.get('picture_roles',[]),plan['representation'],bool(r.get('subject_guidance',{}).get('mark_labels')),task=task)
             graph['7']['inputs']['pictures']=json.dumps(local_refs)
             graph['8']['inputs']['bindings']=json.dumps(local_bindings)
             graph['9']['inputs']['prompt']=local_prompt
@@ -964,7 +966,7 @@ def generate(job):
             shot_plans.append({'shot':i+1,'subjects':[subject['id'] for subject in active],'prompt':local_prompt,'action':'generate'})
             save(job,shot_plans=shot_plans,shot_warnings=shot_warnings)
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
-        if bindings and plan['representation']!='original' and not (r['mode']=='swap' and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True)):
+        if bindings and plan['representation']!='original' and not per_shot_identities:
             nxt=shots[i+1] if i+1<len(shots) else None
             shot_warnings+=[f'Shot {i+1}: {w}' for w in follow_update(follow,outputs.get('8',{}).get('henge_tracks'),nxt['start']-shot['start'] if nxt else None)]
             save(job,shot_warnings=shot_warnings)
