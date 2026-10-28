@@ -35,15 +35,19 @@ class HengeLoadShot:
         return read_frames(input_path(video),width,height,length),refs
 
 
-def scene_cuts(images,threshold=.18):
-    """Frame indexes where a camera cut starts (a big jump between consecutive small grey thumbnails)."""
+def scene_cuts(images,threshold=.18,spike=.1,window=6):
+    """Frame indexes where a camera cut starts (a big jump between consecutive small grey thumbnails). A cut between
+    two similar-looking shots can stay under the absolute threshold (Top Gun: 0.16 against 0.18), so a single-frame
+    spike above `spike` that is far above its neighbours also counts; motion raises the neighbours too."""
     small=torch.nn.functional.interpolate(images.mean(-1,keepdim=True).permute(0,3,1,2),size=(18,32),mode='area')[:,0]
     diff=(small[1:]-small[:-1]).abs().mean((1,2))
     if len(diff)==0:return []
     floor=max(threshold,float(diff.median())*4)
-    cuts,last=[],0
-    for i,d in enumerate(diff.tolist(),1):
-        if d>floor and i-last>=6:cuts.append(i);last=i
+    values=diff.tolist();cuts,last=[],0
+    for i,d in enumerate(values,1):
+        around=values[max(0,i-1-window):i-1]+values[i:i+window]
+        isolated=bool(around) and d>spike and d>8*max(sorted(around)[len(around)//2],.004)
+        if (d>floor or isolated) and i-last>=6:cuts.append(i);last=i
     return cuts
 
 def track_scenes(images,sam,cond,threshold,per_scene=6,total=16,min_frames=3):
@@ -69,6 +73,33 @@ def track_scenes(images,sam,cond,threshold,per_scene=6,total=16,min_frames=3):
     for i,(_,a,m) in enumerate(kept):masks[a:a+len(m),i]=m
     return masks
 
+_BFS_BLUR=[]
+
+def bfs_blur():
+    """BFS source blur (ComfyUI-BFSNodes, installed next to Henge), imported as a namespace package so the BFS node
+    registration does not run twice. None when the BFS nodes are not installed."""
+    if _BFS_BLUR:return _BFS_BLUR[0]
+    import glob,importlib,sys,types
+    found=None
+    for root in folder_paths.get_folder_paths('custom_nodes'):
+        hit=sorted(glob.glob(os.path.join(root,'*','bfs_source_blur.py')))
+        if hit:found=os.path.dirname(hit[0]);break
+    if found:
+        package=types.ModuleType('henge_bfs');package.__path__=[found];sys.modules.setdefault('henge_bfs',package)
+        _BFS_BLUR.append(importlib.import_module('henge_bfs.bfs_source_blur'))
+    else:_BFS_BLUR.append(None)
+    return _BFS_BLUR[0]
+
+def blur_guide(images,spec,area=None):
+    """The guide frames with the source person blurred (or colour-inverted) as the BFS planner does: the model reads
+    the pose and motion but has no face to copy. 'masked area' blurs only the marked people (area)."""
+    mode=spec.get('source_blur','off')
+    if not mode or mode=='off':return images
+    blur=bfs_blur()
+    if blur is None:raise ValueError('Source blur needs the BFS nodes (ComfyUI-BFSNodes) installed with Henge')
+    out=blur.blur_source(images,mode,1.,'Henge source blur',spec.get('source_blur_segmenter','SAM 3.1'),spec.get('source_blur_effect','blur'),area.float() if area is not None else None)
+    return out.to(images.dtype)
+
 class HengeGuide:
     @classmethod
     def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'representation':(['original','2d','3d','mask'],),'bindings':('STRING',{'default':'[]'}),'source_kind':(['human','animal','other'],),'segment_start':('FLOAT',{'default':0}),'sam_checkpoint':('STRING',{'default':'sam3.1_multiplex_fp16.safetensors'}),'body_model':('STRING',{'default':'sam_3d_body_dinov3_bf16.safetensors'}),'preserve_objects':('STRING',{'default':'[]'})},'optional':{'mask_settings':('STRING',{'default':'{}'})}}
@@ -76,8 +107,10 @@ class HengeGuide:
     def prepare(self,images,representation,bindings,source_kind,segment_start,sam_checkpoint,body_model,preserve_objects="[]",mask_settings='{}'):
         spec={**DEFAULT_MASK,**json.loads(mask_settings or '{}')}
         empty=torch.zeros(images.shape[:3])
-        if representation=='original':return (images,empty,{})
         subjects=json.loads(bindings)
+        if representation=='original':
+            # Only 'masked area' needs the people tracked; the other blur regions find every person themselves.
+            if not str(spec.get('source_blur','off')).startswith('masked area') or not subjects:return (blur_guide(images,spec),empty,{})
         if not subjects:raise ValueError('Color guides need a selected subject and its reference binding')
         if representation=='3d' and source_kind!='human':raise ValueError('SAM 3D Body supports human sources. Use a 2D color guide for animals.')
         from comfy_extras.nodes_sam3 import SAM3_VideoTrack
@@ -90,7 +123,7 @@ class HengeGuide:
         if masks is None:
             # Nobody in this shot (a cutaway, an empty room): it goes through unmarked instead of failing the job.
             del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
-            return {'ui':ui_report({'henge_tracks':[json.dumps({'warnings':['Nobody found in this shot; it was left unmarked'],'subjects':[]})]}),'result':(images,empty,{})}
+            return {'ui':ui_report({'henge_tracks':[json.dumps({'warnings':['Nobody found in this shot; it was left unmarked'],'subjects':[]})]}),'result':(images if representation=='original' else blur_guide(images,spec),empty,{})}
         n,h,w=images.shape[:3]
         # Marks, continuity from the previous shot and recognition by look (follow.py): never guessed by position.
         picked,warnings=follow.choose(subjects,masks,images,segment_start)
@@ -111,6 +144,9 @@ class HengeGuide:
                 object_mask|=om.bool()
         selected=torch.zeros((n,h,w),dtype=torch.bool)
         for idx,_,_ in chosen:selected|=masks[:,idx]
+        if representation=='original':
+            del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
+            return {**tracking,'result':(blur_guide(images,spec,selected),empty,attention_regions)}
         if representation=='mask':
             # Latent mask: keep the source pixels; only the region of the selected subjects is regenerated.
             # Like the BFS Shot Planner, the region is one box around the subjects' whole travel in this segment
@@ -119,14 +155,17 @@ class HengeGuide:
             # Held props (guitar, microphone...) stay as in the source instead of being regenerated with the person.
             region=mask_region(shape_mask(selected,spec),spec)
             if bool(object_mask.any()):region=region*(~object_mask).float()
-            return {**tracking,'result':(images,region,attention_regions)}
-        result=images.clone();del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
+            return {**tracking,'result':(blur_guide(images,spec,selected),region,attention_regions)}
+        del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
+        # The blur goes under the marks: with translucent 2D marks the face would otherwise show through the tint.
+        seen=blur_guide(images,spec,selected) if representation=='2d' else images
+        result=seen.clone()
         # 2D marks can be translucent (mark_opacity < 1, the BFS Colored Mark look): the guide person stays visible
         # under the tint, so the face and expression come through. 3D always paints the body solid.
         alpha=float(spec.get('mark_opacity',1.)) if representation=='2d' else 1.
         for idx,s,rgb in chosen:
             m=masks[:,idx];color=torch.tensor(rgb,dtype=result.dtype)/255
-            result[m]=color if alpha>=1 else images[m]*(1-alpha)+color*alpha
+            result[m]=color if alpha>=1 else seen[m]*(1-alpha)+color*alpha
         if representation=='2d':
             result[object_mask]=images[object_mask]
             if spec.get('labels'):result=draw_labels(result,chosen,masks)
@@ -213,24 +252,66 @@ class HengeH3Conditioning:
 
 
 # Defaults of the BFS Shot Planner "Mask" card (feather/paste are paste-back settings, not used by a latent mask).
+def label_spot(mask,step=4):
+    """Where a label fits inside a mask: its most interior point (farthest from the edge, usually the chest) and the
+    distance to the edge there, in pixels. None when the mask is empty."""
+    m=mask[::step,::step]
+    if not m.any():return None
+    try:
+        from scipy.ndimage import distance_transform_edt
+        # The frame border is not the person's edge (a close-up is cut by it): pad with the mask itself there.
+        dist=distance_transform_edt(np.pad(m,1,mode='edge'))[1:-1,1:-1]
+    except ImportError:
+        ys,xs=np.nonzero(m);return float(xs.mean()*step),float(ys.mean()*step),float(min(np.ptp(xs),np.ptp(ys))*step/4)
+    # Prefer the chest: not the head (the label would cover the face, visible under translucent marks) and not the
+    # bottom (a seated person's widest part is often the lap or the table edge).
+    rows=np.arange(m.shape[0])[:,None];ys=np.nonzero(m)[0];top,bottom=ys.min(),ys.max()
+    rel=(rows-top)/max(1,bottom-top)
+    weight=1-.6*np.clip((.3-rel)/.3,0,1)-(0 if m[-1].any() else .35*np.clip((rel-.65)/.35,0,1))
+    y,x=np.unravel_index(int(np.argmax(dist*weight)),dist.shape)
+    return float(x*step),float(y*step),float(dist[y,x]*step)
+
 def draw_labels(result,chosen,masks):
-    """Experimental (mask_settings labels=true): write each subject's picture tag (<Picture 1>) over its marked person
-    in every frame, centred above the top of the mask, so the binding is readable in the guide itself."""
+    """Experimental (mask_settings labels=true): write each subject's picture tag (<Picture 1>) inside its marked person
+    in every frame, at the most interior point of the mask, sized to fit, white with a dark outline, smoothed over time
+    so it does not jitter, so the binding is readable in the guide itself."""
     from PIL import ImageDraw,ImageFont
-    n,h,w=result.shape[:3];size=max(14,round(h/22))
-    try:font=ImageFont.truetype('DejaVuSans-Bold.ttf',size)
-    except OSError:font=ImageFont.load_default(size=size)
+    n,h,w=result.shape[:3]
+    fonts={}
+    def font(size):
+        if size not in fonts:
+            try:fonts[size]=ImageFont.truetype('DejaVuSans-Bold.ttf',size)
+            except OSError:fonts[size]=ImageFont.load_default(size=size)
+        return fonts[size]
     frames=(result.clamp(0,1)*255).byte().cpu().numpy()
-    for idx,s,rgb in chosen:
+    places=[[None]*n for _ in chosen]
+    for k,(idx,s,rgb) in enumerate(chosen):
         text='<Picture '+', '.join(str(x) for x in s.get('picture_slots') or [])+'>'
+        probe=font(100);box=probe.getbbox(text);ratio=(box[2]-box[0])/100 # text width per pixel of font size
+        last=None;gap=0
         for f in range(n):
-            ys,xs=np.nonzero(masks[f,idx].cpu().numpy())
-            if not len(xs):continue
-            im=Image.fromarray(frames[f]);d=ImageDraw.Draw(im)
-            box=d.textbbox((0,0),text,font=font);tw,th=box[2]-box[0],box[3]-box[1]
-            x=int(np.clip(xs.mean()-tw/2,2,w-tw-2));y=int(np.clip(ys.min()+th*.6,2,h-th-2))
-            d.rectangle((x-4,y-3,x+tw+4,y+th+5),fill=(0,0,0));d.text((x,y-box[1]),text,font=font,fill=rgb)
-            frames[f]=np.asarray(im)
+            spot=label_spot(masks[f,idx].cpu().numpy())
+            # Fits inside: the text box within the interior circle (width about 1.8x the distance to the edge), but
+            # never below a readable size; a narrow mask lets it overflow a little. A sliver gets no label.
+            size=None if spot is None else int(max(h/26,min(h/12,1.8*spot[2]/ratio)))
+            if spot is None or spot[2]<h/60:
+                gap+=1
+                if gap>2:last=None
+                continue
+            x,y=spot[0],spot[1]
+            # Smooth over time; restart after a cut or a jump (another track, the person came back elsewhere).
+            if last is not None and abs(x-last[0])<.15*w and abs(y-last[1])<.15*h:
+                x,y,size=.75*last[0]+.25*x,.75*last[1]+.25*y,int(round(.75*last[2]+.25*size))
+            last=(x,y,size);gap=0;places[k][f]=(text,x,y,size)
+    for f in range(n):
+        todo=[p[f] for p in places if p[f]]
+        if not todo:continue
+        im=Image.fromarray(frames[f]);d=ImageDraw.Draw(im)
+        for text,x,y,size in todo:
+            ft=font(size);box=d.textbbox((0,0),text,font=ft,stroke_width=max(1,size//8));tw,th=box[2]-box[0],box[3]-box[1]
+            px=int(np.clip(x-tw/2,2,w-tw-2));py=int(np.clip(y-th/2,2,h-th-2))
+            d.text((px-box[0],py-box[1]),text,font=ft,fill=(255,255,255),stroke_width=max(1,size//8),stroke_fill=(0,0,0))
+        frames[f]=np.asarray(im)
     return torch.from_numpy(frames).to(result.dtype)/255
 
 DEFAULT_MASK={'threshold':.5,'shape':'box','padding':.15,'expand':16,'fill_holes':True,'temporal_expand':2,'blockify':0,'invert':False,'strength':1.}

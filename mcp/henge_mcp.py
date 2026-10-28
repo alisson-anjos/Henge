@@ -85,6 +85,62 @@ def find_people(video: str, time: float, kind: str = 'person') -> list:
 
 
 @mcp.tool()
+def pointing_status() -> dict:
+    """Whether the optional local MolmoPoint model/runner is configured on the Henge bridge."""
+    return api('GET','/assistant/pointing').json()
+
+
+@mcp.tool()
+def point_video(video: str, query: str, start: float, end: float) -> list:
+    """Use local MolmoPoint to propose points for described targets in one video shot, at most 30 seconds.
+    Returns normalized x/y, absolute times and previews. This does not segment, bind Pictures or generate.
+    Inspect results, group the right person's points and pass them as subjects[].anchors to create_job.
+    Object IDs are scoped to this request; repeat and inspect after each camera cut.
+    Requires HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL on the Henge bridge machine.
+    """
+    source=Path(video).expanduser()
+    with source.open('rb') as stream:
+        result=api('POST','/assistant/point-video',files={'video':(source.name,stream,'video/mp4')},
+            data={'query':query,'start':str(start),'end':str(end)},timeout=1000).json()
+    previews=result.pop('previews',[])
+    return [json.dumps(result), *[Image(data=base64.b64decode(p.split(',',1)[1]),format='jpeg') for p in previews]]
+
+
+@mcp.tool()
+def ask_video(video: str, question: str, start: float = 0, end: float | None = None) -> str:
+    """Ask local Molmo2 about a video: it watches the whole interval with timestamps. Use it for captions, timelines,
+    how many people and where, who does or says what and when, camera moves and cuts. Timestamps in the answer are
+    seconds from start. Requires HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL on the Henge bridge machine.
+    """
+    source = Path(video).expanduser()
+    end = probe(source)['duration'] if end is None else end
+    with source.open('rb') as stream:
+        result = api('POST', '/assistant/ask-video', files={'video': (source.name, stream, 'video/mp4')},
+                     data={'question': question, 'start': str(start), 'end': str(end)}, timeout=1000).json()
+    return result.get('answer', json.dumps(result))
+
+
+@mcp.tool()
+def match_people(video: str, photos: list[str], start: float = 0, end: float | None = None) -> list:
+    """Find the people shown in photos (one photo per person, at most 6) in every shot of a video, with local Molmo2.
+    Camera cuts are detected; a person gets one anchor per shot where they are found in two of its three keyframes
+    and a reverse check agrees. Returns people[i].anchors ready for create_job subjects (add picture_slots), shots
+    and one preview per shot. Inspect the previews. Does not segment or generate; SAM tracks from the anchors.
+    Requires HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL on the Henge bridge machine.
+    """
+    source = Path(video).expanduser()
+    end = probe(source)['duration'] if end is None else end
+    streams = [source.open('rb'), *[Path(p).expanduser().open('rb') for p in photos]]
+    try:
+        files = [('video', (source.name, streams[0], 'video/mp4'))] + [('people', (Path(p).name, s, 'application/octet-stream')) for p, s in zip(photos, streams[1:])]
+        result = api('POST', '/assistant/match-people', files=files, data={'start': str(start), 'end': str(end)}, timeout=1800).json()
+    finally:
+        for s in streams: s.close()
+    previews = result.pop('previews', [])
+    return [json.dumps(result), *[Image(data=base64.b64decode(p.split(',', 1)[1]), format='jpeg') for p in previews]]
+
+
+@mcp.tool()
 def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | None = None, start: float = 0, end: float | None = None,
                quality: str = '480p', project: str = 'Henge', subjects: list[dict] | None = None, auto_approve: bool = False,
                keep_audio: bool = True, generate_audio: bool = False, background: str | None = None, seconds_per_shot: float = 4.5, options: dict | None = None) -> dict:
@@ -94,6 +150,7 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
     (headswap and sharpness ignore it). start/end: the interval in seconds (default the whole video).
     quality: '480p' | '720p' | '1080p' ('1440p' | '2160p' only for sharpness).
     subjects (swap with several people): [{"picture_slots": [1], "x": 0.42, "y": 0.35, "time": 2.0, "label": "driver"}], x/y from find_people.
+    Each subject can instead supply anchors: [{"x": 0.42, "y": 0.35, "time_seconds": 2.0}, ...] for multiple marks/cuts.
     auto_approve: render straight after planning instead of stopping at the plan for review.
     background: optional path of a picture that replaces what is behind the people, moving with the guide's camera
     (moving plate, built before planning; swap and motion).
@@ -106,7 +163,7 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
     end = meta['duration'] if end is None else min(end, meta['duration'])
     duration = end - start; frames = max(22, int((round(seconds_per_shot * 24) - 5) // 17) * 17 + 5)
     bindings = [{'id': str(uuid.uuid4()), 'label': s.get('label') or f'Subject {i + 1}', 'color': COLORS[i % len(COLORS)], 'picture_slots': s.get('picture_slots') or [i + 1],
-                 'anchors': [{'x': s['x'], 'y': s['y'], 'time_seconds': s.get('time', start), 'frame_width': meta['width'], 'frame_height': meta['height']}]} for i, s in enumerate(subjects or [])]
+                 'anchors': [{'x': a['x'], 'y': a['y'], 'time_seconds': a.get('time_seconds', a.get('time', start)), 'frame_width': meta['width'], 'frame_height': meta['height']} for a in (s.get('anchors') or [s])]} for i, s in enumerate(subjects or [])]
     native = re.sub(r'@Picture\s*(\d+)', r'<Picture \1>', prompt)
     for i, b in enumerate(bindings):
         refs = ', '.join(f'<Picture {n}>' for n in b['picture_slots'])

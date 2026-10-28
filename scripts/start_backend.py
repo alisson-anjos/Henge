@@ -7,7 +7,7 @@ for file in [ROOT/'.env',ROOT/'.env.local']:
   for line in file.read_text().splitlines():
    if line.strip() and not line.lstrip().startswith('#') and '=' in line:
     key,value=line.split('=',1)
-    if key.strip() in ['VLM_CHAT_URL','VLM_MODEL','VLM_API_KEY','HENGE_VLM_CLIP','COMFY_BASE_URL','COMFY_ROOT','HENGE_DATA_DIR']:os.environ.setdefault(key.strip(),value.strip().strip('"').strip("'"))
+    if key.strip() in ['VLM_CHAT_URL','VLM_MODEL','VLM_API_KEY','HENGE_VLM_CLIP','COMFY_BASE_URL','COMFY_ROOT','HENGE_DATA_DIR','HENGE_MOLMO_PYTHON','HENGE_MOLMO_MODEL']:os.environ.setdefault(key.strip(),value.strip().strip('"').strip("'"))
 PYTHON=os.environ.get('HENGE_PYTHON','/data/comfyui/.venv/bin/python');COMFY=os.environ.get('COMFY_ROOT','/data/henge-comfy-backend');DEPS=ROOT/'.runtime/comfy-deps'
 if not DEPS.exists():
  DEPS.mkdir(parents=True)
