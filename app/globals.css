@@ -918,4 +918,6 @@ img{display:block;max-width:100%}
 .first-frame-paint{flex:none;min-width:0;max-height:var(--ff-h)}
 .first-frame-modal .first-frame-controls{min-width:0}
 .molmo-settings .select-button{width:100%}
-.generation-options .regenerate-scene{grid-column:1/-1}.regenerate-scene textarea{width:100%;min-width:0;padding:10px;border-radius:8px;background:var(--n-17191b);color:var(--n-eeeeee);border:1px solid var(--n-36383b);font:inherit;resize:vertical}
+.regenerate-scene{grid-column:1/-1}.regenerate-scene textarea{width:100%;min-width:0;padding:10px;border-radius:8px;background:var(--n-17191b);color:var(--n-eeeeee);border:1px solid var(--n-36383b);font:inherit;resize:vertical}
+
+#sharpness-controls{min-width:0}#sharpness-controls .mask-settings{min-width:0}#sharpness-controls .mask-settings>p{grid-column:1/-1}
