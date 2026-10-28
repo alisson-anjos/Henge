@@ -127,16 +127,28 @@ def match(model, processor, args):
     return dict(matches=matches)
 
 
+def run(model, processor, args):
+    import torch
+    started = time.monotonic(); torch.cuda.reset_peak_memory_stats()
+    payload = point(model, processor, args) if args.mode == 'point' else match(model, processor, args) if args.mode == 'match' else ask(model, processor, args)
+    payload.update(model=Path(args.model).name, seconds=time.monotonic()-started, peak_vram_gb=torch.cuda.max_memory_allocated()/1024**3)
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.output).write_text(json.dumps(payload, ensure_ascii=False, indent=2)+'\n')
+    return payload
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', required=True); parser.add_argument('--output', required=True)
+    parser.add_argument('--model', required=True); parser.add_argument('--output')
+    parser.add_argument('--serve', action='store_true', help='Keep the model loaded and answer JSON requests on stdin, one per line')
+    parser.add_argument('--max-crops', type=int, default=8, help='Image crops per picture (fewer is faster)')
     parser.add_argument('--mode', choices=['point', 'match', 'ask'], default='point')
     parser.add_argument('--fps', type=float, default=2.)
     parser.add_argument('--video'); parser.add_argument('--query')
     parser.add_argument('--start', type=float, default=0.); parser.add_argument('--end', type=float)
     parser.add_argument('--keys'); parser.add_argument('--refs', nargs='*', default=[])
     args = parser.parse_args()
-    if args.mode == 'point': validate_request(args.query, args.start, args.end)
+    if args.mode == 'point' and not args.serve: validate_request(args.query, args.start, args.end)
     import torch
     from transformers import AutoProcessor, AutoModelForImageTextToText
     started = time.monotonic()
@@ -144,10 +156,23 @@ def main():
     model = AutoModelForImageTextToText.from_pretrained(args.model, trust_remote_code=True, local_files_only=True,
         dtype=torch.bfloat16, device_map='cuda')
     processor = AutoProcessor.from_pretrained(args.model, trust_remote_code=True, local_files_only=True)
-    payload = point(model, processor, args) if args.mode == 'point' else match(model, processor, args) if args.mode == 'match' else ask(model, processor, args)
-    payload.update(model=Path(args.model).name, seconds=time.monotonic()-started, peak_vram_gb=torch.cuda.max_memory_allocated()/1024**3)
-    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.output).write_text(json.dumps(payload, ensure_ascii=False, indent=2)+'\n')
+    processor.image_processor.max_crops = max(1, args.max_crops)
+    print(f'Molmo2 loaded in {time.monotonic()-started:.0f}s', flush=True)
+    if args.serve:
+        # One JSON request per line: {"mode", "output", ...the CLI arguments}; one JSON reply per line on stdout.
+        import sys
+        for line in sys.stdin:
+            try:
+                request = json.loads(line)
+                req = argparse.Namespace(**{**vars(parser.parse_args(['--model', args.model])), **request, 'model': args.model})
+                if req.mode == 'point': validate_request(req.query, req.start, req.end)
+                run(model, processor, req)
+                reply = {'ok': True}
+            except Exception as exc:
+                import traceback; reply = {'ok': False, 'error': f'{exc}\n{traceback.format_exc()[-1500:]}'}
+            print('HENGE-REPLY ' + json.dumps(reply), flush=True)
+        return
+    payload = run(model, processor, args)
     print(json.dumps({k: v for k, v in payload.items() if k not in ('generated_text', 'matches', 'answer')}), flush=True)
 
 

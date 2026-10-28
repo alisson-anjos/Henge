@@ -380,6 +380,8 @@ def posix_inputs(graph):
 def execute_graph(job,graph,stage):
     known_loras();graph=posix_inputs(localize_loras(graph))
     if REMOTE:return execute_serverless(job,graph,stage)
+    # A ComfyUI on this machine needs the GPU: a warm Molmo2 leaves it first.
+    if urlsplit(URL).hostname in ('127.0.0.1','localhost','::1'):molmo_pointing.release()
     import aiohttp
     async def execute():
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
@@ -1805,6 +1807,40 @@ def free_local_comfy():
 
 molmo_pointing.BEFORE_RUN=free_local_comfy
 
+# Molmo2 settings (settings center): which checkpoint, how long it stays loaded, image detail.
+MOLMO_SETTINGS=ROOT/'molmo.json'
+MOLMO_DEFAULTS={'enabled':True,'model_path':'','keep_warm_minutes':0,'image_quality':'accurate'}
+
+def molmo_settings():
+    try:stored=json.loads(MOLMO_SETTINGS.read_text()) if MOLMO_SETTINGS.is_file() else {}
+    except (OSError,ValueError):stored={}
+    return {**MOLMO_DEFAULTS,**{k:v for k,v in stored.items() if k in MOLMO_DEFAULTS}}
+
+molmo_pointing.SETTINGS=molmo_settings
+
+@app.get('/molmo/settings')
+def get_molmo_settings():
+    return {**molmo_settings(),'default_model_path':os.environ.get('HENGE_MOLMO_MODEL',''),'status':pointing_status(),'warm':molmo_pointing._WARM['process'] is not None}
+
+@app.post('/molmo/settings')
+async def set_molmo_settings(request:Request):
+    body=await request.json();cfg=molmo_settings()
+    if 'model_path' in body:
+        path=str(body.get('model_path') or '').strip()
+        if path and not (Path(path).expanduser()/'config.json').is_file():raise HTTPException(400,'No Molmo2 checkpoint at this path (config.json not found)')
+        cfg['model_path']=str(Path(path).expanduser()) if path else ''
+    if 'keep_warm_minutes' in body:
+        try:cfg['keep_warm_minutes']=clamp_float(float(body['keep_warm_minutes']),0,60,'minutes')
+        except (TypeError,ValueError):raise HTTPException(400,'keep_warm_minutes must be between 0 and 60')
+    if isinstance(body.get('enabled'),bool):cfg['enabled']=body['enabled']
+    if 'image_quality' in body:
+        if body['image_quality'] not in ('accurate','fast'):raise HTTPException(400,'image_quality must be accurate or fast')
+        cfg['image_quality']=body['image_quality']
+    tmp=MOLMO_SETTINGS.with_suffix('.tmp');tmp.write_text(json.dumps(cfg,indent=2));tmp.replace(MOLMO_SETTINGS)
+    # A different checkpoint, detail or 0 minutes takes effect at once: the warm one is unloaded.
+    await asyncio.to_thread(molmo_pointing.release)
+    return get_molmo_settings()
+
 def assistant_planner():
     """The assistant's config when the user chose it to write the prompts and analyses (and it has a key or a
     local server), else None: the Qwen planner in ComfyUI (or VLM_CHAT_URL) does it."""
@@ -1830,9 +1866,9 @@ async def assistant_models(request:Request):
 
 @app.get('/assistant/pointing')
 def pointing_status():
-    model=Path(os.environ.get('HENGE_MOLMO_MODEL',''))
+    model=Path(molmo_settings().get('model_path') or os.environ.get('HENGE_MOLMO_MODEL',''))
     python=Path(os.environ.get('HENGE_MOLMO_PYTHON',''))
-    return {'configured':python.is_file() and (model/'config.json').is_file(),
+    return {'configured':molmo_settings().get('enabled',True) and python.is_file() and (model/'config.json').is_file(),'enabled':molmo_settings().get('enabled',True),
             'model':model.name if (model/'config.json').is_file() else None, 'max_shot_seconds':30,'match_people':{'max_people':molmo_pointing.MAX_PEOPLE,'max_seconds':molmo_pointing.MAX_MATCH_SECONDS}}
 
 @app.post('/assistant/point-video')

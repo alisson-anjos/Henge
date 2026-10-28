@@ -12,7 +12,7 @@ const RUNPOD_SIGNUP = 'https://get.runpod.io/z4bz8o1va7a7';
 const RUNPOD_POD = 'https://console.runpod.io/deploy?template=mnxax277c8';
 // Serverless templates can't be public on RunPod: the guide creates the worker template in the user's account.
 const RUNPOD_SERVERLESS = 'https://github.com/alisson-anjos/Henge/blob/main/docs/SERVERLESS.md';
-type Tab = 'connection' | 'assistant' | 'access';
+type Tab = 'connection' | 'assistant' | 'molmo' | 'access';
 type Provider = 'comfyui' | 'comfy_sdk' | 'runpod';
 type Connection = {provider: Provider; comfy_url: string; runpod_endpoint_id: string; sdk_target: 'proxy' | 'url' | 'cloud'; sdk_url: string;
   has_runpod_api_key: boolean; runpod_api_key_hint: string; has_sdk_api_key: boolean; sdk_api_key_hint: string; locked: string[]; active: Provider};
@@ -31,7 +31,7 @@ export default function SettingsCenter({lang, wizard, initialTab = 'connection',
   const finish = () => {try {localStorage.setItem(SETUP_KEY, '1');} catch {/* private mode */} onClose();};
   useEffect(() => {const esc = (e: KeyboardEvent) => {if (e.key === 'Escape') wizard ? finish() : onClose();}; addEventListener('keydown', esc); return () => removeEventListener('keydown', esc);});
 
-  const tabs: [Tab, string][] = [['connection', tr('Connection', 'Conexão', 'Conexión')], ['assistant', tr('Assistant', 'Assistente', 'Asistente')], ['access', tr('Login', 'Login', 'Acceso')]];
+  const tabs: [Tab, string][] = [['connection', tr('Connection', 'Conexão', 'Conexión')], ['assistant', tr('Assistant', 'Assistente', 'Asistente')], ['molmo', 'Molmo2'], ['access', tr('Login', 'Login', 'Acceso')]];
   const body: Record<string, ReactNode> = {
     welcome: <div className="setup-welcome">
       <span className="brandmark" aria-hidden="true">✳</span>
@@ -44,6 +44,7 @@ export default function SettingsCenter({lang, wizard, initialTab = 'connection',
       <p>{tr('A chat that operates the studio for you: it marks people, picks options and starts generations. It uses Claude, OpenAI or a local model (LM Studio, Ollama). The key stays on the bridge.', 'Um chat que opera o estúdio por você: marca pessoas, escolhe opções e inicia gerações. Usa Claude, OpenAI ou um modelo local (LM Studio, Ollama). A chave fica no bridge.', 'Un chat que maneja el estudio por ti: marca personas, elige opciones e inicia generaciones. Usa Claude, OpenAI o un modelo local (LM Studio, Ollama). La clave queda en el bridge.')}</p>
       <button type="button" className="primary" onClick={() => {dispatchEvent(new CustomEvent('henge:assistant-settings')); wizard ? setStep(s => s + 1) : onClose();}}>{tr('Open assistant settings', 'Abrir ajustes do assistente', 'Abrir ajustes del asistente')}</button>
     </div>,
+    molmo: <MolmoPanel lang={lang}/>,
     access: <AccessPanel lang={lang}/>,
     done: <div className="setup-welcome">
       <span className="brandmark" aria-hidden="true">✓</span>
@@ -68,6 +69,35 @@ export default function SettingsCenter({lang, wizard, initialTab = 'connection',
         <button type="button" className="primary" onClick={step === steps.length - 1 ? finish : () => setStep(s => s + 1)}>{step === 0 ? tr('Start', 'Começar', 'Empezar') : step === steps.length - 1 ? tr('Open the studio', 'Abrir o estúdio', 'Abrir el estudio') : tr('Next', 'Próximo', 'Siguiente')}</button>
       </footer>}
     </section>
+  </div>;
+}
+
+type MolmoSettings = {enabled: boolean; model_path: string; keep_warm_minutes: number; image_quality: 'accurate' | 'fast'; default_model_path: string; warm: boolean; status: {configured: boolean; model: string | null}};
+
+/** Molmo2 (local video model): on/off, which checkpoint, how long it stays loaded, image detail. */
+function MolmoPanel({lang}: {lang: Language}) {
+  const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
+  const [cfg, setCfg] = useState<MolmoSettings | null>(null);
+  const [draft, setDraft] = useState<Partial<MolmoSettings>>({});
+  const [message, setMessage] = useState('');
+  useEffect(() => {fetch('/api/backend/molmo/settings').then(r => r.json()).then((c: MolmoSettings) => {setCfg(c); setDraft(c);}).catch(() => setMessage(tr('The bridge does not answer.', 'A bridge não responde.', 'El bridge no responde.')));}, []); // eslint-disable-line react-hooks/exhaustive-deps
+  async function save() {
+    setMessage('');
+    const r = await fetch('/api/backend/molmo/settings', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({enabled: draft.enabled, model_path: draft.model_path ?? '', keep_warm_minutes: draft.keep_warm_minutes, image_quality: draft.image_quality})});
+    const reply = await r.json();
+    if (!r.ok) {setMessage(reply.detail || `HTTP ${r.status}`); return;}
+    setCfg(reply); setDraft(reply); setMessage(tr('Saved.', 'Salvo.', 'Guardado.'));
+  }
+  if (!cfg) return <div className="settings-note"><p className="muted">{message || tr('Loading…', 'Carregando…', 'Cargando…')}</p></div>;
+  return <div className="settings-note molmo-settings">
+    <h3>{tr('Molmo2 video model (optional, runs on this computer)', 'Modelo de vídeo Molmo2 (opcional, roda neste computador)', 'Modelo de vídeo Molmo2 (opcional, en este equipo)')}</h3>
+    <p>{tr('Watches the whole guide video: finds people from photos, answers questions about the video, suggests where shots split and describes the guide for the planner. Off: the planner VLM does all of it from frames.', 'Assiste ao vídeo guia inteiro: encontra pessoas por foto, responde perguntas sobre o vídeo, sugere onde dividir os trechos e descreve o guia para o planner. Desligado: o VLM do planner faz tudo a partir de quadros.', 'Ve el vídeo guía entero: encuentra personas por foto, responde preguntas, sugiere dónde dividir los tramos y describe la guía para el planner. Apagado: el VLM del planner lo hace todo con fotogramas.')}</p>
+    <label className="toggle-row"><input type="checkbox" checked={draft.enabled !== false} onChange={e => setDraft(d => ({...d, enabled: e.target.checked}))}/> {tr('Use Molmo2', 'Usar o Molmo2', 'Usar Molmo2')}</label>
+    <label className="field">{tr('Checkpoint folder', 'Pasta do checkpoint', 'Carpeta del checkpoint')}<input value={draft.model_path || ''} placeholder={cfg.default_model_path || '/models/Molmo2-8B-FP8'} onChange={e => setDraft(d => ({...d, model_path: e.target.value}))}/><small>{tr('Empty: HENGE_MOLMO_MODEL. Molmo2-8B-FP8 is the most accurate; Molmo2-4B is about twice as fast with half the VRAM.', 'Vazio: HENGE_MOLMO_MODEL. O Molmo2-8B-FP8 é o mais preciso; o Molmo2-4B é cerca de 2× mais rápido com metade da VRAM.', 'Vacío: HENGE_MOLMO_MODEL. Molmo2-8B-FP8 es el más preciso; Molmo2-4B es unas 2× más rápido con la mitad de VRAM.')}</small></label>
+    <label className="field">{tr('Keep it loaded after use', 'Manter carregado depois de usar', 'Mantenerlo cargado tras usarlo')}<select value={String(draft.keep_warm_minutes ?? 0)} onChange={e => setDraft(d => ({...d, keep_warm_minutes: Number(e.target.value)}))}>{[0, 2, 5, 10, 30].map(m => <option key={m} value={m}>{m ? tr(`${m} min`, `${m} min`, `${m} min`) : tr('No: unload after each use', 'Não: descarregar a cada uso', 'No: descargar tras cada uso')}</option>)}</select><small>{tr('Loading takes about 50 s. While loaded it holds about 12 GB of VRAM; a ComfyUI job on this computer unloads it first.', 'Carregar leva cerca de 50 s. Carregado, ocupa cerca de 12 GB de VRAM; um job do ComfyUI neste computador o descarrega antes.', 'Cargar tarda unos 50 s. Cargado ocupa unos 12 GB de VRAM; un trabajo de ComfyUI en este equipo lo descarga antes.')}{cfg.warm ? tr(' Loaded now.', ' Carregado agora.', ' Cargado ahora.') : ''}</small></label>
+    <label className="field">{tr('Image detail', 'Detalhe das imagens', 'Detalle de las imágenes')}<select value={draft.image_quality || 'accurate'} onChange={e => setDraft(d => ({...d, image_quality: e.target.value as 'accurate' | 'fast'}))}><option value="accurate">{tr('Accurate (8 crops per image)', 'Preciso (8 recortes por imagem)', 'Preciso (8 recortes por imagen)')}</option><option value="fast">{tr('Fast (4 crops per image)', 'Rápido (4 recortes por imagem)', 'Rápido (4 recortes por imagen)')}</option></select></label>
+    <p className="muted">{cfg.status.configured ? tr(`Ready: ${cfg.status.model}`, `Pronto: ${cfg.status.model}`, `Listo: ${cfg.status.model}`) : cfg.enabled === false ? tr('Turned off.', 'Desligado.', 'Apagado.') : tr('Not set up: set HENGE_MOLMO_PYTHON and a checkpoint (docs/molmo-pointing.md).', 'Não configurado: defina HENGE_MOLMO_PYTHON e um checkpoint (docs/molmo-pointing.md).', 'Sin configurar: define HENGE_MOLMO_PYTHON y un checkpoint (docs/molmo-pointing.md).')}</p>
+    <div className="settings-actions"><button type="button" className="primary" onClick={() => void save()}>{tr('Save', 'Salvar', 'Guardar')}</button>{message && <span className="muted">{message}</span>}</div>
   </div>;
 }
 

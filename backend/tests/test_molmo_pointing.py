@@ -145,6 +145,17 @@ class PointingApiTests(unittest.TestCase):
             post.assert_not_called()
         self.assertIs(self.server.molmo_pointing.BEFORE_RUN,self.server.free_local_comfy)
 
+    def test_molmo_can_be_turned_off_in_settings(self):
+        with patch.object(self.server,'molmo_settings',return_value={'enabled':False,'model_path':'','keep_warm_minutes':0,'image_quality':'accurate'}):
+            self.assertFalse(self.server.pointing_status()['configured'])
+            with patch.object(self.server.molmo_pointing,'SETTINGS',self.server.molmo_settings):
+                self.assertFalse(self.server.molmo_pointing.available())
+        r=self.client.post('/molmo/settings',json={'model_path':'/nowhere'})
+        self.assertEqual(r.status_code,400)
+        r=self.client.post('/molmo/settings',json={'enabled':False,'keep_warm_minutes':5,'image_quality':'fast'})
+        self.assertEqual(r.status_code,200,r.text);self.assertEqual((r.json()['enabled'],r.json()['keep_warm_minutes'],r.json()['image_quality']),(False,5,'fast'))
+        self.client.post('/molmo/settings',json={'enabled':True,'keep_warm_minutes':0,'image_quality':'accurate'})
+
     def test_guide_caption_is_skipped_without_molmo(self):
         job={'id':'0'*32,'request':{'mode':'swap','video':{'start_seconds':0,'end_seconds':2}},'assets':{'video':'x.mp4'}}
         with patch.object(self.server.molmo_pointing,'available',return_value=False),patch.object(self.server.molmo_pointing,'ask_video') as ask:

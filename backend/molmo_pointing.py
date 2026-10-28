@@ -19,6 +19,9 @@ from PIL import Image, ImageDraw
 LOCK = threading.Lock()
 # Set by the bridge: frees the VRAM of a ComfyUI on this same machine before Molmo2 loads (one GPU, two models).
 BEFORE_RUN = None
+# Set by the bridge: the user's Molmo2 settings {model_path, keep_warm_minutes, image_quality}.
+SETTINGS = lambda: {}
+_WARM = {'process': None, 'key': None, 'timer': None}
 COLORS = ['#ff3b30', '#34c759', '#0a84ff', '#ffd60a', '#bf5af2', '#ff9f0a']
 MAX_MATCH_SECONDS = 120
 MAX_PEOPLE = 6
@@ -59,27 +62,84 @@ def validate_match(people, start, end):
 
 
 def configured():
+    if (SETTINGS() or {}).get('enabled') is False:
+        raise ValueError('Molmo2 is turned off in Settings → Molmo2; the planner VLM does the video analysis')
     python = os.environ.get('HENGE_MOLMO_PYTHON', '')
-    model = os.environ.get('HENGE_MOLMO_MODEL', '')
+    model = (SETTINGS() or {}).get('model_path') or os.environ.get('HENGE_MOLMO_MODEL', '')
     if not python or not model or not Path(python).is_file() or not (Path(model)/'config.json').is_file():
         raise ValueError('Local Molmo2 is not configured. Set HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL; see docs/molmo-pointing.md')
     return python, model
 
 
+def release():
+    """Unload a warm Molmo2 (before ComfyUI uses this GPU, or after its idle time)."""
+    with LOCK:
+        release_locked()
+
+
+def _cli_to_request(args):
+    """['--mode', 'ask', '--refs', 'a', 'b', ...] -> {'mode': 'ask', 'refs': ['a', 'b'], ...} for the warm worker."""
+    out, key = {}, None
+    for item in args:
+        if item.startswith('--'):
+            key = item[2:].replace('-', '_'); out[key] = None
+        elif key == 'refs':
+            out['refs'] = (out.get('refs') or []) + [item]
+        else:
+            out[key] = float(item) if key in ('start', 'end', 'fps') else item
+    if 'refs' in out and out['refs'] is None: out['refs'] = []
+    return out
+
+
 def run_worker(args):
     python, model = configured()
-    command = [python, str(Path(__file__).with_name('molmo_pointing_worker.py')), '--model', model, *args]
-    # Each subprocess exits after inference, so H3 and SAM do not share resident Molmo weights; before it loads, a local
-    # ComfyUI unloads its models so the two never sit in VRAM together.
+    cfg = SETTINGS() or {}
+    crops = 4 if cfg.get('image_quality') == 'fast' else 8
+    warm = max(0., min(60., float(cfg.get('keep_warm_minutes') or 0)))
+    command = [python, str(Path(__file__).with_name('molmo_pointing_worker.py')), '--model', model, '--max-crops', str(crops)]
+    # Before Molmo2 loads, a local ComfyUI unloads its models so the two never sit in VRAM together.
     with LOCK:
         if BEFORE_RUN is not None:
             try:
                 BEFORE_RUN()
             except Exception as exc:
                 print(f'[Henge] could not free ComfyUI VRAM before Molmo2: {exc}', flush=True)
-        result = subprocess.run(command, capture_output=True, text=True, timeout=900)
-    if result.returncode:
-        raise RuntimeError('Molmo2 failed: '+(result.stderr or result.stdout)[-2200:])
+        if not warm:
+            # Default: one process per request, exiting after it, so no Molmo weights stay resident.
+            if _WARM['process']: release_locked()
+            result = subprocess.run(command + list(args), capture_output=True, text=True, timeout=900)
+            if result.returncode:
+                raise RuntimeError('Molmo2 failed: '+(result.stderr or result.stdout)[-2200:])
+            return
+        key = (model, crops)
+        proc = _WARM['process']
+        if proc is None or proc.poll() is not None or _WARM['key'] != key:
+            if proc: release_locked()
+            proc = subprocess.Popen(command + ['--serve'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            _WARM.update(process=proc, key=key)
+        if _WARM['timer']: _WARM['timer'].cancel()
+        proc.stdin.write(json.dumps(_cli_to_request(args)) + '\n'); proc.stdin.flush()
+        tail = []
+        for line in proc.stdout:
+            if line.startswith('HENGE-REPLY '):
+                reply = json.loads(line[len('HENGE-REPLY '):]); break
+            tail = (tail + [line])[-40:]
+        else:
+            _WARM.update(process=None, key=None)
+            raise RuntimeError('Molmo2 stopped: ' + ''.join(tail)[-2200:])
+        timer = threading.Timer(warm * 60, release); timer.daemon = True; timer.start(); _WARM['timer'] = timer
+    if not reply.get('ok'):
+        raise RuntimeError('Molmo2 failed: ' + str(reply.get('error'))[-2200:])
+
+
+def release_locked():
+    proc, timer = _WARM['process'], _WARM['timer']
+    _WARM.update(process=None, key=None, timer=None)
+    if timer: timer.cancel()
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try: proc.wait(timeout=20)
+        except subprocess.TimeoutExpired: proc.kill()
 
 
 def point_video(video, query, start, end, work):
