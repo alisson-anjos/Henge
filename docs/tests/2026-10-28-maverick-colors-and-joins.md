@@ -104,3 +104,33 @@ Downloads:
 
 Next required validation for the complete project: the middle and final camera shots,
 including absent subjects and reference renumbering after cuts.
+
+## Character Swap with the explicit prompt
+
+Job `36862c27eae24ec28394b44ae91ddb99`, completed.
+Character Swap v1.1 + Guide Latents, 100% colour opacity, seed 42, 8 steps.
+Used the manually reviewed prompt, changing its task trigger to `body_swap:`.
+Disabled automatic prompt enhancement to prevent per-shot rewriting of the frozen prompt;
+`guide_clip=on` still presents the guide frames to the text encoder.
+
+Visual inspection at 0.4, 1.8 and 3.1 seconds shows all three assigned people filled with the expected
+reference accessories: gold-detail cap/glasses on green, uncovered hair/glasses on purple,
+navy cap on cyan. This is a substantial improvement over the previous generic-caption Character Swap test.
+The prompt is therefore an important contributor; this is first-shot evidence, not a guarantee of perfect
+identity fidelity or correctness across camera cuts. No latent noise mask was added in this comparison.
+
+Downloads:
+- `maverick_character_prompt_explicito_shot1.mp4`
+- `maverick_tara_vs_character_prompt_explicito.mp4` (TARA left / Character Swap right)
+
+## Product guidance and checks
+
+Studio now recommends Motion Transfer TARA + TARA with explicit per-person prompts for colour guides;
+Character Swap stays available with wording that reference assignment can be unreliable.
+Removed the previous UI/backend ban on TARA with colour marks. Existing restrictions unrelated to colour remain.
+Assistant instructions use the same recommendation without silently changing the user's chosen settings.
+
+TypeScript and production build passed. Focused validation checks passed.
+The wider 55-test contracts/conditioning run had 52 passes and three failures concerning animal adaptation,
+a stale history-guide expectation, and reference-preparation mocks. The same three failures were reproduced
+against HEAD before the colour recommendation changes in an isolated source copy.
