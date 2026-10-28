@@ -56,7 +56,7 @@ function normalizeSettings(o: Record<string, unknown>) {
     regionalAttention: typeof o.regional_attention === 'object' && o.regional_attention !== null && (o.regional_attention as Record<string, unknown>).enabled === true,
     base: o.base === 'omniref' ? 'omniref' : 'h3',
     loraStrength: num(o.lora_strength, 0, 2, 1),
-    upscaleMethod: (['h3', 'regenerate', 'nvidia', 'none'] as const).find(m => m === o.upscale_method) ?? (o.latent_upscale === false ? 'none' : 'h3'),
+    upscaleMethod: (['h3', 'regenerate', 'nvidia', 'none'] as const).find(m => m === o.upscale_method) ?? (o.latent_upscale === false ? 'none' : o.latent_upscale === true ? 'h3' : 'regenerate'),
     upscaleSteps: num(o.upscale_steps, 1, 8, 1),
     upscaleDenoise: num(o.upscale_denoise, 0, 1, .15),
     regenerateSteps: o.regenerate_steps === 3 ? 3 : 2,
@@ -282,8 +282,8 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
       {mode === 'sharpness' && <fieldset className="mask-settings"><legend>{tr('Sharpness', 'Nitidez', 'Nitidez')}</legend>
         <label>{tr('Sharpness strength (LoRA, 1.0 recommended)', 'Força do sharpness (LoRA, 1,0 recomendado)', 'Fuerza de nitidez (LoRA, 1,0 recomendado)')}<input type="number" min="0" max="2" step="0.05" value={loraStrength} onChange={e => setLoraStrength(Math.min(2, Math.max(0, Number(e.target.value) || 0)))}/></label>
         <label>{tr('Upscale after sharpening', 'Upscale após a nitidez', 'Escalado después de la nitidez')}<Select value={upscaleMethod} onChange={e => setUpscaleMethod(e.target.value as 'h3' | 'regenerate' | 'nvidia' | 'none')}>
+          <option value="regenerate" disabled={health?.upscalers?.regenerate !== true}>{tr('Open-H3 Refiner + LMS · default', 'Open-H3 Refiner + LMS · padrão', 'Open-H3 Refiner + LMS · predeterminado')}{health?.upscalers?.regenerate !== true ? tr(' · requires worker update/models', ' · requer atualização/modelos no worker', ' · requiere actualizar worker/modelos') : ''}</option>
           <option value="h3" disabled={health?.upscalers?.h3 === false}>{tr('H3 · latent upscaler + short refine', 'H3 · upscaler latente + refino curto', 'H3 · upscaler latente + refinado corto')}{health?.upscalers?.h3 === false ? tr(' · not installed', ' · não instalado', ' · no instalado') : ''}</option>
-          <option value="regenerate" disabled={health?.upscalers?.regenerate !== true}>{tr('Open-H3 Regenerate 2K · rank-16 refiner (experimental)', 'Open-H3 Regenerate 2K · refiner rank 16 (experimental)', 'Open-H3 Regenerate 2K · refiner rango 16 (experimental)')}{health?.upscalers?.regenerate !== true ? tr(' · requires worker update/models', ' · requer atualização/modelos no worker', ' · requiere actualizar worker/modelos') : ''}</option>
           <option value="nvidia" disabled={health?.upscalers?.nvidia === false}>{tr('NVIDIA RTX Video Super Resolution · fast, no new detail', 'NVIDIA RTX Video Super Resolution · rápido, sem detalhe novo', 'NVIDIA RTX Video Super Resolution · rápido, sin detalle nuevo')}{health?.upscalers?.nvidia === false ? tr(' · not installed', ' · não instalado', ' · no instalado') : ''}</option>
           <option value="none">{tr('None · sharpen directly at the output size (slower)', 'Nenhum · nitidez direto no tamanho final (mais lento)', 'Ninguno · nitidez directa al tamaño final (más lento)')}</option></Select></label>
         {upscaleMethod === 'regenerate' && <>

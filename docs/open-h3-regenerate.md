@@ -1,6 +1,6 @@
 # Open-H3 Regenerate no Sharpness
 
-O modo opcional **Open-H3 Regenerate 2K · refiner rank 16 (experimental)** executa primeiro a nitidez LMS do Henge e depois uma segunda passagem generativa. Pode alterar detalhes: compare sempre com o vídeo original.
+O modo **Open-H3 Refiner + LMS · padrão**, primeira opção e seleção inicial do dropdown de upscale do Sharpness, executa primeiro a nitidez LMS do Henge e depois uma segunda passagem generativa. Pode alterar detalhes: compare sempre com o vídeo original.
 
 A segunda passagem usa a mesma base Ref2VA já instalada, carregada em uma cadeia independente de LoRAs, DMAD 4-step, o refiner rank 16 do Kijai e nosso LMS v1.0 r64 em strength 1.0. Esse arquivo contém **somente o refiner**, sem LMS e sem LightX2V Turbo. O LMS é carregado separadamente nas duas passagens, uma vez por cadeia de modelo. Na segunda passagem, `MiniMaxH3AddGuide` ancora o vídeo original do shot na resolução final, começando no frame 0.
 
@@ -22,7 +22,7 @@ O Henge exige os nodes nativos e os cinco pesos no inventário do worker. No Ser
 
 ## Uso e limites
 
-Em Nitidez, escolha saída **1080p ou 2K** e selecione o novo método. A primeira passagem roda com lado curto de 768 pixels; a segunda recebe as dimensões finais explicitamente, preservando a orientação do vídeo. 4K não está habilitado para este método.
+Ao entrar em Nitidez, resoluções de 480p/720p passam para **1080p**, compatível com o método padrão. Também é possível escolher **2K**. Configurações salvas com método explícito continuam sendo respeitadas. A primeira passagem roda com lado curto de 768 pixels; a segunda recebe as dimensões finais explicitamente, preservando a orientação do vídeo. 4K não está habilitado para este método.
 
 Informe uma descrição fiel da cena ou deixe vazio para o VLM configurado descrever os frames. Essa descrição é separada da instrução técnica LMS e pode ser revisada no plano do job. Não depende do Molmo local. Em clipes com vários shots, a descrição automática cobre o intervalo inteiro; valide especialmente os cortes e cenas diferentes.
 

@@ -684,7 +684,7 @@ export default function Studio() {
     } catch {setNotice(tr('This file is not a valid Henge configuration.', 'Este arquivo não é uma configuração válida do Henge.', 'Este archivo no es una configuración válida de Henge.'));}
   }
   /** The direction's settings (mode, prompt, quality, shots, audio, subject guidance); media are left as they are. */
-  useEffect(() => {if (mode !== 'sharpness') setQuality(q => ['1440p', '2160p'].includes(q) ? '1080p' : q);}, [mode]);
+  useEffect(() => {setQuality(q => mode === 'sharpness' ? (['480p', '720p'].includes(q) ? '1080p' : q) : (['1440p', '2160p'].includes(q) ? '1080p' : q));}, [mode]);
   useEffect(() => {setPickingId(null);}, [mode]);
   // Head Swap takes Original or Mask; Sharpness always uses the original video.
   useEffect(() => {if (mode === 'sharpness' || (mode === 'headswap' && ['2d', '3d'].includes(guideRepresentation))) setGuideRepresentation('original');}, [mode, guideRepresentation]);
