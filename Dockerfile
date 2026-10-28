@@ -33,7 +33,7 @@ ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
     HENGE_MOLMO_PYTHON=/opt/molmo/bin/python HENGE_MOLMO_REPO=tollea1234/Molmo2-8B-FP8 \
     HF_HOME=/state/huggingface HF_XET_HIGH_PERFORMANCE=1 \
     PIP_BREAK_SYSTEM_PACKAGES=1 PIP_ROOT_USER_ACTION=ignore
-RUN apt-get update && apt-get install -y --no-install-recommends git ffmpeg ca-certificates openssh-server curl libgl1 libglib2.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git ffmpeg ca-certificates openssh-server curl python3-venv libgl1 libglib2.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git /opt/ComfyUI && git -C /opt/ComfyUI checkout "$COMFY_REF" \
  && git clone https://github.com/alisson-anjos/ComfyUI-BFSNodes.git /opt/ComfyUI/custom_nodes/bfsnodes \
  && git -C /opt/ComfyUI/custom_nodes/bfsnodes checkout "$BFS_REF"
@@ -41,7 +41,7 @@ COPY --from=web /usr/local/bin/node /usr/local/bin/node
 COPY --from=web /app /app
 # Pin the base image's torch stack so custom-node requirements cannot swap the CUDA build.
 RUN python -m pip freeze | grep -iE '^(torch|torchvision|torchaudio)==' > /tmp/torch-constraints.txt || true; cat /tmp/torch-constraints.txt \
- && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt runpod==1.12.0 nvidia-vfx \
+ && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt runpod==1.12.0 nvidia-vfx 'click>=8,!=8.3.0,<8.4' \
  && python -m venv --system-site-packages /opt/molmo \
  && /opt/molmo/bin/pip install --no-cache-dir 'transformers==4.57.1' 'tokenizers==0.22.2' 'huggingface_hub==0.36.2' 'accelerate==1.5.2' 'safetensors==0.8.0' 'decord2==3.4.0' 'molmo-utils==0.0.1' 'compressed-tensors==0.20.0' \
  && ln -s /app/backend/comfy_nodes/henge /opt/ComfyUI/custom_nodes/henge \
