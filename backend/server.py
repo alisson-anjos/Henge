@@ -205,10 +205,6 @@ def validate_request(r,options,slots):
     if options.get('source_blur_effect','blur') not in ['blur','invert colours']:raise ValueError('Source blur effect must be blur or invert colours')
     if not isinstance(r.get('output_audio',{}).get('generate',False),bool):raise ValueError('Generated audio must be a boolean')
     if r.get('output_audio',{}).get('generate') and r.get('processing',{}).get('mode')=='causal':raise ValueError('Generated audio needs shot rendering, not causal')
-    if options.get('conditioning_mode','guide')=='tara' and (r.get('subject_guidance') or {}).get('representation') in ('2d','3d') and (r.get('subject_guidance') or {}).get('bindings') and r['mode']!='sharpness':
-        # TARA reads the guide as a native video reference and was trained on plain footage: a tinted 2D/3D guide is
-        # outside what it learned. Mask leaves the guide untouched (it only bounds the regenerated latent area).
-        raise ValueError('TARA was trained without color marks: use the Original or Mask guide with TARA, or Guide Latents for 2D/3D marks')
     clamp_float(options.get('reference_scale',1.),.25,1.,'native reference scale')
     clamp_float(options.get('seed',42),0,2**32-1,'seed');clamp_float(options.get('steps',8),1,60,'steps');clamp_float(options.get('clip_fps',2),.5,24,'CLIP video fps')
     p=r.get('processing',{});clamp_float(p.get('requested_seconds_per_shot',4.5),1,15,'segment length')

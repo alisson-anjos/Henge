@@ -147,10 +147,11 @@ class WorkflowContracts(unittest.TestCase):
   from workflows import find_people_graph,subject_looks_graph
   g=find_people_graph('henge/x/frame.png','animal');self.assertEqual(g['2']['inputs']['kind'],'animal');self.assertEqual(g['2']['class_type'],'HengeFindPeople')
   g=subject_looks_graph([('henge/x/a.png','id1',.3,.5)]);self.assertEqual(g['2']['class_type'],'HengeSubjectLook')
- def test_tara_refuses_color_marks(self):
+ def test_tara_accepts_color_marks(self):
   a={'x':.5,'y':.5,'time_seconds':0,'frame_width':64,'frame_height':64}
   b=[{'color':'green','picture_slots':[1],'anchors':[a]}]
-  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','subject_guidance':{'representation':'2d','bindings':b}},{'conditioning_mode':'tara'},[1])
+  for representation in ('2d','3d'):
+   validate_request({**self.request(),'mode':'motion','subject_guidance':{'representation':representation,'bindings':b}},{'profile':'motion_tara','conditioning_mode':'tara'},[1])
   validate_request({**self.request(),'mode':'motion','subject_guidance':{'representation':'mask','bindings':b}},{'conditioning_mode':'tara'},[1])
  def test_likeness_filter(self):
   import server,os

@@ -1,4 +1,5 @@
 'use client';
+import {colorGuideRecommendation} from '../lib/color-guide';
 
 import {useEffect, useRef, useState} from 'react';
 import type {Picture} from '../lib/media';
@@ -78,6 +79,7 @@ export default function SubjectBindings({subjects, onChange, representation, onR
   return <section className={`${styles.panel} surface`} aria-label={t.title}>
     <div className={styles.heading}><h2>{t.title}</h2><div className={styles.modes} role="group" aria-label={t.mode}>{(mode === 'headswap' ? ['original', 'mask'] as const : ['original', '2d', '3d', 'mask'] as const).map(value => <button type="button" key={value} title={MODES[value][lang]} aria-pressed={representation === value} onClick={() => onRepresentation(value)}>{value === 'original' ? (lang === 'pt' ? 'Original' : lang === 'es' ? 'Original' : 'Original') : value.toUpperCase()}</button>)}</div></div>
     <p className={styles.modeHelp}>{MODES[representation][lang]}</p>
+    {['2d', '3d'].includes(representation) && <p className={styles.modeHelp}>{colorGuideRecommendation[lang]}</p>}
     {warning && <p className={styles.warning} role="alert">{warning}</p>}
     {representation === '2d' && onMarkOpacity && <label className={styles.opacity}><span>{tr('Mark opacity', 'Opacidade da marcação', 'Opacidad de la marca')} <b className="mono">{Math.round(markOpacity * 100)}%</b></span>
       <input type="range" min="0.1" max="1" step="0.05" value={markOpacity} onChange={e => onMarkOpacity(Number(e.target.value))}/>
