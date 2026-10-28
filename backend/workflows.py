@@ -44,7 +44,7 @@ LEGACY_LORAS=json.loads((Path(__file__).with_name('legacy_loras.json')).read_tex
 # What ComfyUI lists per loader input, refreshed by the bridge: models already in the user's ComfyUI are reused even
 # under an old short name or in another subfolder (e.g. vae/minimax/…), so nothing is downloaded twice.
 INSTALLED={}
-LOADERS={'LoraLoaderModelOnly':'lora_name','VAELoader':'vae_name','UNETLoader':'unet_name','CLIPLoader':'clip_name'}
+LOADERS={'LoraLoaderModelOnly':'lora_name','VAELoader':'vae_name','UNETLoader':'unet_name','CLIPLoader':'clip_name','LatentUpscaleModelLoader':'model_name'}
 def resolve_model(node,name,installed=None):
     names=INSTALLED.get(node,set()) if installed is None else installed
     if not name or not names or name in names:return name
@@ -69,7 +69,14 @@ BASES={
 # Sharpness above 720p renders at half the output size, then doubles it with one of two upscalers (henge/upscale.py):
 # h3: learned H3 latent upscaler, then a short partial-denoise refine by the same H3 model (tiled above ~2 MP);
 # nvidia: NVIDIA RTX Video Super Resolution on the decoded frames (no diffusion, no invented detail).
-UPSCALE_METHODS=('h3','nvidia','none')
+UPSCALE_METHODS=('h3','regenerate','nvidia','none')
+REGENERATE={
+ 'base':'minimax_h3_fl2va_pruned_int8_convrot.safetensors',
+ 'refiner':'henge/minimax_h3_open_regenerate_2k_refiner_rank_16_bf16.safetensors',
+ 'turbo':TURBOS['dmad4']['lora'],
+ 'upscaler':'minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors',
+}
+REGENERATE_SIGMAS={2:'0.7, 0.494118, 0',3:'0.909375, 0.857143, 0.666667, 0'}
 # Learned H3 latent upscalers, preferred first (LBH-123-AI 3D upscaler, MIT; ours is fine-tuned on the LMS data).
 H3_UPSCALERS=('h3_upscaler_lms_v0.1.safetensors','minimax_h3_latent_upscaler_3d_bf16.safetensors')
 
@@ -145,7 +152,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             g['9']['inputs']['prompt']+=f' <Picture {len(refs)+1}> is the preceding generated final frame, used only for scene/identity continuity. Follow the current Video 1 performance and timing; do not freeze its pose or override the assigned reference identities.'
     if upscale:
         # Output at twice the rendered size (`width`/`height` are the render size); see UPSCALE_METHODS.
-        W,H=width*2,height*2
+        W,H=int(upscale.get('width',width*2)),int(upscale.get('height',height*2))
         if upscale['method']=='h3':
             # Learned H3 latent upscale to the output size, then a short partial-denoise pass guided by the source at
             # that size (`video` holds the output-size shot). Above ~2 MP the refine model samples overlapping tiles.
@@ -164,6 +171,26 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             g['37']=node('SamplerCustomAdvanced',noise=['35',0],guider=['36',0],sampler=['12',0],sigmas=['34',0],latent_image=['33',0])
             g['38']=node('LTXVSeparateAVLatent',av_latent=['37',0])
             # 2K/4K frames: decode in tiles so the VAE fits beside the model.
+            g['16']=node('VAEDecodeTiled',samples=['38',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
+        elif upscale['method']=='regenerate':
+            # Separate FL2VA stack, following the supplied two-stage workflow.
+            # Kijai's rank-16 contains only the refiner, not LMS or the turbo.
+            count=int(upscale.get('steps',2))
+            if count not in REGENERATE_SIGMAS:raise ValueError('Regenerate needs 2 or 3 refine steps')
+            g['70']=node('UNETLoader',unet_name=REGENERATE['base'],weight_dtype='default')
+            g['71']=node('ModelAttentionBackend',model=['70',0],attention=attention)
+            g['72']=node('LoraLoaderModelOnly',model=['71',0],lora_name=REGENERATE['turbo'],strength_model=1.)
+            g['73']=node('LoraLoaderModelOnly',model=['72',0],lora_name=REGENERATE['refiner'],strength_model=1.)
+            g['30']=node('LatentUpscaleModelLoader',model_name=upscale.get('model',REGENERATE['upscaler']))
+            # Native node resizes video while preserving the AV latent's audio stream.
+            g['31']=node('MiniMaxH3LatentUpscaleWithModel',model=['30',0],samples=['14',0],width=W,height=H)
+            g['32']=node('CLIPTextEncode',clip=['5',0],text=upscale.get('prompt') or prompt)
+            g['33']=node('ManualSigmas',sigmas=REGENERATE_SIGMAS[count])
+            g['34']=node('BasicGuider',model=['73',0],conditioning=['32',0])
+            g['35']=node('KSamplerSelect',sampler_name='er_sde')
+            g['36']=node('RandomNoise',noise_seed=seed)
+            g['37']=node('SamplerCustomAdvanced',noise=['36',0],guider=['34',0],sampler=['35',0],sigmas=['33',0],latent_image=['31',0])
+            g['38']=node('LTXVSeparateAVLatent',av_latent=['37',0])
             g['16']=node('VAEDecodeTiled',samples=['38',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
         elif upscale['method']=='nvidia':
             g['30']=node('HengeRTXUpscale',images=['16',0],width=W,height=H,quality='ULTRA')

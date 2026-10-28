@@ -67,13 +67,14 @@ class WorkflowContracts(unittest.TestCase):
       'plan':{'adapt_reference':True,'adapt_picture_slots':[1],'source_kind':'human','target_kind':'animal','adapt_instruction':'x','picture_roles':[{'slot':1,'description':'A cat.'}]}}
    server.save(j);return j
   def fake(outputs,dest):Image.new('RGB',(8,8),'white').save(dest);return dest
-  with patch.object(server,'execute_graph',return_value={}) as run,patch.object(server,'image_from_output',side_effect=fake),patch.object(server,'run'):
+  with patch.object(server,'frame_editor',return_value='klein3'),patch.object(server,'execute_graph',return_value={}) as run,patch.object(server,'image_from_output',side_effect=fake),patch.object(server,'run'):
    server.adapt_prepare(job('1'*32),job('1'*32));server.adapt_prepare(job('2'*32),job('2'*32));self.assertEqual(run.call_count,1)
    server.adapt_prepare(job('3'*32),job('3'*32),regenerate=True);self.assertEqual(run.call_count,2)
    edited=job('4'*32,{'adapt_instruction':'A cat knight, front and back.'});server.adapt_prepare(edited,edited);self.assertEqual(run.call_count,3)
-   graph=run.call_args[0][1];self.assertEqual(graph['5']['inputs']['prompt'],'A cat knight, front and back.')
-   self.assertTrue(graph['4']['inputs']['image'].endswith('cat.png'));self.assertTrue(graph['22']['inputs']['image'].endswith('adapt_source.png'))
-  self.assertTrue(server.adapt_state(server.load('2'*32))['ready'])
+   graph=run.call_args[0][1];self.assertEqual(graph['5']['inputs']['text'],'A cat knight, front and back.')
+   self.assertTrue(graph['10']['inputs']['image'].endswith('cat.png'));self.assertTrue(graph['41']['inputs']['image'].endswith('adapt_source.png'))
+  with patch.object(server,'frame_editor',return_value='klein3'):
+   self.assertTrue(server.adapt_state(server.load('2'*32))['ready'])
  def test_character_swap_animal_gets_one_adapted_figure(self):
   import server
   from edit_modes import character_figure_instruction
@@ -85,7 +86,7 @@ class WorkflowContracts(unittest.TestCase):
   server.save(job)
   answers={'vlm_picture_1':'Male, orange tabby cat, white paws','vlm_species':'Animal'}
   def fake_graph(job,graph,stage):return {'4':{'text':[answers[stage]]}}
-  with patch.object(server,'prepare_evidence',return_value=([(1,pic)],pic,{})),patch.object(server,'fibo_available',return_value=True),patch.object(server,'execute_graph',side_effect=fake_graph):
+  with patch.object(server,'prepare_evidence',return_value=([(1,pic)],pic,{})),patch.object(server,'frame_editor',return_value='klein3'),patch.object(server,'execute_graph',side_effect=fake_graph):
    server.planning(job)
   plan=server.load(jid)['plan'];self.assertTrue(plan['adapt_reference'] and plan['preparation_recommended']);self.assertEqual(plan['target_kind'],'animal')
   req=server.adapt_request(server.load(jid));self.assertTrue(req['figure']);self.assertIn('Exactly one figure',req['instruction'])

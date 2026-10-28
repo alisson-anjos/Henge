@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageFont,ImageOps
 import workflows
 import moving_plate
-from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
@@ -172,7 +172,13 @@ def validate_request(r,options,slots):
     if not isinstance(options.get('auto_approve',False),bool):raise ValueError('Auto-approve must be a boolean')
     if not isinstance(options.get('prepare_references',True),bool):raise ValueError('Reference preparation must be a boolean')
     clamp_float(options.get('cfg',1.),1,12,'CFG');clamp_float(options.get('lora_strength',1.),0,2,'LoRA strength');clamp_float(options.get('upscale_denoise',.15),0,1,'refine denoise');clamp_float(options.get('upscale_steps',1),1,8,'refine steps')
-    if upscale_method(options) not in UPSCALE_METHODS:raise ValueError('Upscale must be h3, nvidia or none')
+    if upscale_method(options) not in UPSCALE_METHODS:raise ValueError('Upscale must be h3, regenerate, nvidia or none')
+    if upscale_method(options)=='regenerate':
+        if r['mode']!='sharpness':raise ValueError('Open-H3 Regenerate is a Sharpness option')
+        if r['quality'] not in ('1080p','1440p'):raise ValueError('Open-H3 Regenerate currently supports 1080p or 2K output')
+        if options.get('regenerate_steps',2) not in (2,3):raise ValueError('Regenerate needs 2 or 3 refine steps')
+        if not isinstance(options.get('regenerate_prompt',''),str) or len(options.get('regenerate_prompt',''))>4000:raise ValueError('Refiner scene description must be at most 4000 characters')
+
     if clamp_float(options.get('structure_cfg',1.),1,3,'structure guidance')>1 and options.get('conditioning_mode','guide')!='tara':raise ValueError('Structure guidance is a TARA option')
     clamp_float(options.get('causal_chunk',5),1,32,'causal chunk');clamp_float(options.get('causal_window',6),1,16,'causal window')
     if r.get('processing',{}).get('mode')=='causal':
@@ -295,13 +301,6 @@ def comfy_info(path='/object_info',timeout=10):
     if path=='/object_info' and LAST_INFO['url']==URL and LAST_INFO['info']:return LAST_INFO['info']
     return api('GET',path,timeout=timeout)
 
-FIBO_UNET='fibo2_edit_turbo_int8_convrot.safetensors'
-def fibo_available(info=None):
-    """FIBO needs ComfyUI's TextEncodeFibo2 node (newer ComfyUI than the image pins) and its model."""
-    try:info=comfy_info() if info is None else info
-    except Exception:return False
-    return 'TextEncodeFibo2' in info and FIBO_UNET in comfy_choices(info,'UNETLoader','unet_name')
-
 def klein_available(info=None):
     """FLUX.2 [klein] 4B: native Flux 2 nodes plus its model, text encoder and VAE."""
     try:info=comfy_info() if info is None else info
@@ -318,10 +317,10 @@ def klein3_available(info=None):
 
 def frame_editor(info=None):
     """Which image editor edits frames and pictures: FLUX.3 [image klein] when its optional download is there, else
-    FLUX.2 [klein] 4B (the default), else FIBO 2, else none."""
+    FLUX.2 [klein] 4B (the default), else none."""
     try:info=comfy_info() if info is None else info
     except Exception:return None
-    return 'klein3' if klein3_available(info) else 'klein' if klein_available(info) else 'fibo' if fibo_available(info) else None
+    return 'klein3' if klein3_available(info) else 'klein' if klein_available(info) else None
 
 # First-frame edit instructions per operation; the painted area (when given) is the only part that changes.
 EDIT_OPS={'replace':'Replace {what} with {target}.','remove':'Remove {what} and fill the space naturally with what would be behind it.',
@@ -601,6 +600,7 @@ def planning(job):
     if job['request']['mode']=='sharpness':
         # Little More Sharpness uses one fixed caption and no references: nothing to review, render directly.
         plan=fixed_plan('sharpness',LMS_CAPTION,'Sharpen the selected interval with the LMS LoRA; motion, framing and timing come from the source video.')
+        if upscale_method(job['options'])=='regenerate':plan['regenerate_prompt']=regenerate_scene_prompt(job)
         save(job,plan=plan,status='queued_render',stage='queued',progress=0,message='Queued for sharpening',step=None,step_total=None);return
     pictures,guide,metadata=prepare_evidence(job);r=job['request'];slots=[slot for slot,_ in pictures]
     work=job_path(job['id'])
@@ -706,7 +706,7 @@ def planning(job):
     plan=validate_plan(plan,slots,job['options'],r)
     if (plan['adapt_reference'] or plan['preparation_recommended']) and not frame_editor():
         plan['adapt_reference']=plan['preparation_recommended']=False
-        plan['warnings'].append('Reference adaptation needs an image editor (FLUX Klein or FIBO), not installed on this ComfyUI; the original pictures are used.')
+        plan['warnings'].append('Reference adaptation needs an image editor (FLUX.3 / FLUX.2 Klein), not installed on this ComfyUI; the original pictures are used.')
     plan['prompt']=add_marks(plan['prompt'],r,plan['representation'])
     if plan['representation'] in ('mask','2d') and not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
     save(job,plan=plan,prompt_evidence=evidence,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the VLM plan before generating.',step=None,step_total=None)
@@ -729,23 +729,24 @@ def adapt_request(job):
         described={str(x.get('slot')):x.get('description','') for x in plan.get('picture_roles',[])}
         default=character_figure_instruction(len(selected),described.get(str(slots[0]),''))
     else:default=plan['adapt_instruction']
-    # The editor is part of the key: a reference made by FIBO is not reused once Klein is installed.
-    h=hashlib.sha256(f"v3|{frame_editor() or 'fibo'}|{'figure' if figure else 'frame'}|{override or ('' if figure else default)}".encode())
+    # The editor is part of the key: a reference made by one editor is not reused by a different editor.
+    h=hashlib.sha256(f"v3|{frame_editor() or 'unavailable'}|{'figure' if figure else 'frame'}|{override or ('' if figure else default)}".encode())
     for p in selected:file_digest(INPUT/p,h)
     h.update(f"|{job['request']['video']['start_seconds']}|".encode());file_digest(INPUT/assets['video'],h)
     return {'figure':figure,'selected':selected,'instruction':override or default,'default_instruction':default,'key':h.hexdigest()[:32]}
 
 def adapt_prepare(job,runner,regenerate=False):
-    """The prepared reference for a job (Klein or FIBO), from the cache when the same pictures (and instruction) were prepared before.
+    """The prepared reference for a job (FLUX Klein), from the cache when the same pictures (and instruction) were prepared before.
     `runner` is the job whose status the ComfyUI run reports to. Copies it to the job's input and preview."""
+    build={'klein3':klein3_graph,'klein':klein_graph}.get(frame_editor())
+    if build is None:raise ValueError('Reference adaptation requires FLUX.3 or FLUX.2 Klein')
     req=adapt_request(job);inp=INPUT/'henge'/job['id'];inp.mkdir(parents=True,exist_ok=True);ADAPT_CACHE.mkdir(parents=True,exist_ok=True)
     cached=ADAPT_CACHE/f"{req['key']}.png"
     if regenerate or not cached.is_file():
         seed=int(time.time())%2**31 if regenerate else int(job['options'].get('seed',42))
         frame=inp/'adapt_source.png';run(['ffmpeg','-v','error','-ss',str(job['request']['video']['start_seconds']),'-i',str(INPUT/job['assets']['video']),'-frames:v','1','-threads','1','-y',str(frame)])
         frame=frame.relative_to(INPUT).as_posix()
-        # The same editor as the edit modal: FLUX.3 / FLUX.2 [klein] when installed, else FIBO 2.
-        build={'klein3':klein3_graph,'klein':klein_graph}.get(frame_editor(),fibo_graph)
+        # The same editor as the edit modal: FLUX.3 / FLUX.2 [klein] when installed.
         if req['figure']:graph=build(req['selected'][0],req['selected'][1:]+[frame],req['instruction'],seed)
         else:graph=build(frame,req['selected'],req['instruction'],seed)
         made=image_from_output(execute_graph(runner,graph,'reference_edit'),inp/'adapt_new.png');shutil.move(made,cached)
@@ -764,8 +765,39 @@ def adapt_state(job):
     job=load(job['id'])
     return {'enabled':True,'figure':req['figure'],'instruction':req['instruction'],'default_instruction':req['default_instruction'],'ready':cached,'preview_url':job.get('adapted_preview_url') if cached else None}
 
+def regenerate_requirements(info):
+    required=('MiniMaxH3LatentUpscaleWithModel','LatentUpscaleModelLoader','ManualSigmas','BasicGuider')
+    missing_nodes=[name for name in required if name not in info]
+    missing_models=[]
+    for loader,key,name in [('UNETLoader','unet_name',REGENERATE['base']),('LoraLoaderModelOnly','lora_name',REGENERATE['turbo']),('LoraLoaderModelOnly','lora_name',REGENERATE['refiner']),('LatentUpscaleModelLoader','model_name',REGENERATE['upscaler'])]:
+        names=set(comfy_choices(info,loader,key))
+        if workflows.resolve_model(loader,name,names) not in names:missing_models.append(name)
+    message='Open-H3 Regenerate needs the updated ComfyUI worker and regenerate model profile'
+    if missing_nodes:message+='; missing nodes: '+', '.join(missing_nodes)
+    if missing_models:message+='; missing models: '+', '.join(missing_models)
+    return {'available':not missing_nodes and not missing_models,'missing_nodes':missing_nodes,'missing_models':missing_models,'message':message if missing_nodes or missing_models else 'Ready'}
+
+
+def regenerate_scene_prompt(job):
+    manual=job['options'].get('regenerate_prompt','').strip()
+    if manual:return manual
+    _,guide,_=prepare_evidence(job)
+    instruction=('Describe the visible scene, subjects, appearance, action, camera and lighting in these chronological video frames. '
+                 'Write one concise English paragraph for a video refinement model. Describe only visible facts; preserve the number '
+                 'of subjects and do not invent objects, identities, dialogue or scene changes. Return only the scene description.')
+    save(job,stage='vlm_regenerate',message='Describing the scene for Open-H3 refinement')
+    cfg=assistant_planner()
+    if cfg:raw=assistant.complete(cfg,instruction,guide,700)
+    else:
+        graph=plan_graph(guide.relative_to(INPUT).as_posix(),instruction,700,os.environ.get('HENGE_VLM_CLIP','qwen3.5_9b_w4a8_gptq.safetensors'))
+        raw=execute_graph(job,graph,'vlm_regenerate').get('4',{}).get('text',[''])[0]
+    text=re.sub(r'<think>.*?</think>','',raw or '',flags=re.S).strip()
+    if not text:raise ValueError('Scene description was empty; provide a refiner scene description and retry')
+    return text[:4000]
+
+
 def upscale_method(options):
-    """Sharpness above 720p: h3 | nvidia | none (older jobs only carry latent_upscale)."""
+    """Sharpness above 720p: h3 | regenerate | nvidia | none (older jobs only carry latent_upscale)."""
     return options.get('upscale_method') or ('h3' if options.get('latent_upscale',True) else 'none')
 
 CUT_MODES=('fit','every','off')
@@ -896,11 +928,18 @@ def generate(job):
         # Sharpen at half the output size, then double it (h3: learned latent upscaler + short tiled H3 refine;
         # nvidia: RTX Video Super Resolution on the frames). Both double exactly, so the output is 2x the render.
         w,h=size(short//2);W,H=w*2,h*2;upscale={'method':method,'steps':options.get('upscale_steps',1),'denoise':options.get('upscale_denoise',.15)}
-        if method=='h3':
+        if method=='regenerate':
+            status=regenerate_requirements(comfy_info())
+            if not status['available']:raise ValueError(status['message'])
+            # Native resize targets the final canvas explicitly, not an assumed 2x ratio.
+            w,h=size(768)
+            W,H=size(short)
+            upscale={'method':method,'width':W,'height':H,'model':REGENERATE['upscaler'],'steps':options.get('regenerate_steps',2),'prompt':plan.get('regenerate_prompt') or options.get('regenerate_prompt','')}
+        elif method=='h3':
             choices=comfy_choices(comfy_info(),'HengeH3LatentUpscale','model_name')
             upscale['model']=next((m for m in H3_UPSCALERS if m in choices),None)
             if not upscale['model']:raise ValueError('H3 upscale needs a latent upscaler in models/latent_upscale_models (h3_upscaler_lms_v0.1); choose NVIDIA or no upscale')
-        elif 'HengeRTXUpscale' not in comfy_info():raise ValueError('NVIDIA upscale needs the nvidia-vfx package on the ComfyUI machine; choose H3 or no upscale')
+        elif method=='nvidia' and 'HengeRTXUpscale' not in comfy_info():raise ValueError('NVIDIA upscale needs the nvidia-vfx package on the ComfyUI machine; choose H3 or no upscale')
     else:w,h=W,H
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];shots,context=plan_shots(job)
     # Marked people are followed shot by shot (comfy_nodes/henge/follow.py): the user's marks, continuity across
@@ -911,7 +950,7 @@ def generate(job):
     prompt=plan['prompt'];adapted_ref=None
     if plan['adapt_reference'] and not swap_figure:
         figure=adapt_request(job)['figure'];adapted_ref=adapt_prepare(job,job);refs.append(adapted_ref.relative_to(INPUT).as_posix())
-        if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> shows that character in humanoid form, in the starting pose of the guide; use it for body shape, limb proportions and appearance only, it does not supply motion or a background." if figure else f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
+        if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> shows that character in humanoid form, in the starting pose of the guide; use it for body shape, limb proportions and appearance only, it does not supply motion or a background." if figure else f" <Picture {len(refs)}> is the prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
     pieces=[];guide_pieces=[];previous=None;save(job,shot_urls=[],shot_plans=[])
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
@@ -1198,7 +1237,9 @@ def health():
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
-    return {'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
+    regenerate=regenerate_requirements(info)
+    upscalers['regenerate']=regenerate['available']
+    return {'regenerate':regenerate,'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -1314,7 +1355,11 @@ async def create_job(request:Request):
         r=json.loads(str(form.get('direction','{}')));options=json.loads(str(form.get('options','{}')))
         pictures={int(k.split('_')[1]):v for k,v in form.items() if re.fullmatch(r'picture_\d+',k)}
         if len(pictures)>11:raise ValueError('Attach up to 11 reference images')
-        validate_request(r,options,list(pictures));video=form.get('video')
+        validate_request(r,options,list(pictures))
+        if upscale_method(options)=='regenerate':
+            status=regenerate_requirements(comfy_info())
+            if not status['available']:raise HTTPException(409,status['message'])
+        video=form.get('video')
         if not hasattr(video,'read'):raise ValueError('Attach the guide video')
         jid=uuid.uuid4().hex;work=job_path(jid);work.mkdir();inp=INPUT/'henge'/jid;inp.mkdir(parents=True)
         async def upload(file,dest,limit):
@@ -1355,7 +1400,7 @@ async def preparation(jid:str,request:Request):
         job=load(jid)
         if job['status']!='awaiting_approval':raise HTTPException(409,'Reference preparation can only change before approval')
         plan=dict(job['plan']);enabled=body['enabled']
-        if enabled and not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FLUX Klein or FIBO), not installed on this ComfyUI')
+        if enabled and not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FLUX.3 / FLUX.2 Klein), not installed on this ComfyUI')
         if enabled and (not plan.get('adapt_picture_slots') or not plan.get('adapt_instruction','').strip()):raise HTTPException(400,'The analysis did not provide a reference preparation instruction')
         plan['adapt_reference']=enabled
         options={**job['options'],'adapt':'on' if enabled else 'off'}
@@ -1411,12 +1456,12 @@ async def convert_gif(request:Request):
 
 @app.post('/frame-edit')
 async def frame_edit(request:Request):
-    """Frame or picture edit (the edit modal): FLUX.3 / FLUX.2 [klein] when installed, else FIBO 2; returns the edited PNG.
+    """Frame or picture edit (the edit modal): FLUX.3 / FLUX.2 [klein] when installed; returns the edited PNG.
     Optional `mask` (white = paint): only that area is edited, on a crop around it, and pasted back with a soft edge, so
     the rest of the frame stays pixel-exact. `op` is replace, remove, add or free (`what` = the part, `instruction` = the
     new content or the whole request). Runs as a hidden job so it uses the same ComfyUI or serverless path as generation."""
     editor=frame_editor()
-    if not editor:raise HTTPException(409,'No image editor is installed on this ComfyUI (FLUX.2 Klein or FIBO)')
+    if not editor:raise HTTPException(409,'No image editor is installed on this ComfyUI (FLUX.3 / FLUX.2 Klein)')
     form=await request.form(max_files=13,max_fields=6,max_part_size=32*1024*1024)
     op=str(form.get('op') or 'free');what=str(form.get('what') or '').strip()[:400];instruction=str(form.get('instruction') or '').strip()
     if op not in EDIT_OPS:raise HTTPException(400,'Unknown edit')
@@ -1446,10 +1491,7 @@ async def frame_edit(request:Request):
         seed=int(time.time())%2**31
         if editor=='klein3':graph=klein3_graph(staged[0],staged[1:],text,seed)
         elif editor=='klein':graph=klein_graph(staged[0],staged[1:],text,seed)
-        else:
-            # FIBO otherwise re-poses the picture (seen with a person swap): pin <image_1>'s composition and poses.
-            refs=''.join(f' <image_{i}> is a reference.' for i in range(2,len(staged)+1))
-            graph=fibo_graph(staged[0],staged[1:],f'Edit <image_1>: {text}{refs}',seed)
+        else:raise ValueError('Frame editing requires FLUX.3 or FLUX.2 Klein')
         outputs=await asyncio.to_thread(execute_graph,job,graph,'frame_edit')
         edited=await asyncio.to_thread(image_from_output,outputs,inp/'edited_raw.png')
         with Image.open(edited) as out:
@@ -1550,7 +1592,7 @@ async def regenerate_adapted(jid:str,request:Request):
         job=load(jid)
         if job['status']!='awaiting_approval':raise HTTPException(409,'The adapted reference can only change while the plan awaits approval')
         if not (job.get('plan') or {}).get('adapt_reference'):raise HTTPException(409,'This job does not adapt the reference')
-        if not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FLUX Klein or FIBO), not installed on this ComfyUI')
+        if not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FLUX.3 / FLUX.2 Klein), not installed on this ComfyUI')
         if instruction is not None:
             options={**job['options'],'adapt_instruction':instruction.strip()}
             if not instruction.strip() or instruction.strip()==adapt_request({**job,'options':{**job['options'],'adapt_instruction':''}})['default_instruction']:options.pop('adapt_instruction')
@@ -1606,7 +1648,7 @@ def job_settings(job):
     parts=[(job.get('mode') or '').replace('_',' ').title(),'LoRA '+model.get('label',o.get('profile',''))]
     if job.get('mode')=='sharpness' and QUALITY.get(job.get('quality'),0)>UPSCALE_ABOVE:
         method=upscale_method(o)
-        parts.append({'h3':f"H3 upscale x2 ({o.get('upscale_steps',1)} steps, denoise {o.get('upscale_denoise',.15)})",'nvidia':'NVIDIA RTX VSR x2'}.get(method,'no upscale'))
+        parts.append({'h3':f"H3 upscale x2 ({o.get('upscale_steps',1)} steps, denoise {o.get('upscale_denoise',.15)})",'nvidia':'NVIDIA RTX VSR x2','regenerate':f"Open-H3 Regenerate rank16 ({o.get('regenerate_steps',2)} steps)"}.get(method,'no upscale'))
     if job.get('mode')!='sharpness':
         parts+=[f"guidance {o.get('conditioning_mode','guide').upper()}",f"turbo {TURBOS.get(o.get('turbo','dmd8'),{}).get('label',o.get('turbo'))}",f"CFG {o.get('cfg',1)}"]
         if o.get('base','h3')!='h3':parts.append(BASES.get(o['base'],{}).get('label',o['base']))

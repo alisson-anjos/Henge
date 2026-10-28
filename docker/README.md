@@ -50,11 +50,11 @@ reproducible downloads. Existing files are reused; changing the manifest does
 not silently replace installed weights. Remove/move the specific installed file
 or use a new destination when deliberately changing versions.
 
-Optional profiles are `fibo`, `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0 and
+Optional profiles are `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0 and
 Combined). Set `HENGE_MODEL_PROFILES` in an untracked `.env` beside Compose:
 
 ```dotenv
-HENGE_MODEL_PROFILES=character,fibo,sam2d,audio
+HENGE_MODEL_PROFILES=character,klein,sam2d,audio
 ```
 
 For your own private models, override their URL (or configure `repo_id`, `filename` and `repo_type`), then add the
@@ -69,7 +69,7 @@ each model's terms; downloading does not grant additional usage rights.
 You can preview the selected downloads without fetching weights:
 
 ```sh
-python scripts/download_models.py --manifest config/model-repos.json --profiles character,fibo --dry-run
+python scripts/download_models.py --manifest config/model-repos.json --profiles character,klein --dry-run
 ```
 
 ## Persistence and shutdown

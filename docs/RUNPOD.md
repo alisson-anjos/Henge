@@ -47,7 +47,7 @@ To build your own template instead, RunPod → **My Templates → New Template**
 |---|---|
 | Container image | `ghcr.io/alisson-anjos/henge:latest` |
 | Container disk | 30 GB |
-| Volume disk | 180 GB (default profiles incl. OmniRef and FIBO) |
+| Volume disk | 180 GB (default profiles including OmniRef and Klein) |
 | Volume mount path | `/workspace` |
 | Expose HTTP ports | `8188` (add `8189` to open ComfyUI too) |
 | Expose TCP ports | `22` |
@@ -56,7 +56,7 @@ Environment variables (all optional):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,fibo,klein,sam2d,sam3d,audio` | Comma list: `character`, `omniref` (+22 GB base), `fibo`, `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0, Combined), `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with Motion Transfer v1.0 and TARA v1.0, and the Solar 4-step turbo), `klein` (FLUX.2 Klein 4B first-frame editor) |
+| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,klein,sam2d,sam3d,audio` | Comma list: `character`, `omniref` (+22 GB base), `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0, Combined), `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with Motion Transfer v1.0 and TARA v1.0, and the Solar 4-step turbo), `klein` (FLUX.2 Klein 4B first-frame editor) |
 | `HF_TOKEN` | — | Not needed for the default profiles. Only for the optional `klein3` profile (FLUX.3 [image klein], gated: accept its license at huggingface.co/black-forest-labs/flux-3-image-klein-comfy) or an override that points at a private repository |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that replaces a model URL or destination from the bundled manifest |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
@@ -90,7 +90,7 @@ The image uses PyTorch 2.14 + CUDA 13.0, so the host driver must support CUDA 13
 
 Open **Connect → HTTP 8188**: the Henge setup screen lists every model with its progress and opens the studio by
 itself when they are ready (about 10 minutes on RunPod's network). The first boot downloads ≈ 125 GB with the default profiles (H3 21 GB + H3 text encoder 27 GB + VAE
-5 GB + Qwen3.5 planner 7 GB + OmniRef 22 GB + FIBO 14 GB + SAM ≈ 4 GB + the task, turbo and Motion Transfer LoRAs);
+5 GB + Qwen3.5 planner 7 GB + OmniRef 22 GB + Klein editor weights + SAM ≈ 4 GB + the task, turbo and Motion Transfer LoRAs);
 fewer profiles download less. When ComfyUI and the UI are up, open **Connect → HTTP 8188**
 (`https://<pod-id>-8188.proxy.runpod.net`).
 

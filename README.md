@@ -72,7 +72,7 @@ ref2va or FastH3 OmniRef 8-step), CFG, Comfy Kitchen attention, auto-approve, an
 camera cuts or at a fixed length, each shot playable before rendering and downloadable when done). **Subject
 guidance**: mark people in the video and bind each to its pictures. *2D* paints each one with its color (solid
 or translucent, with a live preview on the approval screen), *3D* draws a colored body with face, and *Mask*
-regenerates only the area around them so the rest of the video stays pixel-identical. **FIBO** can redraw an
+regenerates only the area around them so the rest of the video stays pixel-identical. **FLUX Klein** can redraw an
 animal reference as an upright humanoid for a human performer. **Guide for the text encoder**: Latents + CLIP (the
 default) or latents only. **Audio**: keep the original, or keep the soundtrack H3 generates per shot.
 **New background**: a picture that follows the original camera (moving plate). Each job can be downloaded as the exact
@@ -122,7 +122,7 @@ You need a working ComfyUI (PyTorch with CUDA 13, NVIDIA driver 580+), Node.js 2
    ```sh
    /path/to/comfy/python scripts/download_models.py \
      --manifest config/model-repos.example.json --models-dir /path/to/ComfyUI/models \
-     --profiles character,motion,headswap,sharpness,fibo,klein,sam2d,audio
+     --profiles character,motion,headswap,sharpness,klein,sam2d,audio
    ```
 
    No token needed. Models you already have in ComfyUI are reused, even under another name or subfolder.
@@ -179,7 +179,7 @@ Details: [docs/RUNPOD.md](docs/RUNPOD.md).
 
 ### C. UI on your PC, GPU on RunPod Serverless
 
-The UI and bridge run on your computer; each job stage (plan, FIBO, every shot) is one request to a
+The UI and bridge run on your computer; each job stage (plan, reference editing, every shot) is one request to a
 serverless endpoint, whose workers start on demand and stop 15 s after the last request.
 
 Every step can also be done in the RunPod console, without scripts: see
@@ -358,3 +358,5 @@ All task LoRAs (Character Swap, Motion Transfer, TARA, Head Swap, Little More Sh
 ([alissonerdx](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI)). The moving plate and per-shot generated audio
 come from scripts shared by **crinklypaper** on the Banodoco Discord. Every model, library, idea and media source:
 [docs/REFERENCES.md](docs/REFERENCES.md); license texts: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Optional experimental Sharpness mode: [Open-H3 Regenerate rank-16 setup and limits](docs/open-h3-regenerate.md). Requires the updated worker and the `regenerate` model profile.

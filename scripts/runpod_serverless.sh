@@ -17,7 +17,7 @@ IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:latest}
 # free; set that order in the RunPod console or with the REST API (PATCH /v1/endpoints/<id> {"gpuTypeIds": [...]}).
 GPU=${GPU:-NVIDIA GeForce RTX 5090}
 WORKERS_MAX=${WORKERS_MAX:-2}
-# Idle workers are billed: 15 s covers back-to-back requests of one job (planning, FIBO, shots, downloads) without
+# Idle workers are billed: 15 s covers back-to-back requests of one job (planning, reference editing, shots, downloads) without
 # paying minutes after it ends. 120 s was a large part of the bill.
 IDLE_TIMEOUT=${IDLE_TIMEOUT:-15}
 id() { python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])'; }

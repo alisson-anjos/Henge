@@ -75,22 +75,18 @@ off Enhance prompt preserves the user's text.
 
 ## Automatic reference preparation (optional)
 
-FIBO is recommended when an animal reference needs to follow a human performance:
-for example, a dog with upright posture and human-compatible limbs while keeping
-its animal identity. A normal human-to-human swap does not activate preparation
-because of hair, wardrobe, makeup or skin color. The reviewed plan offers **Adapt
-reference** and **Use original image**. Preparation can also be disabled under
-Advanced. The uploaded original is retained; the prepared image is additional.
+Reference preparation uses the available FLUX Klein editor: FLUX.3 Klein when installed,
+otherwise FLUX.2 Klein. It can prepare an upright, human-compatible animal reference while
+preserving its identity. Normal human-to-human swaps do not require adaptation just because
+of hair, wardrobe, makeup or skin colour. Review the plan and choose **Adapt reference** or
+**Use original image**; the uploaded original is retained.
 
-| File / download | Destination |
-| --- | --- |
-| [FIBO 2.0 Edit Turbo INT8](https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors) | `models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors` |
-| [FIBO Qwen3-VL 4B encoder](https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/text_encoders/qwen3vl_4b_int8_convrot.safetensors) | `models/text_encoders/qwen3vl_4b_int8_convrot.safetensors` |
-| [Flux2 VAE](https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/vae/flux2-vae.safetensors) | `models/vae/flux2-vae.safetensors` |
+The `klein` and optional `klein3` profiles in `config/model-repos.example.json` list the
+required model, encoder and shared FLUX VAE. FIBO is no longer automatically selected or
+downloaded as an editor. Some shared encoder/VAE files keep their existing hosting URLs;
+they do not activate FIBO inference.
 
-See the [FIBO model card](https://huggingface.co/Comfy-Org/Fibo-2.0) for its
-license, including noncommercial restrictions. Preparation is an appearance/pose
-aid, not full temporal skeletal retargeting or a quality guarantee.
+Preparation is an appearance/pose aid, not temporal skeletal retargeting or a quality guarantee.
 
 ## Optional subject guidance
 

@@ -79,7 +79,8 @@
       "profiles": [
         "character",
         "headswap",
-        "sharpness"
+        "sharpness",
+        "regenerate"
       ],
       "note": "Optional turbo LoRA (4 steps)."
     },
@@ -208,28 +209,18 @@
       "note": "Optional turbo LoRA (4 steps): SolarRenderer 4-step converted to ComfyUI H3 keys."
     },
     {
-      "id": "fibo_diffusion_models",
-      "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors",
-      "destination": "diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors",
-      "profiles": [
-        "fibo"
-      ]
-    },
-    {
-      "id": "fibo_text_encoders",
+      "id": "klein3_text_encoder",
       "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/text_encoders/qwen3vl_4b_int8_convrot.safetensors",
       "destination": "text_encoders/qwen3vl_4b_int8_convrot.safetensors",
       "profiles": [
-        "fibo",
         "klein3"
       ]
     },
     {
-      "id": "fibo_vae",
+      "id": "flux_image_vae",
       "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/vae/flux2-vae.safetensors",
       "destination": "vae/flux2-vae.safetensors",
       "profiles": [
-        "fibo",
         "klein",
         "klein3"
       ]
@@ -336,6 +327,33 @@
         "sharpness"
       ],
       "note": "MiniMax H3 3D latent upscaler (LBH-123-AI base, MIT) fine-tuned on the LMS data, for the Sharpness H3 2K/4K upscale."
+    },
+    {
+      "id": "regenerate_fl2va",
+      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "destination": "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "profiles": [
+        "regenerate"
+      ],
+      "note": "Optional FL2VA base for the separate Open-H3 Regenerate refinement stage."
+    },
+    {
+      "id": "regenerate_refiner_rank16",
+      "url": "https://huggingface.co/Kijai/MiniMax-H3-experimental/resolve/f5c3b1d5a63e008a691fca1b6096fd57a5307536/loras/minimax_h3_open_regenerate_2k_refiner_rank_16_bf16.safetensors",
+      "destination": "loras/henge/minimax_h3_open_regenerate_2k_refiner_rank_16_bf16.safetensors",
+      "profiles": [
+        "regenerate"
+      ],
+      "note": "Kijai rank-16 refiner ONLY. LMS and turbo are not merged into this file."
+    },
+    {
+      "id": "regenerate_native_upscaler",
+      "url": "https://huggingface.co/LBH-123-AI/Minimax_h3_latent_Upscaler/resolve/3f941d5d182014dd5c0a5e16330420ee2d4aa0c6/minimax_h3_latent_upscaler_3d_conv_v1/minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors",
+      "destination": "latent_upscale_models/minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors",
+      "profiles": [
+        "regenerate"
+      ],
+      "note": "Native ComfyUI MiniMaxH3LatentUpscaleWithModel checkpoint."
     }
   ]
 }

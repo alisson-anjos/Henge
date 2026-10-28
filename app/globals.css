@@ -611,7 +611,7 @@ img{display:block;max-width:100%}
 .assistant-panel.expanded .assistant-results img{max-width:560px}
 @media(max-width:560px){.assistant-panel.expanded{left:8px;right:8px;width:auto;height:calc(100vh - 90px)}}
 .shot-redo{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:0 4px}.shot-redo:hover{color:var(--accent)}
-.trim-overlay{position:fixed;inset:0;z-index:55;display:grid;place-items:center;padding:16px;background:rgb(var(--n-080706-rgb) / 0.85);backdrop-filter:blur(8px)}
+.trim-overlay{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:16px;background:rgb(var(--n-080706-rgb) / 0.85);backdrop-filter:blur(8px)}
 @media(max-width:700px){.controls>.mode-picker{grid-column:1/-1}}
 
 /* Visual polish: keep the working surface compact and make the responsive layout intentional. */
@@ -911,3 +911,11 @@ img{display:block;max-width:100%}
 .seed-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:end;margin:16px 0}.seed-control label{display:grid;gap:6px;font-size:12px;color:var(--muted)}.seed-control input{width:100%;min-width:0;padding:10px;background:var(--n-17191b);color:var(--n-eeeeee);border:1px solid var(--n-36383b);border-radius:8px}.seed-control small{grid-column:1/-1;color:var(--muted);line-height:1.5}
 
 @media(max-width:700px){.topbar-end .guide-link{display:flex;padding:0 8px;min-height:34px}}
+/* Keep frame selection and edit fields together, beside the previews on portrait desktop layouts. */
+.first-frame-form{display:grid;gap:12px;min-width:0;align-content:start}
+.first-frame-panes{align-items:start}
+.first-frame-panes figure{align-content:start;grid-template-rows:auto minmax(0,auto)}
+.first-frame-paint{flex:none;min-width:0;max-height:var(--ff-h)}
+.first-frame-modal .first-frame-controls{min-width:0}
+.molmo-settings .select-button{width:100%}
+.generation-options .regenerate-scene{grid-column:1/-1}.regenerate-scene textarea{width:100%;min-width:0;padding:10px;border-radius:8px;background:var(--n-17191b);color:var(--n-eeeeee);border:1px solid var(--n-36383b);font:inherit;resize:vertical}

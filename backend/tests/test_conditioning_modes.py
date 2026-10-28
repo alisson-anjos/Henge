@@ -15,7 +15,7 @@ class ConditioningModes(unittest.TestCase):
   self.assertNotIn('21',h3_graph(*args))
   g=h3_graph(*args,conditioning_mode='tara',context_video='context.mp4',context_count=5,context_prompt=False)
   self.assertEqual(g['9']['inputs']['prompt'],'  raw text  ')
- def test_native_branch_has_no_addguide_and_keeps_picture_roles(self):
+ def test_native_branch_uses_guide_only_for_history_and_keeps_picture_roles(self):
   source=Path(__file__).resolve().parents[1]/'comfy_nodes/henge/__init__.py'
   cls=next(n for n in ast.parse(source.read_text()).body if isinstance(n,ast.ClassDef) and n.name=='HengeH3Conditioning')
   calls=[]
@@ -32,7 +32,9 @@ class ConditioningModes(unittest.TestCase):
    refs=[torch.zeros(1,64,64,3),torch.ones(1,64,64,3)];video=torch.zeros(5,64,128,3)
    args=dict(clip=object(),vae=object(),guide=video,references=refs,prompt='test',width=128,height=64,length=5,clip_video_fps=2,reference_size='match',guide_context=True,audio_conditioning=False,audio_video='',context_images=torch.ones(5,64,128,3),context_count=5)
    scope['HengeH3Conditioning']().encode(**args,conditioning_mode='tara',reference_scale=.5)
-   self.assertEqual([name for name,_ in calls],['native'])
+   self.assertEqual([name for name,_ in calls],['native','guide'])
+   self.assertEqual(calls[1][1]['frame_idx'],0)
+   self.assertEqual(len(calls[1][1]['image']),5)
    kw=calls[0][1];self.assertEqual(tuple(kw['ref_videos']['ref_video_1'].shape),(5,32,64,3));self.assertIs(kw['ref_images']['ref_image_1'],refs[0]);self.assertEqual(len(kw['ref_images']),3)
    calls.clear();scope['HengeH3Conditioning']().encode(**args)
    self.assertEqual([name for name,_ in calls],['clip_context','native','guide','guide'])
@@ -57,7 +59,7 @@ class PreparationChoice(unittest.TestCase):
   import server
   job={'id':'a'*32,'status':'awaiting_approval','options':{'adapt':'auto'},'plan':{'adapt_reference':True,'prompt':'original text','adapt_picture_slots':[1],'adapt_instruction':'Prepare upright dog'}}
   def save(current,**patches):current.update(patches);return current
-  with patch.object(server,'load',return_value=job),patch.object(server,'save',side_effect=save),patch.object(server,'fibo_available',return_value=True):
+  with patch.object(server,'load',return_value=job),patch.object(server,'save',side_effect=save),patch.object(server,'frame_editor',return_value='klein3'):
    client=TestClient(server.app)
    for enabled in [False,True]:
     result=client.post('/jobs/'+job['id']+'/preparation',json={'enabled':enabled})
@@ -69,6 +71,6 @@ class PreparationChoice(unittest.TestCase):
   from fastapi.testclient import TestClient
   import server
   job={'id':'b'*32,'status':'awaiting_approval','options':{'adapt':'auto'},'plan':{'adapt_reference':False,'prompt':'p','adapt_picture_slots':[1],'adapt_instruction':'Prepare upright dog'}}
-  self.assertFalse(server.fibo_available({'UNETLoader':{'input':{'required':{'unet_name':[[server.FIBO_UNET]]}}}}))
-  with patch.object(server,'load',return_value=job),patch.object(server,'save'),patch.object(server,'fibo_available',return_value=False):
+  self.assertIsNone(server.frame_editor({'TextEncodeFibo2':{},'UNETLoader':{'input':{'required':{'unet_name':[['fibo2_edit_turbo_int8_convrot.safetensors']]}}}}))
+  with patch.object(server,'load',return_value=job),patch.object(server,'save'),patch.object(server,'frame_editor',return_value=None):
    self.assertEqual(TestClient(server.app).post('/jobs/'+job['id']+'/preparation',json={'enabled':True}).status_code,409)

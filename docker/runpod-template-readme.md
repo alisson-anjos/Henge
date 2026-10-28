@@ -42,7 +42,7 @@ The prompt planner / VLM is Qwen3.5 9B (W4A8 GPTQ), running inside ComfyUI.
 | Variable | Default | Purpose |
 |---|---|---|
 | `HF_TOKEN` | — | **Not needed** for the default profiles. Only for the optional `klein3` (FLUX.3 [image klein], gated: accept its license on Hugging Face first) |
-| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,fibo,klein,sam2d,sam3d,audio` | `motion` = every Motion Transfer LoRA, FFP included; `klein` = FLUX.2 Klein 4B first-frame editor; also `solar` (~25 GB) |
+| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,klein,sam2d,sam3d,audio` | `motion` = every Motion Transfer LoRA, FFP included; `klein` = FLUX.2 Klein 4B first-frame editor; also `solar` (~25 GB) |
 | `HENGE_MODEL_OVERRIDES` | — | JSON to replace a model URL, e.g. `{"motion_transfer_tara_v1":{"url":"https://…"}}` |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |
 | `HENGE_EXPOSE_COMFY` | — | `1` also serves ComfyUI on port 8189 |

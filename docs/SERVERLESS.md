@@ -64,8 +64,7 @@ Choose the model profiles (comma list), as on a normal pod:
 | `sharpness` | Sharpness (H3 + Little More Sharpness LoRA; 2K/4K with the H3 or NVIDIA RTX upscaler) | ~1 GB (LoRA + H3 latent upscaler) |
 | `audio` | Generated audio and audio conditioning (H3 audio VAE) | ~0.3 GB |
 | `omniref` | OmniRef base | +22 GB |
-| `fibo` | Reference adaptation (FIBO 2 edit: animal to human-compatible pose) | ~14 GB |
-| `klein` | First-frame edits with FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0): replace, remove or add, optionally only in a painted area; used before FIBO when installed | ~12 GB |
+| `klein` | First-frame edits with FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0): replace, remove or add, optionally only in a painted area; also used for reference preparation | ~12 GB |
 | `klein3` | Optional: FLUX.3 [image klein], used instead of FLUX.2 [klein] when installed. **Gated**: accept the FLUX Kommunity License at [black-forest-labs/flux-3-image-klein-comfy](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN` | ~5 GB |
 | `sam2d`, `sam3d` | Subject marks: SAM 3.1 tracking (2D colors, Mask, the assistant's find people) and SAM 3D Body + MoGe (3D) | ~4 GB |
 
@@ -237,7 +236,7 @@ accepts requests signed with your API key, and that key lives only in the bridge
 Every stage of a job is one request to the endpoint:
 
 1. **Plan**: the VLM describes the pictures and writes the prompt (one request per question).
-2. **Reference preparation**: background removal, and FIBO when enabled.
+2. **Reference preparation**: background removal, and FLUX Klein when enabled.
 3. **Each shot**: one H3 render. The bridge cuts the guide into shots, sends each one with its
    references, and joins the results.
 

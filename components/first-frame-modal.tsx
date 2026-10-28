@@ -1,4 +1,5 @@
 'use client';
+import {frameEditorName} from '../lib/frame-editor';
 import {useEffect, useRef, useState} from 'react';
 import type {Language} from '../lib/design-copy';
 import type {Picture} from '../lib/media';
@@ -17,7 +18,7 @@ export async function coverFit(src: string, width: number, height: number): Prom
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(new File([blob], 'first_frame.png', {type: 'image/png'})) : reject(Error('Could not encode the frame')), 'image/png'));
 }
 
-/** The guide's first selected frame, edited with FLUX.3 / FLUX.2 [klein] (or FIBO 2) or replaced by an uploaded image. Paint a
+/** The guide's first selected frame, edited with FLUX.3 / FLUX.2 [klein] or replaced by an uploaded image. Paint a
  * mask to edit only that area; Replace, Remove, Add or a free instruction. The result is cropped and resized to the frame's
  * exact size so it can be propagated (Motion Transfer · first-frame propagate). */
 export default function FirstFrameModal({videoUrl, start, end, image, pictures, lang, onUse, onClose}: {videoUrl?: string; start?: number; end?: number; image?: File; pictures: Picture[]; lang: Language; onUse: (file: File, edit: {id: string; width: number; height: number} | null, at?: number) => void; onClose: () => void}) {
@@ -26,8 +27,8 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
   const [frame, setFrame] = useState<Image & {width: number; height: number} | null>(null);
   const [result, setResult] = useState<Image & {edit?: string} | null>(null);
   const [edits, setEdits] = useState<Edit[]>([]);
-  const [editor, setEditor] = useState<'klein3' | 'klein' | 'fibo' | null>(null);
-  const editorName = ({klein3: 'FLUX.3 Klein', klein: 'FLUX.2 Klein', fibo: 'FIBO'} as const)[editor ?? 'fibo'];
+  const [editor, setEditor] = useState<'klein3' | 'klein' | null>(null);
+  const editorName = frameEditorName(editor, tr('Image editor', 'Editor de imagem', 'Editor de imagen'));
   const [op, setOp] = useState<'replace' | 'remove' | 'add' | 'free'>('replace');
   const [what, setWhat] = useState('');
   const paint = useRef<HTMLCanvasElement>(null), drawing = useRef(false);
@@ -52,7 +53,7 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
     dialog.current?.showModal();
     // ComfyUI can take a while to list its nodes (very large models folder): ask again until the editor is known.
     let tries = 0, timer: ReturnType<typeof setTimeout> | undefined;
-    const ask = () => fetch('/api/backend/health').then(r => r.json()).then(h => {const e = h.frame_editor ?? (h.editor_ready ? 'fibo' : null); setEditor(e); if (!e && ++tries < 12) timer = setTimeout(ask, 10000);}).catch(() => {});
+    const ask = () => fetch('/api/backend/health').then(r => r.json()).then(h => {const e = h.frame_editor === 'klein3' || h.frame_editor === 'klein' ? h.frame_editor : null; setEditor(e); if (!e && ++tries < 12) timer = setTimeout(ask, 10000);}).catch(() => {});
     ask();
     fetch('/api/backend/frame-edits').then(r => r.json()).then(rows => {if (Array.isArray(rows)) setEdits(rows);}).catch(() => {});
     if (image) {
@@ -134,6 +135,7 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
       <figure><figcaption className="eyebrow muted">{image ? tr('Picture', 'Imagem', 'Imagen') : tr('Guide frame', 'Quadro do guia', 'Fotograma de la guía')}{frame ? ` · ${frame.width}×${frame.height}` : ''}</figcaption>{frame ? <div className="first-frame-paint" style={shape}><img src={frame.url} alt=""/>{editor && <canvas ref={paint} aria-label={tr('Paint the area to edit', 'Pinte a área a editar', 'Pinta el área a editar')} onPointerDown={e => {drawing.current = true; e.currentTarget.setPointerCapture(e.pointerId); stroke(e);}} onPointerMove={stroke} onPointerUp={() => {drawing.current = false;}}/>}</div> : <div className="first-frame-empty">{tr('Reading the frame…', 'Lendo o quadro…', 'Leyendo el fotograma…')}</div>}</figure>
       <figure><figcaption className="eyebrow muted">{tr('Edited', 'Editado', 'Editado')}</figcaption>{result ? <img src={result.url} alt="" style={shape}/> : <div className="first-frame-empty" style={shape}>{busy ? tr(`${editorName} is editing… (about 1 min)`, `${editorName} está editando… (cerca de 1 min)`, `${editorName} está editando… (alrededor de 1 min)`) : editor ? tr(`Edit with ${editorName} or upload an image`, `Edite com ${editorName} ou envie uma imagem`, `Edita con ${editorName} o sube una imagen`) : tr('Upload an edited image', 'Envie uma imagem editada', 'Sube una imagen editada')}</div>}</figure>
     </div>
+    <div className="first-frame-form">
     {!image && end !== undefined && end - (start ?? 0) > .1 && <label className="frame-chooser"><span className="eyebrow muted">{tr('Frame to edit', 'Quadro a editar', 'Fotograma a editar')} <b className="mono">{(at - (start ?? 0)).toFixed(2)} s</b></span>
       <input type="range" min={start ?? 0} max={Math.max(start ?? 0, end - 1 / 24)} step={1 / 24} value={at} onChange={e => chooseFrame(Number(e.target.value))}/>
       <small>{tr('Pick the frame where the subject is clearest. Generation starts at the frame you edit.', 'Escolha o quadro em que o assunto aparece melhor. A geração começa no quadro que você editar.', 'Elige el fotograma donde el sujeto se ve mejor. La generación empieza en el fotograma que edites.')}</small></label>}
@@ -152,9 +154,10 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
             {editRefs.length < 12 && <button type="button" className="edit-ref-add" onClick={() => refUpload.current?.click()}>+<span>{tr('Upload', 'Enviar', 'Subir')}</span></button>}</div>
           {editRefs.length > 0 && <small className="muted">{tr('Mention them in the edit as ', 'Cite-as na edição como ', 'Menciónalas en la edición como ')}{editRefs.map((r, i) => `image ${i + 2} (${r.label})`).join(', ')}{tr(', e.g. "his jacket from image 2".', ', p.ex. "a jaqueta da image 2".', ', p.ej. "su chaqueta de la image 2".')}</small>}
           <input hidden ref={refUpload} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e => {const files = Array.from(e.target.files ?? []); setExtraRefs(cur => [...cur, ...files.map(file => ({file, url: URL.createObjectURL(file)}))]); e.target.value = '';}}/></div>
-      </> : <small className="muted">{tr('No image editor (FLUX Klein or FIBO) is installed on this ComfyUI; upload an edited frame instead.', 'Nenhum editor de imagem (FLUX Klein ou FIBO) está instalado neste ComfyUI; envie um quadro já editado.', 'No hay editor de imagen (FLUX Klein o FIBO) en este ComfyUI; sube un fotograma editado.')}</small>}
+      </> : <small className="muted">{tr('No image editor (FLUX.3 / FLUX.2 Klein) is installed on this ComfyUI; upload an edited frame instead.', 'Nenhum editor de imagem (FLUX.3 / FLUX.2 Klein) está instalado neste ComfyUI; envie um quadro já editado.', 'No hay editor de imagen (FLUX.3 / FLUX.2 Klein) en este ComfyUI; sube un fotograma editado.')}</small>}
       {edits.length > 0 && <div className="recent-edits"><span className="eyebrow muted">{tr('Recent edits', 'Edições recentes', 'Ediciones recientes')}</span><div>{edits.map(e => <button key={e.id} title={e.instruction} aria-pressed={result?.edit === e.id} onClick={() => pick(e)}><img src={e.url} alt={e.instruction} loading="lazy"/></button>)}</div></div>}
       {error && <p className="validation" role="alert">{error}</p>}
+    </div>
     </div>
     </div>
       <input hidden ref={upload} type="file" accept="image/jpeg,image/png,image/webp" onChange={e => {const file = e.target.files?.[0]; if (file) setResult({blob: file, url: URL.createObjectURL(file)}); e.target.value = '';}}/>
