@@ -46,3 +46,26 @@ Downloads in `D:\Downloads\henge_molmo2_test\`:
 Settings → Molmo2 already offers on/off, checkpoint folder, warm retention and image detail.
 Disabling Molmo preserves manual marks and SAM; planning falls back to sampled-frame analysis.
 Studio routing to the worker-side Molmo node remains unimplemented.
+
+## Motion Transfer comparison
+
+Job `48cf089c954041caa3e344cfc96d4bd8`, completed.
+Same first-shot interval, references, descriptions, seed, steps, and 100% opacity as above.
+Changed profile to Motion Transfer v1.0 with Guide Latents and its training adapter;
+changed the prompt trigger from `body_swap:` to `motion_transfer:`.
+Verified the graph's guide method, opacity and LoRA chain before sampling.
+The volume uses `henge/motion_10500.safetensors`, the mapped legacy local alias
+of published `minimax_h3_motion_transfer_v1.0_ref2va.safetensors`.
+
+Visual review at 0.4, 1.8 and 3.1 seconds: all three coloured silhouettes are filled,
+but reference assignment remains incorrect. The left/green subject resembles Picture 2
+(beard and aviator glasses), while the central/purple subject wears Picture 3's cap.
+The graph lists prepared references in 1, 2, 3 order; HengeLoadShot preserves this order
+and HengeH3Conditioning enumerates them in that same order. No list permutation
+was found in this code path. This does not establish why the model confuses bindings.
+
+Downloads:
+- `maverick_motion_transfer_100pct_shot1.mp4`
+- `maverick_character_vs_motion_100pct.mp4` (Character Swap left / Motion Transfer right)
+
+User feedback on the TARA join preview: the version without crossfade appears better.
