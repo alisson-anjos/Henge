@@ -1,8 +1,9 @@
 # Finding people with Molmo2 (optional, local)
 
 Henge can use [Molmo2](https://huggingface.co/collections/allenai/molmo2) on the bridge machine to find people
-in the guide video and propose the marks that SAM tracks. It never runs on the generation backend: it is a
-separate Python environment, started per request and closed after it, so H3 and SAM never share its weights.
+in the guide video and propose the marks that SAM tracks. The studio currently routes these tools to a separate Python environment on the bridge machine.
+By default it unloads after each request; settings can keep it warm. A worker-side `HengeMolmo` node
+is available as groundwork, but routing studio tools to it is not implemented yet.
 
 Two tools (studio assistant and MCP):
 
@@ -37,3 +38,14 @@ HENGE_MOLMO_MODEL=/models/Molmo2-8B-FP8
 
 `GET /assistant/pointing` reports whether it is configured. match_people takes about 50 s to load the model
 plus roughly 30 s per shot for three people.
+
+## Studio settings
+
+Open Settings → Molmo2 to enable or disable it, choose the checkpoint folder,
+set the warm retention time and select image detail. Save applies the settings.
+When disabled, planning uses sampled frames instead of a Molmo2 video caption;
+manual subject marks and SAM segmentation remain available. Molmo2-specific
+pointing, matching, video questions and suggested splits are unavailable.
+
+Suggest with Molmo is disabled during generation. Its Cancel button aborts the
+request and asks the bridge to terminate the local Molmo2 process.
