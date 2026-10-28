@@ -70,4 +70,29 @@ class AssistantTest(unittest.TestCase):
   self.assertEqual(assistant.STUDIO_NAMES&assistant.JOB_NAMES,set())
   for t in assistant.TOOLS:self.assertEqual(t['input_schema']['type'],'object')
 
+ def test_builtin_vlm_replies(self):
+  r=assistant.parse_local_reply('```json\n{"tool_calls":[{"name":"get_studio_state","input":{}},{"name":"view_frame","input":{"time":1.5}}]}\n```')
+  self.assertEqual([c['name'] for c in r['tool_calls']],['get_studio_state','view_frame'])
+  self.assertEqual(r['tool_calls'][1]['input'],{'time':1.5})
+  self.assertTrue(all(c['id'].startswith('call_') for c in r['tool_calls']))
+  r=assistant.parse_local_reply('Vou marcar agora. {"tool_calls":[{"name":"mark_subject","input":{"x":0.4,"y":0.5,"time":1,"picture_slots":[1]}}]}')
+  self.assertEqual(r['tool_calls'][0]['input']['picture_slots'],[1])
+  self.assertEqual(r['text'],'Vou marcar agora.')
+  # A missing closing brace (seen from Qwen 3.5 9B) is repaired.
+  r=assistant.parse_local_reply('Vou usar match_people. {"tool_calls": [{"name": "match_people", "input": {"people": [{"photo": "Picture 1", "picture_slots": [1]}], "apply": true}]}')
+  self.assertEqual(r['tool_calls'][0]['input']['people'][0]['photo'],'Picture 1')
+  r=assistant.parse_local_reply('Pronto, os 3 estão marcados {com cuidado}.')
+  self.assertEqual(r['tool_calls'],[]);self.assertIn('Pronto',r['text'])
+
+ def test_builtin_vlm_is_the_default_and_runs_tools(self):
+  with tempfile.TemporaryDirectory() as d:
+   self.assertEqual(assistant.load_config(Path(d)/'none.json')['provider'],'local')
+  seen=[]
+  def fake(prompt,images,tokens):
+   seen.append((prompt,images));return '{"tool_calls":[{"name":"get_studio_state","input":{}}]}'
+  with patch.object(assistant,'LOCAL_VLM',fake):
+   out=assistant.step({**assistant.DEFAULTS},[{'role':'user','text':'oi','images':['data:image/jpeg;base64,AAAA']}],lambda n,i:('',[]))
+  self.assertEqual(out['studio_calls'][0]['name'],'get_studio_state')
+  self.assertIn('get_studio_state',seen[0][0]);self.assertEqual(seen[0][1],['data:image/jpeg;base64,AAAA'])
+
 if __name__=='__main__':unittest.main()

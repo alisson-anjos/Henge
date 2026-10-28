@@ -15,12 +15,13 @@ Providers: Claude through the official Anthropic SDK, and any OpenAI-compatible 
 local servers such as LM Studio, Ollama or vLLM)."""
 import base64
 import json
+import uuid
 import re
 from pathlib import Path
 
 import requests
 
-DEFAULTS = {'provider': 'anthropic', 'model': 'claude-opus-5-5', 'base_url': '', 'api_key': '', 'effort': 'medium',
+DEFAULTS = {'provider': 'local', 'model': 'henge-vlm', 'base_url': '', 'api_key': '', 'effort': 'medium',
             'image_enabled': False, 'image_model': 'gpt-image-2.5-flare', 'image_quality': 'medium', 'image_api_key': '',
             # Who marks people: 'sam' = SAM 3.1 detects and numbers them (find_people); 'vision' = the assistant points at
             # them with its own vision. Either way SAM segments and tracks from those points in every frame at generation.
@@ -28,7 +29,11 @@ DEFAULTS = {'provider': 'anthropic', 'model': 'claude-opus-5-5', 'base_url': '',
             # Who writes the prompts (picture descriptions, the plan, the H3 prompt): 'local' = the Qwen planner in
             # ComfyUI; 'assistant' = this provider and model.
             'planner': 'local'}
-PROVIDERS = ('anthropic', 'openai')
+PROVIDERS = ('anthropic', 'openai', 'local')
+# The built-in provider: the planner VLM (Qwen 3.5 9B) on the same ComfyUI / serverless path, so the assistant works
+# without any API key. The bridge sets LOCAL_VLM(prompt, image_relative_path_or_None, max_tokens) -> text.
+LOCAL_MODEL = 'henge-vlm'
+LOCAL_VLM = None
 
 SYSTEM = """You are the Henge studio assistant. Henge turns a guide video plus reference pictures into a new video with MiniMax H3. You operate the studio for the user: you see its state, look at frames, mark people, set options and start generations. The user watches the screen change as you work.
 
@@ -43,7 +48,7 @@ TARA (method) was trained without color marks: with TARA use only original or ma
 
 How to work:
 1. Read the studio state. If the guide video or the pictures are missing, ask the user to attach them in the chat or in the studio. Chat videos are automatically loaded as the guide and chat images marked as generation references as reference Pictures in attachment order. Images the user marks as explanation (a frame with people numbered or circled, a sketch) are for you only: they are never Pictures; use them to understand who is who and where, then mark the real guide frames yourself.
-2. Look before you act: view_pictures to see the references, view_frame or find_people to see the video.
+2. Look before you act: view_pictures to see the references; ask_video (local Molmo2, watches the whole clip) to understand the video, then view_frame or find_people for single moments. When the user gives a photo of each person to replace (an explanation image of the performer, or a Picture that shows the same person), prefer match_people: it finds every person in every shot with local Molmo2 and marks them, one subject per person bound to its picture_slots; check its previews and fix a wrong or missing mark with mark_subject. Optional point_video uses local Molmo2 to propose marks from a target description. Call it per camera shot, inspect the returned preview points and use mark_subject to bind approved points to Pictures. Its object IDs are not global identities or Picture numbers. If they are unavailable, keep the existing manual/SAM marking workflow.
 3. To bind people: first view_frame at a few times (start, middle, end) to learn who appears when, then call find_people at a time where everyone you need is visible and check that each number really is the person you mean (not a background figure) before marking; when the video has camera cuts, run find_people once per moment (after each cut) and mark each performer there too; before generating, read get_studio_state and confirm every subject has one mark per moment it appears and no performer has two subjects; it returns the frame with numbered people. Then mark_subject each person you need, with the matching picture slots. Marks must be inside the selected interval.
 4. Choose the guide: several people -> 2d (or mask to keep the scene untouched); one person -> original is fine, mask keeps the scene. If find_people fails with two or more people, do not fall back to original silently: say so and ask the user to mark them with 'Mark in video' (or retry), because with original the model can swap who becomes whom.
 5. Write the prompt with set_prompt only when the user asked for something the mode needs (motion and swap use the user's request; headswap and sharpness ignore it). Refer to pictures as @Picture1, @Picture2.
@@ -69,6 +74,12 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
     {'name': 'view_frame', 'description': 'See one frame of the guide video at a time in seconds (within the selected interval). grid=true draws a coordinate grid (x and y from 0 to 1, a line every 0.1) to read positions for mark_subject.',
      'input_schema': {'type': 'object', 'properties': {'time': {'type': 'number'}, 'grid': {'type': 'boolean'}}, 'required': ['time'], 'additionalProperties': False}},
+    {'name': 'point_video', 'description': 'Use optional local Molmo2 to locate described people or objects in ONE guide shot (at most 30 seconds). Returns time-indexed normalized points and preview frames, not SAM masks. Inspect proposals, then use mark_subject with x/y/time and the correct Picture slots; reuse the same subject for more marks. Object IDs are local to this query and are not Picture IDs. Do not infer identity across camera cuts. Never claim all frames are segmented until SAM tracking has run.',
+     'input_schema': {'type': 'object', 'properties': {'query': {'type': 'string', 'description': 'Precise visual target, preferably an English pointing/tracking request'}, 'start': {'type': 'number'}, 'end': {'type': 'number'}}, 'required': ['query', 'start', 'end'], 'additionalProperties': False}},
+    {'name': 'ask_video', 'description': 'Ask local Molmo2 a question about the guide video: it watches the whole interval with timestamps (frames you see with view_frame are single moments). Use it whenever you need to understand the video: a caption or timeline, how many people and where, who does or says what and when, camera moves and cuts, where an action starts or ends. Answers in text; timestamps are seconds from start. Changes nothing.',
+     'input_schema': {'type': 'object', 'properties': {'question': {'type': 'string'}, 'start': {'type': 'number'}, 'end': {'type': 'number'}}, 'required': ['question'], 'additionalProperties': False}},
+    {'name': 'match_people', 'description': 'Find people from their photos in EVERY shot of the selected interval (local Molmo2; cuts are detected) and mark them: one subject per person, one mark per shot where they appear, bound to picture_slots; SAM then tracks from the marks. photo is the exact file name of an explanation image from the chat, or "Picture N" for an attached Picture showing that same person. A person is only marked in a shot when found in two of its three keyframes and a reverse check agrees, so a missing shot means not found. apply=false only returns the proposals. Takes about a minute per shot; returns one preview per shot.',
+     'input_schema': {'type': 'object', 'properties': {'people': {'type': 'array', 'minItems': 1, 'maxItems': 6, 'items': {'type': 'object', 'properties': {'photo': {'type': 'string'}, 'picture_slots': {'type': 'array', 'items': {'type': 'integer'}}, 'label': {'type': 'string'}}, 'required': ['photo', 'picture_slots'], 'additionalProperties': False}}, 'start': {'type': 'number'}, 'end': {'type': 'number'}, 'apply': {'type': 'boolean'}}, 'required': ['people'], 'additionalProperties': False}},
     {'name': 'find_people', 'description': 'Detect and number every person (or animal) in the guide frame at a time. Returns the frame with numbers drawn on each one; use the numbers with mark_subject.',
      'input_schema': {'type': 'object', 'properties': {'time': {'type': 'number'}, 'kind': {'type': 'string', 'enum': ['person', 'animal']}}, 'required': ['time'], 'additionalProperties': False}},
     {'name': 'set_mode', 'description': 'Switch the studio mode.',
@@ -374,6 +385,8 @@ def list_models(saved: dict, draft: dict) -> list:
     key = (draft.get('api_key') or '').strip()
     if not key and provider == saved['provider'] and base_url == saved['base_url']:
         key = saved['api_key']
+    if provider == 'local':
+        return [{'id': LOCAL_MODEL, 'name': 'Henge VLM (Qwen 3.5 9B, built-in)'}]
     if provider == 'anthropic':
         import anthropic
         hint = key_hint(provider, key)
@@ -417,6 +430,111 @@ def _call_openai(cfg: dict, messages: list) -> dict:
     return {'text': (msg.get('content') or '').strip(), 'tool_calls': calls, 'native': None}
 
 
+# --- Built-in VLM (no native tool calling): tools are described in the prompt and called with a JSON object ---
+
+LOCAL_PROTOCOL = """
+
+You are running on the built-in Henge VLM. You have no native tool calls. To use tools, reply with ONLY one JSON
+object and nothing else:
+{"tool_calls": [{"name": "<tool name>", "input": {<arguments matching its parameters>}}]}
+You may call several tools at once. When you need no tool, reply in plain text to the user, in the user's language.
+Never invent tool results or the studio state: at the start of every new user request call get_studio_state first.
+Refer to pictures as "Picture N". The text you give set_prompt is always in English, whatever language the user
+speaks. Tools:
+"""
+
+
+def _tool_line(t: dict) -> str:
+    props = t['input_schema'].get('properties', {}); req = set(t['input_schema'].get('required', []))
+    args = ', '.join(f"{k}{'' if k in req else '?'}: {v.get('type', 'any')}" for k, v in props.items())
+    return f"- {t['name']}({args}): {t['description'][:300]}"
+
+
+def _local_images(messages: list, limit: int = 4) -> list:
+    """The newest images (from the last user or tool turn that has any), at most `limit`."""
+    for m in reversed(messages):
+        urls = m.get('images') or [u for r in m.get('results', []) for u in r.get('images') or []]
+        if urls:
+            return urls[-limit:]
+    return []
+
+
+def _local_prompt(cfg: dict, messages: list) -> str:
+    lines = [system_for(cfg) + LOCAL_PROTOCOL + '\n'.join(_tool_line(t) for t in tools_for(cfg)), '', 'Conversation so far:']
+    for m in messages[-24:]:
+        if m['role'] == 'user':
+            lines.append('USER: ' + (m.get('text') or '') + (f" [{len(m['images'])} image(s) attached]" if m.get('images') else ''))
+        elif m['role'] == 'assistant':
+            calls = m.get('tool_calls') or []
+            lines.append('ASSISTANT: ' + (json.dumps({'tool_calls': [{'name': c['name'], 'input': c['input']} for c in calls]}) if calls else (m.get('text') or '')))
+        elif m['role'] == 'tool':
+            for r in m['results']:
+                lines.append(f"TOOL {r['name']}: " + ('ERROR: ' if r.get('is_error') else '') + (r.get('text') or 'done')[:2000]
+                             + (f" [{len(r['images'])} image(s)]" if r.get('images') else ''))
+    lines.append('ASSISTANT:')
+    return '\n'.join(lines)
+
+
+def repair_json(text: str) -> str:
+    """Close the brackets a small model forgot ('...true}]}' for '...true}}]}'): a closer that does not match the open
+    bracket first closes the inner ones; missing closers are added at the end."""
+    out, stack, quoted, escaped = [], [], False, False
+    for ch in text:
+        if quoted:
+            out.append(ch); escaped = ch == '\\' and not escaped
+            if ch == '"' and not escaped: quoted = False
+            if ch != '\\': escaped = False
+            continue
+        if ch == '"': quoted = True
+        elif ch in '{[': stack.append(ch)
+        elif ch in '}]':
+            want = '{' if ch == '}' else '['
+            while stack and stack[-1] != want:
+                out.append('}' if stack.pop() == '{' else ']')
+            if stack: stack.pop()
+        out.append(ch)
+    out += ['}' if b == '{' else ']' for b in reversed(stack)]
+    return ''.join(out)
+
+
+def parse_local_reply(text: str) -> dict:
+    """The built-in VLM's reply -> {'text', 'tool_calls'}: a JSON object with tool_calls (bare or in a code fence),
+    else plain text."""
+    clean = re.sub(r'^```(?:json)?\s*|\s*```$', '', text.strip())
+
+    def calls_in(candidate: str) -> list:
+        for attempt in (candidate, repair_json(candidate)):
+            try:
+                data = json.loads(attempt)
+            except json.JSONDecodeError:
+                continue
+            calls = data.get('tool_calls') if isinstance(data, dict) else None
+            if isinstance(calls, list):
+                return [{'id': 'call_' + uuid.uuid4().hex[:12], 'name': str(c.get('name')), 'input': c.get('input') if isinstance(c.get('input'), dict) else {}}
+                        for c in calls if isinstance(c, dict) and c.get('name')]
+        return []
+
+    start = clean.find('{')
+    while start >= 0:
+        depth, end = 0, len(clean)
+        for i in range(start, len(clean)):
+            depth += {'{': 1, '}': -1}.get(clean[i], 0)
+            if depth == 0:
+                end = i + 1; break
+        # A balanced object, or (a forgotten brace) the rest of the reply, repaired.
+        out = calls_in(clean[start:end]) or (calls_in(clean[start:]) if end != len(clean) else [])
+        if out:
+            return {'text': clean[:start].strip(), 'tool_calls': out}
+        start = clean.find('{', start + 1)
+    return {'text': text.strip(), 'tool_calls': []}
+
+
+def _call_local(cfg: dict, messages: list) -> dict:
+    if LOCAL_VLM is None:
+        raise RuntimeError('The built-in VLM is not available on this bridge')
+    return {**parse_local_reply(LOCAL_VLM(_local_prompt(cfg, messages), _local_images(messages), 2048)), 'native': None}
+
+
 def complete(cfg: dict, instruction: str, image: Path | None = None, max_tokens: int = 2048) -> str:
     """One planner request (no tools): an instruction and an optional image, answered with plain text. Used when the
     assistant's model writes the prompts instead of the local planner."""
@@ -426,6 +544,10 @@ def complete(cfg: dict, instruction: str, image: Path | None = None, max_tokens:
         data = (mime, base64.b64encode(image.read_bytes()).decode())
     # Reasoning models spend part of the budget thinking: never give them less than 4096 tokens.
     budget = max(max_tokens, 4096)
+    if cfg['provider'] == 'local':
+        if LOCAL_VLM is None:
+            raise RuntimeError('The built-in VLM is not available on this bridge')
+        return LOCAL_VLM(instruction, [jpeg_data_url(image)] if image is not None else [], budget).strip()
     if cfg['provider'] == 'anthropic':
         import anthropic
         client = anthropic.Anthropic(api_key=cfg['api_key'] or None, **({'base_url': cfg['base_url']} if cfg['base_url'] else {}))
@@ -452,6 +574,8 @@ def call_model(cfg: dict, messages: list) -> dict:
     messages = repair_tool_history(messages)
     if cfg['provider'] == 'anthropic':
         return _call_anthropic(cfg, messages)
+    if cfg['provider'] == 'local':
+        return _call_local(cfg, messages)
     return _call_openai(cfg, messages)
 
 

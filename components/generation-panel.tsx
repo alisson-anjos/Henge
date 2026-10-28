@@ -27,6 +27,10 @@ const relativeTime = (created: number, lang: Language) => {
   return new Date(created * 1000).toLocaleDateString(lang);
 };
 const MASK_DEFAULTS = {threshold: .5, shape: 'box', padding: .15, expand: 16, fill_holes: true, temporal_expand: 2, blockify: 0, invert: false, strength: 1};
+// Blur of the source person in what the model sees (BFS source blur): '<region> (<what stays sharp>)'.
+const SOURCE_BLUR_REGIONS = ['face', 'head + hands', 'person', 'masked area'] as const;
+const SOURCE_BLUR_SHARP = ['keep mouth', 'keep lips + tongue', 'mouth too'] as const;
+const SOURCE_BLUR = ['off', ...SOURCE_BLUR_SHARP.flatMap(k => SOURCE_BLUR_REGIONS.map(r => `${r} (${k})`))];
 const SETTINGS_KEY = 'henge-generation-settings';
 const SELECTED_KEY = 'henge-selected-job';
 /** Generation options (as sent to the bridge, exported or stored with a job) -> panel control values. */
@@ -47,6 +51,7 @@ function normalizeSettings(o: Record<string, unknown>) {
     mask: {...MASK_DEFAULTS, ...(typeof o.mask === 'object' && o.mask ? o.mask as Partial<typeof MASK_DEFAULTS> : {})},
     cfg: num(o.cfg, 1, 12, 1),
     structureCfg: num(o.structure_cfg, 1, 3, 1),
+    regionalAttention: typeof o.regional_attention === 'object' && o.regional_attention !== null && (o.regional_attention as Record<string, unknown>).enabled === true,
     base: o.base === 'omniref' ? 'omniref' : 'h3',
     loraStrength: num(o.lora_strength, 0, 2, 1),
     upscaleMethod: (['h3', 'nvidia', 'none'] as const).find(m => m === o.upscale_method) ?? (o.latent_upscale === false ? 'none' : 'h3'),
@@ -55,6 +60,8 @@ function normalizeSettings(o: Record<string, unknown>) {
     turbo: typeof o.turbo === 'string' ? o.turbo : 'dmd8',
     prepareReferences: o.prepare_references !== false,
     attention: o.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention',
+    sourceBlur: SOURCE_BLUR.includes(o.source_blur as string) ? o.source_blur as string : 'off',
+    sourceBlurEffect: o.source_blur_effect === 'invert colours' ? 'invert colours' : 'blur',
   };
 }
 export default function GenerationPanel({onEnhanceChange, registerControls, freshRevision = 0, initialSettings = {}, onSelectJob, onShareSettings, onImportSettings, mode, request, video, pictures, background, canSubmit, lang, onResult, requestedJobId, requestedProfile}: {background?: File | null; onEnhanceChange?: (on: boolean) => void; registerControls?: (controls: PanelControls) => void; freshRevision?: number; initialSettings?: Record<string, unknown>; onSelectJob?: (request: DirectionRequest, jobId: string) => void; onShareSettings?: (options: Record<string, unknown>) => void; onImportSettings?: () => void; mode: Mode; request: DirectionRequest | null; video: File | null; pictures: Picture[]; canSubmit: boolean; lang: Language; onResult: (job: GenerationJob) => void; requestedJobId?: string | null; requestedProfile?: string | null}) {
@@ -89,6 +96,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   const setMask = (patch: Partial<typeof MASK_DEFAULTS>) => setMaskSettings(current => ({...current, ...patch}));
   const [cfg, setCfg] = useState(initial.cfg);
   const [structureCfg, setStructureCfg] = useState(initial.structureCfg);
+  const [regionalAttention, setRegionalAttention] = useState(initial.regionalAttention);
   const [base, setBase] = useState(initial.base);
   const [loraStrength, setLoraStrength] = useState(initial.loraStrength);
   const [upscaleMethod, setUpscaleMethod] = useState<'h3' | 'nvidia' | 'none'>(initial.upscaleMethod);
@@ -97,14 +105,16 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   const [turbo, setTurbo] = useState(initial.turbo);
   const [prepareReferences, setPrepareReferences] = useState(initial.prepareReferences);
   const [attention, setAttention] = useState(initial.attention);
+  const [sourceBlur, setSourceBlur] = useState(initial.sourceBlur);
+  const [sourceBlurEffect, setSourceBlurEffect] = useState(initial.sourceBlurEffect);
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const job = jobs.find(j => j.id === selected) || null;
   function applySettings(options: Record<string, unknown>) {
     const n = normalizeSettings(options);
     setMotionModel(n.motionModel); setAdapt(n.adapt); setConditioningMode(n.conditioningMode); setGuideClip(n.guideClip); setReferenceScale(n.referenceScale); setSeed(n.seed); setSteps(n.steps);
     setClipFps(n.clipFps); setEnhancePrompt(n.enhancePrompt); setAutoApprove(n.autoApprove); setMaskSettings(n.mask); setCfg(n.cfg);
-    setStructureCfg(n.structureCfg); setBase(n.base); setLoraStrength(n.loraStrength); setUpscaleMethod(n.upscaleMethod); setUpscaleSteps(n.upscaleSteps); setUpscaleDenoise(n.upscaleDenoise);
-    setTurbo(n.turbo); setPrepareReferences(n.prepareReferences); setAttention(n.attention);
+    setRegionalAttention(n.regionalAttention); setStructureCfg(n.structureCfg); setBase(n.base); setLoraStrength(n.loraStrength); setUpscaleMethod(n.upscaleMethod); setUpscaleSteps(n.upscaleSteps); setUpscaleDenoise(n.upscaleDenoise);
+    setTurbo(n.turbo); setPrepareReferences(n.prepareReferences); setAttention(n.attention); setSourceBlur(n.sourceBlur); setSourceBlurEffect(n.sourceBlurEffect);
   }
   const modeLabel = (m: string) => ({swap: tr('Character Swap', 'Troca de personagem', 'Cambio de personaje'), motion: tr('Motion Transfer', 'Transferência de movimento', 'Transferencia de movimiento'), headswap: 'Head Swap', sharpness: tr('Sharpness', 'Nitidez', 'Nitidez')} as Record<string, string>)[m] || m;
   /** Model, turbo, method and sampling of a job, compactly, for the history list. */
@@ -160,7 +170,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
     if (!request || !video || !canSubmit || submitting) throw Error(!video ? 'Attach a guide video first' : !canSubmit ? 'The studio is not ready: check the pictures, marks and prompt' : 'A generation is being sent');
     setError(''); setSubmitting(true);
     try {
-      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({profile, adapt, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, guide_clip: guideClip, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, base, cfg, ...(activeConditioning === 'tara' ? {structure_cfg: structureCfg} : {}), ...(usesMask ? {mask: maskSettings} : {}), turbo,...(mode === 'sharpness' ? {lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise} : {})})); body.set('video', video); if (background) body.set('background', background);
+      const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({regional_attention: {enabled: regionalAttention && mode === 'swap' && activeConditioning === 'guide' && ['2d', '3d'].includes(request?.subject_guidance?.representation || ''), strength: .5, reference_budget: .35, layers: '10,25,40'}, profile, adapt, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, guide_clip: guideClip, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, ...(mode !== 'sharpness' && sourceBlur !== 'off' ? {source_blur: sourceBlur, source_blur_effect: sourceBlurEffect} : {}), base, cfg, ...(activeConditioning === 'tara' ? {structure_cfg: structureCfg} : {}), ...(usesMask ? {mask: maskSettings} : {}), turbo,...(mode === 'sharpness' ? {lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise} : {})})); body.set('video', video); if (background) body.set('background', background);
       pictures.forEach(p => body.set(`picture_${p.slot}`, p.file));
       const response = await fetch('/api/backend/jobs', {method: 'POST', body}); const result = await readJson(response);
       if (!response.ok) throw Error(result.detail || result.error || 'Unable to create job');
@@ -230,6 +240,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
     </div>
     <div className="engines" aria-label={tr('Models used', 'Modelos usados', 'Modelos usados')}><span className="control-label">{tr('Models used', 'Modelos usados', 'Modelos usados')}</span><ol>{engines.map((e, i) => <li key={e.name + e.role}><span className="mono">{i + 1}</span><small>{e.role}</small><strong>{e.name}</strong></li>)}</ol></div>
     {mode !== 'sharpness' && <label className="prompt-assist-row"><input type="checkbox" checked={autoApprove} onChange={e => setAutoApprove(e.target.checked)}/><span><strong>{tr('Auto-approve plan', 'Aprovar plano automaticamente', 'Aprobar plan automáticamente')}</strong><small>{autoApprove ? tr('Generates right after planning, using the recommended reference preparation.', 'Gera logo após o planejamento, com a preparação de referência recomendada.', 'Genera justo después de planificar, con la preparación recomendada.') : tr('Pauses so you can review the plan before generating.', 'Pausa para você revisar o plano antes de gerar.', 'Se detiene para que revises el plan antes de generar.')}</small></span></label>}
+    {mode === 'swap' && activeConditioning === 'guide' && ['2d', '3d'].includes(request?.subject_guidance?.representation || '') && <label className="prompt-assist-row"><input type="checkbox" checked={regionalAttention} onChange={e => setRegionalAttention(e.target.checked)}/><span>{tr('Focus each reference on its marked person (experimental)', 'Concentrar cada referência na pessoa marcada (experimental)', 'Concentrar cada referencia en la persona marcada (experimental)')}<small>{tr('Guides attention without locking pixels. May increase render time.', 'Orienta a atenção sem travar pixels. Pode aumentar o tempo de geração.', 'Orienta la atención sin bloquear píxeles. Puede aumentar el tiempo de generación.')}</small></span></label>}
     <details className="generation-advanced"><summary>{tr('Advanced', 'Avançado', 'Avanzado')}</summary><div className="generation-options">
       {conditioningMode === 'tara' && <label>{tr('Reference scale', 'Escala da referência', 'Escala de referencia')}<Select value={referenceScale} onChange={e => setReferenceScale(Number(e.target.value))}>{[1, .75, .5].map(n => <option key={n} value={n}>{n}</option>)}</Select></label>}
       {activeConditioning === 'tara' && ['2d', '3d'].includes(request?.subject_guidance?.representation || '') && !!request?.subject_guidance?.bindings?.length && <p className="validation" role="alert">{tr('TARA was trained without color marks. Use the Original or Mask guide with TARA, or switch to Guide Latents for 2D/3D marks.', 'O TARA foi treinado sem marcações de cor. Use o guia Original ou Mask com o TARA, ou troque para Guide Latents para marcações 2D/3D.', 'TARA se entrenó sin marcas de color. Usa la guía Original o Mask con TARA, o cambia a Guide Latents para marcas 2D/3D.')}</p>}
@@ -238,6 +249,8 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
       <label>Seed<input type="number" min="0" max="4294967295" value={seed} onChange={e => setSeed(Math.min(4294967295, Math.max(0, Math.round(Number(e.target.value) || 0))))}/></label>
       <label>Steps<input type="number" min="1" max="60" value={steps} onChange={e => setSteps(Math.min(60, Math.max(1, Math.round(Number(e.target.value) || 8))))}/></label>
       {(mode === 'swap' || mode === 'motion') && <label>{tr('Remove reference background', 'Remover fundo da referência', 'Quitar fondo de la referencia')}<input type="checkbox" checked={prepareReferences} onChange={e => setPrepareReferences(e.target.checked)}/></label>}
+      {mode !== 'sharpness' && <label>{tr('Blur the original person', 'Desfocar a pessoa original', 'Desenfocar a la persona original')}<Select value={sourceBlur} onChange={e => setSourceBlur(e.target.value)}>{SOURCE_BLUR.map(v => <option key={v} value={v}>{v === 'off' ? tr('Off', 'Desligado', 'Apagado') : v}</option>)}</Select><small>{tr("What the model sees of the guide: the face (or head + hands, or the whole person) is blurred, so it reads the pose and motion but has no face to copy. 'keep mouth' keeps lip sync; masked area = only the marked people. The output is never blurred.", "O que o modelo vê do guia: o rosto (ou cabeça + mãos, ou a pessoa inteira) fica desfocado, então ele lê pose e movimento mas não tem rosto para copiar. 'keep mouth' mantém a boca para o lip sync; masked area = só as pessoas marcadas. O resultado nunca é desfocado.", "Lo que el modelo ve de la guía: la cara (o cabeza + manos, o la persona entera) se desenfoca, así lee la pose y el movimiento pero no tiene cara que copiar. 'keep mouth' conserva la boca; masked area = solo las personas marcadas. El resultado nunca se desenfoca.")}</small></label>}
+      {mode !== 'sharpness' && sourceBlur !== 'off' && <label>{tr('Blur effect', 'Efeito', 'Efecto')}<Select value={sourceBlurEffect} onChange={e => setSourceBlurEffect(e.target.value)}><option value="blur">{tr('Blur', 'Desfoque', 'Desenfoque')}</option><option value="invert colours">{tr('Invert colours (keeps shapes and expression)', 'Inverter cores (mantém formas e expressão)', 'Invertir colores (mantiene formas y expresión)')}</option></Select></label>}
       {mode !== 'sharpness' && <label>{tr('Base model', 'Modelo base', 'Modelo base')}<Select value={base} onChange={e => {setBase(e.target.value); if (e.target.value === 'omniref') setTurbo('none');}}>{Object.entries(health?.bases || {h3: {label: 'MiniMax H3 ref2va', available: true}}).map(([id, item]) => <option key={id} value={id} disabled={!item.available}>{item.label}{item.available ? '' : tr(' · not installed', ' · não instalado', ' · no instalado')}</option>)}</Select></label>}
       {<label>Turbo LoRA<Select value={turbo} onChange={e => {const next = e.target.value; setTurbo(next); if (next === 'none' && base === 'h3') {setSteps(30); setCfg(4);} else {const recommended = health?.turbos?.[next]?.steps; if (recommended) setSteps(recommended); setCfg(1);}}}>{Object.entries(health?.turbos || {dmd8: {label: 'DMD 8-step (drbaph)', steps: 8, available: true}}).map(([id, item]) => <option key={id} value={id} disabled={!item.available}>{item.label}{item.available ? '' : tr(' · not installed', ' · não instalado', ' · no instalado')}</option>)}</Select></label>}
       {usesMask && <fieldset className="mask-settings"><legend>{tr('Latent mask', 'Máscara latente', 'Máscara latente')}</legend>
@@ -266,7 +279,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
       {mode !== 'sharpness' && <label>CLIP video FPS<Select value={activeConditioning === 'tara' ? 2 : clipFps} disabled={activeConditioning === 'tara'} onChange={e => setClipFps(Number(e.target.value))}>{[1, 2, 4, 8].map(n => <option key={n} value={n}>{n}</option>)}</Select></label>}
     </div>{onImportSettings && <button className="quiet-button import-settings-button" onClick={onImportSettings}>{tr('Import settings', 'Importar configuração', 'Importar configuración')}</button>}</details>
   </div>;
-  const shareOptions = {profile, adapt, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, guide_clip: guideClip, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise};
+  const shareOptions = {regional_attention: {enabled: regionalAttention && mode === 'swap' && activeConditioning === 'guide' && ['2d', '3d'].includes(request?.subject_guidance?.representation || ''), strength: .5, reference_budget: .35, layers: '10,25,40'}, profile, adapt, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, guide_clip: guideClip, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, source_blur: sourceBlur, source_blur_effect: sourceBlurEffect, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise};
   const storedOptions = JSON.stringify(shareOptions);
   useEffect(() => {if (restored) try {localStorage.setItem(SETTINGS_KEY, storedOptions);} catch {/* private mode */}}, [restored, storedOptions]);
   const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button>{job && !['completed', 'failed', 'cancelled'].includes(job.status) && <button className="quiet-button" disabled={submitting} onClick={() => action('cancel')}>{tr('Cancel job', 'Cancelar pedido', 'Cancelar pedido')}</button>}{job?.status === 'awaiting_approval'

@@ -579,9 +579,9 @@ img{display:block;max-width:100%}
 .history-caption .job-status.completed{color:var(--s-48d17a)}.history-caption .job-status.failed{color:var(--s-ef5a50)}
 .history-caption .job-status.running,.history-caption .job-status.awaiting_approval{color:var(--s-f0c35a)}
 .saved-directions{margin-top:8px}.saved-directions>summary{cursor:pointer;padding:12px 0;font-weight:600}.saved-directions>summary small{font-weight:400;margin-left:6px}
-.likeness-warning{margin:6px 0;padding:9px 11px;border:1px solid #f0b42966;border-radius:8px;background:#f0b4290f;color:var(--s-f0c35a);font-size:12px}
+.likeness-warning{margin:6px 0;padding:9px 11px;border:1px solid rgb(var(--s-f0c35a-rgb,240 195 90) / .4);border-radius:8px;background:rgb(var(--s-f0c35a-rgb,240 195 90) / .08);color:var(--s-f0c35a);font-size:12px}
 .adapt-plan-status{display:grid;gap:7px;margin:12px 0;padding:11px;border:1px solid var(--line);border-radius:9px;background:var(--n-111118)}.adapt-plan-status strong{font-size:12px}.adapt-plan-status.used strong{color:var(--accent)}.adapt-plan-status small{color:var(--muted);line-height:1.5}.adapt-plan-status .adapted-preview{margin-top:4px;max-width:100%;max-height:420px;border-radius:7px}.generation-job>.adapted-preview{display:none}
-.backend-banner{position:sticky;top:0;z-index:70;display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--n-2a1f0c);border-bottom:1px solid #f0b42966;color:var(--s-f0c35a);font-size:13px}
+.backend-banner{position:sticky;top:0;z-index:70;display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--n-2a1f0c);border-bottom:1px solid rgb(var(--s-f0c35a-rgb,240 195 90) / .4);color:var(--s-f0c35a);font-size:13px}
 .backend-banner .setup-dot{width:8px;height:8px;border-radius:50%;background:#f0b429;flex-shrink:0}
 .generation-card{display:flex;flex-direction:column;padding:0;overflow:hidden}
 .generation-open{display:flex;flex-direction:column;text-align:left;width:100%;background:none;border:0;padding:0;color:inherit;cursor:pointer}

@@ -7,14 +7,14 @@ import Select from './select';
 /** One studio action the assistant asked for, run here so the user sees the screen change. */
 export type StudioCall = {id: string; name: string; input: Record<string, unknown>};
 export type StudioResult = {text: string; images?: string[]; is_error?: boolean};
-export type StudioController = {state: () => Record<string, unknown>; run: (call: StudioCall) => Promise<StudioResult>; ingest: (files: File[]) => Promise<StudioResult>};
+export type StudioController = {state: () => Record<string, unknown>; run: (call: StudioCall) => Promise<StudioResult>; ingest: (files: File[]) => Promise<StudioResult>; remember?: (files: File[]) => void};
 
 type Result = {id: string; name: string; text: string; images?: string[]; is_error?: boolean};
 type Message =
   | {role: 'user'; text: string; images?: string[]}
   | {role: 'assistant'; text: string; tool_calls?: StudioCall[]; native?: unknown; native_provider?: string}
   | {role: 'tool'; results: Result[]};
-type Config = {provider: 'anthropic' | 'openai'; model: string; base_url: string; effort: string; has_key: boolean; key_hint: string; marking?: 'sam' | 'vision'; planner?: 'local' | 'assistant'};
+type Config = {provider: 'anthropic' | 'openai' | 'local'; model: string; base_url: string; effort: string; has_key: boolean; key_hint: string; marking?: 'sam' | 'vision'; planner?: 'local' | 'assistant'};
 type JobMention = {id: string; project?: string; mode?: string; status: string; created: number};
 // An image is a generation reference (loaded as a Picture) or only explains something to the assistant (a marked
 // screenshot, a sketch): those stay in the chat and never reach the studio.
@@ -22,6 +22,7 @@ type PendingAttachment = {id: string; name: string; kind: 'image' | 'video'; ima
 type PendingApproval = {question: string; approve: string; decline: string; resolve: (approved: boolean) => void};
 
 const PRESETS: Record<string, {provider: Config['provider']; model: string; base_url: string}> = {
+  local: {provider: 'local', model: 'henge-vlm', base_url: ''},
   claude: {provider: 'anthropic', model: 'claude-opus-5-5', base_url: ''},
   openai: {provider: 'openai', model: 'gpt-5.1', base_url: 'https://api.openai.com/v1'},
   lmstudio: {provider: 'openai', model: 'qwen3-vl-8b-instruct', base_url: 'http://127.0.0.1:1234/v1'},
@@ -31,6 +32,9 @@ const PRESETS: Record<string, {provider: Config['provider']; model: string; base
 const label = (name: string, input: Record<string, unknown>) => {
   const v = (k: string) => input[k] as string | number | undefined;
   switch (name) {
+    case 'point_video': return `point_video · ${v('start')}–${v('end')}s · ${v('query')}`;
+    case 'ask_video': return `ask_video · ${String(v('question') ?? '').slice(0, 60)}`;
+    case 'match_people': return `match_people · ${Array.isArray(input.people) ? input.people.length : 0} people`;
     case 'find_people': return `find_people · ${v('time')}s`;
     case 'view_frame': return `view_frame · ${v('time')}s`;
     case 'mark_subject': {const slots = input.picture_slots; const list = Array.isArray(slots) ? slots.join(', ') : slots ?? (input.subject ? `subject ${input.subject}` : ''); return `mark_subject · ${input.person !== undefined ? '#' + v('person') : `(${v('x')}, ${v('y')})`} @ ${v('time')}s → ${Array.isArray(slots) || slots != null ? 'Picture ' : ''}${list}`;}
@@ -192,6 +196,8 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
     // Only generation references reach the studio, when the message is sent (removing one before that loads nothing).
     const loaded = attached.filter(a => a.role === 'reference'), explain = attached.filter(a => a.role === 'explain');
     if (loaded.length) {try {await controller.ingest(loaded.map(a => a.file));} catch (e) {setError(e instanceof Error ? e.message : String(e));}}
+    // Explanation images stay out of the studio, but match_people can use them as photos of the people to find.
+    if (explain.length) controller.remember?.(explain.filter(a => a.kind === 'image').map(a => a.file));
     const attachmentNote = (loaded.length ? `\n\n[attachments already loaded into the studio in this order] ${loaded.map((a, i) => `${i + 1}. ${a.kind}: ${a.name} (${a.detail})`).join('; ')}` : '')
       + (explain.length ? `\n\n[explanation images, for you only: NOT loaded into the studio and never a reference Picture; read them as the user's instructions, e.g. people numbered or circled on a frame] ${explain.map(a => `${a.name} (${a.detail})`).join('; ')}` : '');
     const item: Pending = {text: text || tr('Look at these attachments.', 'Veja estes anexos.', 'Mira estos adjuntos.'), images: attached.flatMap(a => a.images), note: attachmentNote};
@@ -201,7 +207,9 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
     setMessages(history); persist(history);
     try {
       for (let round = 0; round < 40 && !stop.current; round++) {
-        setBusy(tr('Thinking…', 'Pensando…', 'Pensando…'));
+        setBusy(config?.provider === 'local' || (config && !config.has_key && config.provider !== 'openai')
+          ? tr('Thinking (built-in model on your backend; on serverless the first step can take a few minutes)…', 'Pensando (modelo embutido no seu backend; no serverless o 1º passo pode levar alguns minutos)…', 'Pensando (modelo integrado en tu backend; en serverless el primer paso puede tardar unos minutos)…')
+          : tr('Thinking…', 'Pensando…', 'Pensando…'));
         const drained = drain(history); if (drained !== history) {history = drained; setMessages(history); persist(history);}
         const reply = await step(history);
         history = reply.messages; setMessages(history); persist(history);
@@ -210,7 +218,11 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         const results: Result[] = [...reply.job_results];
         for (const call of reply.studio_calls) {
           if (stop.current) {results.push({id: call.id, name: call.name, text: 'Stopped by the user.', is_error: true}); continue;}
-          setBusy(label(call.name, call.input));
+          setBusy(call.name === 'ask_video'
+            ? tr('Molmo2 is watching the video on this computer…', 'O Molmo2 está assistindo ao vídeo neste computador…', 'Molmo2 está viendo el vídeo en este equipo…')
+            : call.name === 'match_people'
+            ? tr('Finding the people with Molmo2 on this computer (about a minute per shot)…', 'Procurando as pessoas com o Molmo2 neste computador (cerca de 1 minuto por shot)…', 'Buscando a las personas con Molmo2 en este equipo (cerca de 1 minuto por plano)…')
+            : label(call.name, call.input));
           try {
             const result = call.name === 'confirm_cancel_job'
               ? await new Promise<StudioResult>(resolve => setApproval({question: String(call.input.question), approve: String(call.input.approve_label || tr('Yes, cancel', 'Sim, cancelar', 'Sí, cancelar')), decline: String(call.input.decline_label || tr('No, keep running', 'Não, continuar', 'No, continuar')), resolve: approved => resolve({text: JSON.stringify({approved, job_id: String(call.input.job_id)})})}))
@@ -226,7 +238,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
     finally {setBusy('');}
   }
 
-  const presetOf = (c: Partial<Config>) => Object.entries(PRESETS).find(([, p]) => p.provider === c.provider && (p.provider === 'anthropic' || p.base_url === c.base_url))?.[0] || 'custom';
+  const presetOf = (c: Partial<Config>) => Object.entries(PRESETS).find(([, p]) => p.provider === c.provider && (p.provider !== 'openai' || p.base_url === c.base_url))?.[0] || 'custom';
   const mention = input.match(/#([a-f0-9]*)$/i);
   const mentionJobs = mention ? recentJobs.filter(j => !mention[1] || j.id.startsWith(mention[1].toLowerCase())).slice(0, 8) : [];
   const insertJob = (id: string) => setInput(value => value.replace(/#[a-f0-9]*$/i, `#${id.slice(0, 8)} `));
@@ -241,7 +253,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
           <button type="button" className="quiet-button" aria-pressed={settings} onClick={() => setSettings(s => !s)}>⚙</button></span></header>
       {settings && config && <div className="assistant-settings">
         <label>{tr('Model provider', 'Provedor do modelo', 'Proveedor del modelo')}<Select value={presetOf(draft)} onChange={e => {const p = PRESETS[e.target.value]; if (p) setDraft(d => ({...d, ...p}));}}>
-          <option value="claude">Claude (Anthropic API)</option><option value="openai">OpenAI (GPT)</option><option value="lmstudio">LM Studio ({tr('local', 'local', 'local')})</option><option value="ollama">Ollama ({tr('local', 'local', 'local')})</option><option value="custom">{tr('Other OpenAI-compatible API', 'Outra API compatível com OpenAI', 'Otra API compatible con OpenAI')}</option></Select></label>
+          <option value="local">{tr('Henge VLM (built-in, no key)', 'Henge VLM (embutido, sem chave)', 'Henge VLM (integrado, sin clave)')}</option><option value="claude">Claude (Anthropic API)</option><option value="openai">OpenAI (GPT)</option><option value="lmstudio">LM Studio ({tr('local', 'local', 'local')})</option><option value="ollama">Ollama ({tr('local', 'local', 'local')})</option><option value="custom">{tr('Other OpenAI-compatible API', 'Outra API compatível com OpenAI', 'Otra API compatible con OpenAI')}</option></Select></label>
         {presetOf(draft) === 'custom' && <label>{tr('Type', 'Tipo', 'Tipo')}<Select value={draft.provider} onChange={e => setDraft(d => ({...d, provider: e.target.value as Config['provider']}))}><option value="openai">OpenAI-compatible</option><option value="anthropic">Anthropic</option></Select></label>}
         <label>{tr('Model', 'Modelo', 'Modelo')}
           {models?.length && !typeModel
@@ -255,7 +267,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
           {typeModel && !!models?.length && <button type="button" className="quiet-button" onClick={() => setTypeModel(false)}>{tr('Pick from the list', 'Escolher da lista', 'Elegir de la lista')}</button>}
         </label>
         {draft.provider === 'openai' && <label>Base URL<input value={draft.base_url || ''} placeholder="https://api.openai.com/v1" onChange={e => setDraft(d => ({...d, base_url: e.target.value}))}/></label>}
-        <label>{tr('API key', 'Chave da API', 'Clave de la API')}<input type="password" autoComplete="off" value={draft.api_key || ''} placeholder={config.has_key ? `${tr('saved', 'salva', 'guardada')} ${config.key_hint}` : draft.provider === 'openai' ? tr('not needed for local servers', 'não precisa para servidores locais', 'no hace falta en servidores locales') : 'sk-ant-…'} onChange={e => setDraft(d => ({...d, api_key: e.target.value}))} onBlur={() => {if (draft.api_key) void loadModels();}}/></label>
+        {draft.provider === 'local' ? <small className="muted">{tr('Runs the same Qwen 3.5 9B the planner uses, on your ComfyUI or serverless backend: no key, no account. Slower and simpler than Claude or GPT; good for routine marking and generating.', 'Roda o mesmo Qwen 3.5 9B do planner, no seu ComfyUI ou no serverless: sem chave e sem conta. Mais lento e mais simples que Claude ou GPT; serve para marcar e gerar no dia a dia.', 'Usa el mismo Qwen 3.5 9B del planner, en tu ComfyUI o en el serverless: sin clave ni cuenta. Más lento y simple que Claude o GPT; sirve para marcar y generar.')}</small> : <label>{tr('API key', 'Chave da API', 'Clave de la API')}<input type="password" autoComplete="off" value={draft.api_key || ''} placeholder={config.has_key ? `${tr('saved', 'salva', 'guardada')} ${config.key_hint}` : draft.provider === 'openai' ? tr('not needed for local servers', 'não precisa para servidores locais', 'no hace falta en servidores locales') : 'sk-ant-…'} onChange={e => setDraft(d => ({...d, api_key: e.target.value}))} onBlur={() => {if (draft.api_key) void loadModels();}}/></label>}
         {draft.provider === 'anthropic' && <label>{tr('Effort', 'Esforço', 'Esfuerzo')}<Select value={draft.effort ?? 'medium'} onChange={e => setDraft(d => ({...d, effort: e.target.value}))}>{['low', 'medium', 'high'].map(v => <option key={v} value={v}>{v}</option>)}<option value="">{tr('model default', 'padrão do modelo', 'predeterminado')}</option></Select></label>}
         <label>{tr('Who writes the automatic prompts and analyses', 'Quem escreve os prompts automáticos e as análises', 'Quién escribe los prompts automáticos y los análisis')}<Select value={draft.planner ?? 'local'} onChange={e => setDraft(d => ({...d, planner: e.target.value as 'local' | 'assistant'}))}><option value="local">{tr('The local planner (Qwen in ComfyUI, free)', 'O planner local (Qwen no ComfyUI, grátis)', 'El planificador local (Qwen en ComfyUI, gratis)')}</option><option value="assistant">{tr('This assistant model', 'Este modelo do assistente', 'Este modelo del asistente')}</option></Select><small className="muted">{tr('Picture descriptions, the guide analysis, the plan and the final H3 prompt. With the assistant model they are usually better and free the GPU, but each generation spends a few API requests.', 'Descrição das Pictures, análise do guia, o plano e o prompt final do H3. Com o modelo do assistente costumam sair melhores e liberam a GPU, mas cada geração gasta algumas chamadas da API.', 'Descripción de las Pictures, análisis de la guía, el plan y el prompt final de H3. Con el modelo del asistente suelen salir mejor y liberan la GPU, pero cada generación gasta algunas llamadas a la API.')}</small></label>
         <label>{tr('Who marks the people', 'Quem marca as pessoas', 'Quién marca a las personas')}<Select value={draft.marking ?? 'sam'} onChange={e => setDraft(d => ({...d, marking: e.target.value as 'sam' | 'vision'}))}><option value="sam">{tr('SAM 3.1 detects and numbers them', 'O SAM 3.1 detecta e numera', 'SAM 3.1 las detecta y numera')}</option><option value="vision">{tr('The assistant, with its own vision', 'O assistente, com a própria visão', 'El asistente, con su propia visión')}</option></Select><small className="muted">{tr('With the assistant, it points at each person (checking the dot on the frame); SAM 3.1 still cuts out and tracks them in every frame when generating.', 'Com o assistente, ele aponta cada pessoa (conferindo o ponto no quadro); o SAM 3.1 continua recortando e seguindo cada uma em todos os quadros na geração.', 'Con el asistente, señala a cada persona (comprobando el punto en el fotograma); SAM 3.1 sigue recortándolas y siguiéndolas en todos los fotogramas al generar.')}</small></label>

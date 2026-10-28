@@ -165,12 +165,15 @@ def character_figure_instruction(count,description=''):
             'studio lighting.')
 
 
-def multi_swap_prompt(subjects,representation='2d'):
+def multi_swap_prompt(subjects,representation='2d',labels=False):
     """Character Swap with two or more marked people (the BFS two-character recipe, in the v1.1 body_swap format).
     subjects: [(color, picture_slots, details)] in Subject order. Each subject is defined by its picture and the color
     that marks the person it replaces; the tints are named as editing markers to remove; nothing describes the guide
     performers (their looks would leak)."""
     if len(subjects)<2:raise ValueError('The multi-person template needs at least two subjects')
+    # labels: the 2D guide also writes each person's <Picture N> over them (experimental); the prompt names those tags
+    # in the binding and as markers to remove, so they are not copied into the video.
+    labels=labels and representation=='2d'
     mark='tint' if representation=='2d' else 'color'
     marked='tinted' if representation=='2d' else 'colored'
     defs=[];swaps=[];names=[]
@@ -178,13 +181,32 @@ def multi_swap_prompt(subjects,representation='2d'):
         pictures=' and '.join(f'<Picture {n}>' for n in slots)
         text=clean_details(details,1500) or 'the character'
         defs.append(f'<Subject {i}> is the character shown in {pictures}: {text}. Their identity, face, hair, body shape, proportions and clothing define the {color}-marked replacement.')
-        swaps.append(f'the {color}-{marked} person with <Subject {i}>');names.append(f'<Subject {i}>')
+        tag=f" tagged {pictures.replace(' and ',' / ')}" if labels else ''
+        swaps.append(f'the {color}-{marked} person{tag} with <Subject {i}>');names.append(f'<Subject {i}>')
     colors=' and '.join(c for c,_,_ in subjects)
     replace='Replace '+', '.join(swaps[:-1])+' and '+swaps[-1]
-    return (f"body_swap: subject_definitions: {' '.join(defs)} In the guide video, the translucent {colors} {mark}s are temporary editing markers, not character appearance. "
+    markers=f'the translucent {colors} {mark}s and the <Picture> text tags written over them are' if labels else f'the translucent {colors} {mark}s are'
+    remove='Remove the temporary color markers and text tags completely: no text, letters or labels anywhere in the video. ' if labels else 'Remove the temporary color markers completely. '
+    return (f"body_swap: subject_definitions: {' '.join(defs)} In the guide video, {markers} temporary editing markers, not character appearance. "
             f"{replace}. The guide video provides the scene, framing and the complete performance: body pose, gestures, head motion, gaze, speech and facial expressions.  "
             f"summary: [video generation + references] {replace}, preserving the guide's camera, framing, timing and motion exactly.  "
             f"detailed_description: [Shot 1] {', '.join(names[:-1])} and {names[-1]} take the exact places of the marked people and move with the same timing, body pose, gestures, head motion, gaze, speech and facial expressions; "
-            f"each one follows its own marked person through position changes, occlusion and cuts. Remove the temporary color markers completely. "
+            f"each one follows its own marked person through position changes, occlusion and cuts. {remove}"
             f"Keep the framing of the guide: do not widen the shot or add people who are not in the guide; no inset, no small full-body figure, no picture-in-picture. "
             f"Preserve the background, lighting and camera. Prevent identity drift, clothing changes, texture crawling and flicker.")
+
+
+def shot_swap_plan(bindings, references, roles, representation, labels=False):
+    """Bind only tracked identities; renumber Pictures to match this shot's reference list."""
+    slots=sorted({slot for subject in bindings for slot in subject['picture_slots']})
+    mapping={slot:i for i,slot in enumerate(slots,1)}
+    descriptions={int(role['slot']):role.get('description','') for role in roles}
+    local=[{**subject,'picture_slots':[mapping[slot] for slot in subject['picture_slots']]} for subject in bindings]
+    subjects=[(subject['color'],subject['picture_slots'],descriptions.get(original['picture_slots'][0],'the character in the reference'))
+              for subject,original in zip(local,bindings)]
+    if len(subjects)==1:
+        color,pictures,details=subjects[0]
+        prompt=character_swap_prompt(details or 'the character shown in Picture 1')
+        prompt+=f' Replace only the {color}-marked person; keep every other person unchanged. Remove all temporary color markers and text tags. Do not add people, insets or duplicate characters.'
+    else:prompt=multi_swap_prompt(subjects,representation,labels)
+    return local,[references[slot-1] for slot in slots],prompt

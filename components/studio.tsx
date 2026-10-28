@@ -94,6 +94,7 @@ export default function Studio() {
   const [guideRepresentation, setGuideRepresentation] = useState<GuideRepresentation>('original');
   // 2D color marks: 1 = solid; lower keeps the guide person visible under a translucent tint (BFS Colored Mark used 0.35).
   const [markOpacity, setMarkOpacity] = useState(0.35);
+  const [markLabels, setMarkLabels] = useState(false);
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   // A new guide starts a new generation: the panel drops the selected job (its plan, shots and result) until one is
   // picked again from the history.
@@ -266,6 +267,8 @@ export default function Studio() {
   const studioLive = useRef({mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures, promptMode, shotSeconds, cutMode, contextFrames, keepAudio, audioConditioning, timelineFps, project});
   studioLive.current = {mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures, promptMode, shotSeconds, cutMode, contextFrames, keepAudio, audioConditioning, timelineFps, project};
   const found = useRef(new Map<string, {width: number; height: number; people: {number: number; x: number; y: number}[]}>());
+  // Explanation images from the chat (never Pictures): match_people can use them as photos of the people to find.
+  const explained = useRef(new Map<string, File>());
   const settle = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   const studioState = () => {
     const c = studioLive.current;
@@ -290,6 +293,64 @@ export default function Studio() {
       case 'view_frame': {
         const t = inRange(num('time')); const frame = await captureFrame(c.video!.url, t);
         return {text: `Guide frame at ${t.toFixed(2)} s (${frame.width}x${frame.height})${input.grid ? ', with a 0-1 grid' : ''}.`, images: [input.grid ? await annotated(frame.blob, 960, drawGrid) : await thumbnail(frame.blob, 960)]};
+      }
+      case 'point_video': {
+        const start = inRange(num('start')), end = inRange(num('end'));
+        if (end <= start || end - start > 30) throw Error('Point one shot at a time, at most 30 seconds');
+        const body = new FormData(); body.set('video', c.video!.file); body.set('query', String(input.query ?? ''));
+        body.set('start', String(start)); body.set('end', String(end));
+        const response = await fetch('/api/backend/assistant/point-video', {method: 'POST', body});
+        const reply = await response.json();
+        if (!response.ok) throw Error(reply.detail || `HTTP ${response.status}`);
+        const {previews, ...report} = reply;
+        return {text: JSON.stringify(report), images: previews ?? []};
+      }
+      case 'ask_video': {
+        // Molmo2 watches the whole interval (with timestamps) and answers in text.
+        const range = c.video?.range; if (!range) throw Error('Attach and trim the guide video first');
+        const start = input.start === undefined ? range.start : inRange(num('start')), end = input.end === undefined ? range.end : inRange(num('end'));
+        const body = new FormData(); body.set('video', c.video!.file); body.set('question', String(input.question ?? '')); body.set('start', String(start)); body.set('end', String(end));
+        const response = await fetch('/api/backend/assistant/ask-video', {method: 'POST', body}); const reply = await response.json();
+        if (!response.ok) throw Error(reply.detail || `HTTP ${response.status}`);
+        return {text: `Molmo2 (${start.toFixed(2)}–${end.toFixed(2)} s; times are seconds from ${start.toFixed(2)} s): ${reply.answer}`};
+      }
+      case 'match_people': {
+        // Find each person shown in a photo in every shot (local Molmo2), then mark them: SAM tracks from the marks.
+        const people = Array.isArray(input.people) ? input.people as {photo?: string; picture_slots?: number[]; label?: string}[] : [];
+        if (!people.length) throw Error('Give people: [{photo, picture_slots}]');
+        const range = c.video?.range; if (!range) throw Error('Attach and trim the guide video first');
+        const start = input.start === undefined ? range.start : inRange(num('start')), end = input.end === undefined ? range.end : inRange(num('end'));
+        const photo = (name: string) => {
+          const slot = /^\s*@?picture\s*(\d+)\s*$/i.exec(name);
+          if (slot) {const p = c.pictures.find(x => x.slot === Number(slot[1])); if (!p) throw Error(`Picture ${slot[1]} is not attached`); return p.file;}
+          const picture = c.pictures.find(x => x.file.name === name.trim()); if (picture) return picture.file;
+          const file = explained.current.get(name.trim()); if (!file) throw Error(`No explanation image named ${name}. Use the exact file name, or "Picture N"`); return file;
+        };
+        const body = new FormData(); body.set('video', c.video!.file); body.set('start', String(start)); body.set('end', String(end));
+        people.forEach(p => body.append('people', photo(String(p.photo ?? ''))));
+        const response = await fetch('/api/backend/assistant/match-people', {method: 'POST', body}); const reply = await response.json();
+        if (!response.ok) throw Error(reply.detail || `HTTP ${response.status}`);
+        const lines: string[] = []; let current = [...c.subjects];
+        reply.people.forEach((found: {person: number; anchors: {x: number; y: number; time_seconds: number}[]; missing_shots: number[]}, i: number) => {
+          const want = people[i], slots = (want.picture_slots ?? []).map(Number).filter(Number.isFinite);
+          const label = want.label || String(want.photo);
+          if (!found.anchors.length) {lines.push(`${label}: not found in any shot.`); return;}
+          if (input.apply === false || !slots.length) {lines.push(`${label}: ${found.anchors.map(a => `(${a.x.toFixed(3)}, ${a.y.toFixed(3)}) @ ${a.time_seconds.toFixed(2)} s`).join('; ')}${slots.length ? '' : ' (no picture_slots: not marked)'}.`); return;}
+          if (slots.some(n => !c.pictures.some(p => p.slot === n))) throw Error('Use attached picture slots');
+          const anchors = found.anchors.map(a => ({x: a.x, y: a.y, time_seconds: a.time_seconds, frame_width: reply.frame_width, frame_height: reply.frame_height}));
+          const index = current.findIndex(s => s.picture_slots.length === slots.length && s.picture_slots.every(n => slots.includes(n)));
+          if (index >= 0) {
+            const merged = [...current[index].anchors.filter(a => !anchors.some(b => Math.abs(a.time_seconds - b.time_seconds) < .05)), ...anchors].sort((p, q) => p.time_seconds - q.time_seconds);
+            current = current.map((s, k) => k === index ? {...s, anchors: merged} : s);
+            lines.push(`${label} -> subject ${index + 1} (${current[index].color}, Picture ${slots.join(', ')}): marks at ${anchors.map(a => a.time_seconds.toFixed(2) + ' s').join(', ')}; not in shots ${found.missing_shots.join(', ') || 'none'}.`);
+          } else {
+            const color = SUBJECT_COLORS.find(col => !current.some(s => s.color === col.name)); if (!color) throw Error('Every color is in use');
+            current = [...current, {id: crypto.randomUUID(), label: want.label || `Subject ${current.length + 1}`, color: color.name, picture_slots: slots, anchors}];
+            lines.push(`${label} -> subject ${current.length} (${color.name}, Picture ${slots.join(', ')}): marks at ${anchors.map(a => a.time_seconds.toFixed(2) + ' s').join(', ')}; not in shots ${found.missing_shots.join(', ') || 'none'}.`);
+          }
+        });
+        if (input.apply !== false) {setSubjects(current); await settle();}
+        return {text: `Shots: ${reply.shots.map((s: {shot: number; start: number; end: number}) => `${s.shot}=${s.start.toFixed(2)}–${s.end.toFixed(2)} s`).join(', ')}. ${lines.join(' ')} Check the previews (one per shot); remove a wrong mark with remove_subject or re-mark it with mark_subject.`, images: reply.previews ?? []};
       }
       case 'find_people': {
         const t = inRange(num('time')); const frame = await captureFrame(c.video!.url, t);
@@ -422,7 +483,7 @@ export default function Studio() {
   // Improve at Generate: in Improve mode, and in Auto Prompt mode until the AI has written the final prompt.
   useEffect(() => {panelControls.current?.setEnhancePrompt(promptMode === 'improve' || (promptMode === 'auto' && autoSource === null));}, [promptMode, autoSource]);
   useEffect(() => {setReadLang(lang === 'en' ? 'pt' : lang);}, [lang]);
-  const assistantController: StudioController = {state: studioState, run: runStudioCall, ingest: async files => {
+  const assistantController: StudioController = {state: studioState, run: runStudioCall, remember: files => files.forEach(file => explained.current.set(file.name, file)), ingest: async files => {
     const images=files.filter(file => file.type.startsWith('image/')), videos=files.filter(file => file.type.startsWith('video/'));
     if (videos.length) addVideo([videos[0]], true);
     const added = images.length ? addPictures(images) : 0;
@@ -559,7 +620,7 @@ export default function Studio() {
       audio_conditioning: {enabled: audioConditioning, source: audioConditioning ? 'guide_video' : null},
       output_audio: {keep_source: keepAudio && !generateAudio, generate: generateAudio}, prompt: fixedRecipe ? '' : nativePrompt(executionPrompt), editor_prompt: fixedRecipe ? '' : prompt,
       // Sharpness uses only the video: subjects marked in another mode are not sent.
-      subject_guidance: mode === 'sharpness' ? {representation: 'original', bindings: [], status: 'selection_only', marker_colors_are_output_appearance: false} : {representation: guideRepresentation, bindings: subjects, status: 'selection_only', marker_colors_are_output_appearance: false, ...(guideRepresentation === '2d' ? {mark_opacity: markOpacity} : {})},
+      subject_guidance: mode === 'sharpness' ? {representation: 'original', bindings: [], status: 'selection_only', marker_colors_are_output_appearance: false} : {representation: guideRepresentation, bindings: subjects, status: 'selection_only', marker_colors_are_output_appearance: false, ...(guideRepresentation === '2d' ? {mark_opacity: markOpacity, ...(markLabels ? {mark_labels: true} : {})} : {})},
       video: {name: video.file.name, source_signature: guideSignature, conditioning: 'guide_latents', source_duration: video.duration, start_seconds: video.range.start, end_seconds: video.range.end, duration: selectedDuration},
       pictures: activePictures.map(p => ({slot: p.slot, token: `<Picture ${p.slot}>`, name: p.file.name})),
       ...(mode === 'motion' && firstFrameSlot && activePictures.some(p => p.slot === firstFrameSlot) ? {first_frame_slot: firstFrameSlot} : {}), generation_status: 'not_submitted',
@@ -802,7 +863,7 @@ export default function Studio() {
             {working && <div className="jutsu-loading" role="status"><div className="jutsu-seal"><i/><i/><Icon name="spark" size={42}/></div><strong>{tr('Directing your scene', 'Preparando sua direção', 'Preparando tu dirección')}</strong><small>{tr('Reading references and sampled guide frames', 'Lendo referências e quadros do vídeo guia', 'Leyendo referencias y fotogramas de la guía')}</small></div>}
             <span className="stage-corner mono">Henge / {modeName(mode)}</span>
           </div>
-          {video?.range && (!fixedRecipe || mode === 'headswap') && <SubjectBindings subjects={subjects} onChange={setSubjects} representation={guideRepresentation} onRepresentation={setGuideRepresentation} pictures={pictures} lang={lang} pickingId={pickingId} onPick={setPickingId} onPrompt={() => setNative(true)} mode={mode} markOpacity={markOpacity} onMarkOpacity={setMarkOpacity}/>}
+          {video?.range && (!fixedRecipe || mode === 'headswap') && <SubjectBindings subjects={subjects} onChange={setSubjects} representation={guideRepresentation} onRepresentation={setGuideRepresentation} pictures={pictures} lang={lang} pickingId={pickingId} onPick={setPickingId} onPrompt={() => setNative(true)} mode={mode} markOpacity={markOpacity} onMarkOpacity={setMarkOpacity} markLabels={markLabels} onMarkLabels={setMarkLabels}/>}
           {mode !== 'sharpness' && subjects.length > 0 && subjectErrors && <p className="validation" role="status">{tr('Mark each subject inside the selected interval and attach its references.', 'Marque cada personagem dentro do intervalo selecionado e vincule suas referências.', 'Marca cada personaje dentro del intervalo seleccionado y vincula sus referencias.')}</p>}
           <section className="creation-card surface" aria-label={tr('Create video', 'Criar vídeo', 'Crear vídeo')}><section className="prompt-card"><div className="prompt-header"><h2><Icon name="spark" size={16}/>{t.direct}</h2>{!fixedRecipe && <div className="editor-tabs prompt-modes" role="group" aria-label={tr('Prompt mode', 'Modo do prompt', 'Modo del prompt')}>{([['improve', tr('Improve', 'Melhorar', 'Mejorar')], ['auto', 'Auto Prompt'], ['exact', tr('Exact text', 'Texto exato', 'Texto exacto')]] as const).map(([value, label]) => <button key={value} aria-pressed={promptMode === value} className={promptMode === value ? 'active' : ''} onClick={() => setPromptMode(value)}>{label}</button>)}</div>}</div>
             {!fixedRecipe && <p className="prompt-mode-help">{promptMode === 'improve'
@@ -833,7 +894,7 @@ export default function Studio() {
         </section>
 
         <aside className="direction-panel"><section className="surface pipeline-card"><span className="eyebrow muted">{t.pipeline}</span><div className="pipeline-list">{[[!!video?.range, t.p1, t.p1s], [maxPictures === 0 || activePictures.length > 0, t.p2, maxPictures === 0 ? tr('Not needed', 'Não necessárias', 'No necesarias') : `${activePictures.length} ${t.p2s}`], [fixedRecipe || (!!prompt.trim() && !invalid.length), t.p3, fixedRecipe ? tr('Automatic', 'Automática', 'Automática') : t.p3s], [generationJob?.status === 'completed', tr('Generate video', 'Gerar vídeo', 'Generar vídeo'), generationJob?.status === 'completed' ? tr('Video ready', 'Vídeo pronto', 'Vídeo listo') : tr('Review, then generate', 'Revise e gere', 'Revisa y genera')]].map(([ok, title, sub], i) => <div className={'pipeline-item ' + (ok ? 'complete' : '')} key={String(title)}><span className="pipeline-circle">{ok && <Icon name="check" size={11}/>}</span><div><strong>{title}</strong><small>{sub}</small></div>{i === 3 && <span className="mono step-end">04</span>}</div>)}</div></section>
-          <section className="surface recent-card"><div className="label-row"><span className="eyebrow muted">{t.recent}</span><button className="text-link" onClick={() => setView('history')}>{t.viewAll} →</button></div>{recentJobs.length ? recentJobs.map(j => <button className={'recent-item' + (generationJob?.id === j.id ? ' active' : '')} key={j.id} onClick={() => panelControls.current?.selectJob(j.id)} title={tr(`Select generation #${j.id.slice(0, 8)}; the assistant will know which one you mean`, `Selecionar geração #${j.id.slice(0, 8)}; o assistente saberá qual é`, `Seleccionar generación #${j.id.slice(0, 8)}; el asistente sabrá cuál es`)}><span className={'recent-thumb ' + (j.mode === 'swap' ? 'th-b' : 'th-a')}>{j.result_url ? <video muted playsInline preload="metadata" src={j.result_url + '#t=0.5'}/> : <Icon name="film" size={16}/>}</span><span><strong>{j.project || modeName((j.mode || 'swap') as Mode)}</strong><small><i style={{background: j.status === 'completed' ? '#48d17a' : j.status === 'failed' ? '#ef5a50' : ['cancelled'].includes(j.status) ? '#777185' : '#f0c35a'}}/><span className="mono">#{j.id.slice(0, 8)}</span> · {modeName((j.mode || 'swap') as Mode)} · {jobStatusLabel(j.status, lang)}</small></span></button>) : <div className="recent-empty"><Icon name="clock" size={22}/><p>{tr('Your generations will appear here.', 'Suas gerações aparecerão aqui.', 'Tus generaciones aparecerán aquí.')}</p></div>}</section>
+          <section className="surface recent-card"><div className="label-row"><span className="eyebrow muted">{t.recent}</span><button className="text-link" onClick={() => setView('history')}>{t.viewAll} →</button></div>{recentJobs.length ? recentJobs.map(j => <button className={'recent-item' + (generationJob?.id === j.id ? ' active' : '')} key={j.id} onClick={() => panelControls.current?.selectJob(j.id)} title={tr(`Select generation #${j.id.slice(0, 8)}; the assistant will know which one you mean`, `Selecionar geração #${j.id.slice(0, 8)}; o assistente saberá qual é`, `Seleccionar generación #${j.id.slice(0, 8)}; el asistente sabrá cuál es`)}><span className={'recent-thumb ' + (j.mode === 'swap' ? 'th-b' : 'th-a')}>{j.result_url ? <video muted playsInline preload="metadata" src={j.result_url + '#t=0.5'}/> : <Icon name="film" size={16}/>}</span><span><strong>{j.project || modeName((j.mode || 'swap') as Mode)}</strong><small><i style={{background: j.status === 'completed' ? '#48d17a' : j.status === 'failed' ? '#ef5a50' : ['cancelled'].includes(j.status) ? '#777185' : 'var(--s-f0c35a, #f0c35a)'}}/><span className="mono">#{j.id.slice(0, 8)}</span> · {modeName((j.mode || 'swap') as Mode)} · {jobStatusLabel(j.status, lang)}</small></span></button>) : <div className="recent-empty"><Icon name="clock" size={22}/><p>{tr('Your generations will appear here.', 'Suas gerações aparecerão aqui.', 'Tus generaciones aparecerán aquí.')}</p></div>}</section>
           <p className="direction-tip"><span className="eyebrow accent">Tip</span> — {({swap: t.tipSwap, motion: t.tipMotion, headswap: tr('Use a front-facing, well-lit face. Clips where the head stays visible and not too small work best.', 'Use um rosto de frente e bem iluminado. Funciona melhor quando a cabeça aparece bem e não é pequena.', 'Usa un rostro de frente y bien iluminado. Funciona mejor si la cabeza se ve bien y no es pequeña.'), sharpness: tr('Run it as a second pass on a finished generation: pick it from "Use a video generated in the studio".', 'Use como segunda passada numa geração pronta: escolha em "Usar um vídeo gerado no estúdio".', 'Úsalo como segunda pasada sobre una generación: elígela en "Usar un vídeo generado en el estudio".')})[mode]}</p>
         </aside>
       </main>

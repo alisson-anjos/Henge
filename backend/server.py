@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 import requests
 import assistant
+import molmo_pointing
 from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageFont,ImageOps
@@ -13,7 +14,7 @@ import moving_plate
 from workflows import klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
-from edit_modes import LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,fixed_plan,head_reference,character_reference
+from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -134,6 +135,13 @@ def run(args):
     p=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=300)
     if p.returncode:raise ValueError(p.stderr.decode(errors='replace')[-1200:])
 
+# Blur of the source person in what the model sees (BFS source blur, applied in HengeGuide): '<region> (<what stays sharp>)'.
+SOURCE_BLUR=['off']+[f'{r} ({k})' for k in ('keep mouth','keep lips + tongue','mouth too') for r in ('face','head + hands','person','masked area')]
+
+def source_blur_settings(options):
+    mode=options.get('source_blur','off')
+    return {} if mode=='off' else {'source_blur':mode,'source_blur_effect':options.get('source_blur_effect','blur')}
+
 def clamp_float(value,lo,hi,label):
     if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or not lo<=value<=hi:raise ValueError(f'Invalid {label}')
     return value
@@ -170,6 +178,15 @@ def validate_request(r,options,slots):
     if r.get('processing',{}).get('mode')=='causal':
         if options.get('conditioning_mode','guide')!='guide':raise ValueError('Causal rendering uses Guide Latents; switch the method from TARA')
         if r['mode']=='motion':raise ValueError('Causal rendering is for Character Swap, Head Swap and Sharpness')
+    regional=options.get('regional_attention') or {}
+    if not isinstance(regional,dict) or set(regional)-{'enabled','strength','reference_budget','layers'}:raise ValueError('Invalid regional attention settings')
+    if not isinstance(regional.get('enabled',False),bool):raise ValueError('Regional attention enabled must be boolean')
+    clamp_float(regional.get('strength',.5),0,1,'regional attention strength')
+    clamp_float(regional.get('reference_budget',.35),.01,.95,'regional reference budget')
+    if regional.get('enabled'):
+        if r['mode']!='swap' or r.get('subject_guidance',{}).get('representation') not in ('2d','3d') or not r.get('subject_guidance',{}).get('bindings'):raise ValueError('Regional attention needs marked people in a 2D/3D Character Swap')
+        if options.get('conditioning_mode','guide')!='guide' or r['processing'].get('mode')=='causal':raise ValueError('Regional attention needs Guide Latents and shot sampling')
+        if not re.fullmatch(r'\d+(?:\s*,\s*\d+)*',str(regional.get('layers','10,25,40'))):raise ValueError('Regional attention layers must be comma-separated indices')
     mask=options.get('mask') or {}
     if not isinstance(mask,dict) or set(mask)-{'threshold','shape','padding','expand','fill_holes','temporal_expand','blockify','invert','strength'}:raise ValueError('Invalid latent mask settings')
     if mask.get('shape','box') not in ['box','silhouette']:raise ValueError('Unknown mask shape')
@@ -184,6 +201,8 @@ def validate_request(r,options,slots):
     if r['mode'] not in FIXED_RECIPE and options.get('profile','motion') in ('headswap','sharpness'):raise ValueError('This model belongs to another mode')
     if options.get('conditioning_mode','guide') not in ['guide','tara']:raise ValueError('Unknown conditioning mode')
     if options.get('guide_clip','auto') not in ['auto','on','off']:raise ValueError('Guide for CLIP must be auto, on or off')
+    if options.get('source_blur','off') not in SOURCE_BLUR:raise ValueError('Unknown source blur mode')
+    if options.get('source_blur_effect','blur') not in ['blur','invert colours']:raise ValueError('Source blur effect must be blur or invert colours')
     if not isinstance(r.get('output_audio',{}).get('generate',False),bool):raise ValueError('Generated audio must be a boolean')
     if r.get('output_audio',{}).get('generate') and r.get('processing',{}).get('mode')=='causal':raise ValueError('Generated audio needs shot rendering, not causal')
     if options.get('conditioning_mode','guide')=='tara' and (r.get('subject_guidance') or {}).get('representation') in ('2d','3d') and (r.get('subject_guidance') or {}).get('bindings') and r['mode']!='sharpness':
@@ -487,7 +506,7 @@ def mask_preview(job):
     if job['plan'].get('representation')=='2d':
         # 2D color marks: the marks at full opacity plus the same source clip; the UI blends them live.
         save(job,message='Tracking the marked subjects for the color guide preview')
-        outputs=execute_graph(job,marks_preview_graph(*args,out),'marks_preview')
+        outputs=execute_graph(job,marks_preview_graph(*args,out,labels=bool(r.get('subject_guidance',{}).get('mark_labels'))),'marks_preview')
         videos=output_files(outputs,'4','videos')
         if not videos:raise ValueError('ComfyUI finished without the color guide preview')
         FILES.download(videos[0],work/'marks_preview.mp4');shutil.copyfile(clip,work/'marks_source.mp4')
@@ -563,6 +582,21 @@ def likeness_check(job,pictures,ask):
         raise ValueError(f'{names} looks like a real public figure. This Henge is set to block real people\'s likeness (HENGE_LIKENESS_FILTER=block); use a picture of yourself, of someone who agreed, or of an invented character.')
     save(job,likeness_warning=f'{names} looks like a real public figure. Only generate with their consent, and do not publish it as real.')
 
+def guide_caption(job):
+    """Molmo2's timeline of the guide interval (people, actions, camera, cuts), once per job; '' when Molmo2 is not
+    set up or fails (planning goes on with the frames only)."""
+    if not molmo_pointing.available() or job['request']['mode'] not in ('swap','motion','headswap'):return ''
+    cached=job_path(job['id'])/'molmo_guide.txt'
+    if cached.is_file():return cached.read_text()
+    r=job['request'];start,end=r['video']['start_seconds'],r['video']['end_seconds']
+    save(job,stage='molmo_guide',message='Watching the guide with Molmo2')
+    try:
+        folder=job_path(job['id'])/'molmo';folder.mkdir(exist_ok=True)
+        text=molmo_pointing.ask_video(INPUT/job['assets']['video'],molmo_pointing.GUIDE_CAPTION,start,min(end,start+molmo_pointing.MAX_ASK_SECONDS),folder)['answer']
+    except Exception as e:
+        print(f'[Henge] Molmo2 guide caption skipped: {e}',flush=True);return ''
+    cached.write_text(text);save(job,guide_caption=text);return text
+
 def planning(job):
     if job['request']['mode']=='sharpness':
         # Little More Sharpness uses one fixed caption and no references: nothing to review, render directly.
@@ -570,8 +604,12 @@ def planning(job):
         save(job,plan=plan,status='queued_render',stage='queued',progress=0,message='Queued for sharpening',step=None,step_total=None);return
     pictures,guide,metadata=prepare_evidence(job);r=job['request'];slots=[slot for slot,_ in pictures]
     work=job_path(job['id'])
+    caption=guide_caption(job)
     def ask(instruction,image,stage,tokens):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
+        # The planner sees a sheet of frames; Molmo2 watched every second: its timeline backs the guide questions.
+        if caption and stage in ('vlm_guide','vlm_prompt'):
+            instruction+='\n\nWhat happens in the video, read by a video model that watched all of it (trust it for actions, timing, camera and cuts; the frames remain the evidence for appearance):\n'+caption
         label=(f"Describing Picture {stage.rsplit('_',1)[-1]} independently" if stage.startswith('vlm_picture_') else
                'Analyzing guide performance and setting' if stage=='vlm_guide' else
                'Checking whether Picture 1 is a person or an animal' if stage=='vlm_species' else
@@ -601,7 +639,7 @@ def planning(job):
     likeness_check(job,pictures,ask)
     if r['mode']=='swap' and len(pictures)==1 and len(bindings)<=1 and job['options'].get('enhance_prompt',True):
         # One character, no bindings: the Character Swap v1.1 training-format prompt.
-        details=ask(CHARACTER_INSTRUCTION,pictures[0][1],'vlm_picture_1',1024)
+        details=clean_details(ask(CHARACTER_INSTRUCTION,pictures[0][1],'vlm_picture_1',1024),2000)
         plan=fixed_plan('headswap',character_swap_prompt(details),'Replace the main subject of the guide video with the character from Picture 1, keeping scene, camera and performance (Character Swap v1.1 prompt format).',details)
         if job['options'].get('adapt','auto')!='off' and frame_editor():
             # An animal reference for a human performer: the image editor can redraw it as one upright humanoid figure.
@@ -627,8 +665,8 @@ def planning(job):
         subjects=[]
         for s in bindings:
             slot=s['picture_slots'][0];image=dict(pictures)[slot]
-            subjects.append((s['color'],s['picture_slots'],ask(CHARACTER_INSTRUCTION,image,f'vlm_picture_{slot}',1024)))
-        plan=fixed_plan('swap',multi_swap_prompt(subjects,guidance['representation']),'Replace each marked person with the character bound to their color, keeping scene, camera and performance (multi-person Character Swap).')
+            subjects.append((s['color'],s['picture_slots'],clean_details(ask(CHARACTER_INSTRUCTION,image,f'vlm_picture_{slot}',1024),2000)))
+        plan=fixed_plan('swap',multi_swap_prompt(subjects,guidance['representation'],bool(guidance.get('mark_labels'))),'Replace each marked person with the character bound to their color, keeping scene, camera and performance (multi-person Character Swap).')
         plan['picture_roles']=[{'slot':slot,'role':'identity','description':next((d for c,sl,d in subjects if slot in sl),'')} for slot in slots]
         plan['representation']=guidance['representation']
         raw=ask('Look at these frames of a video. Which of these objects do the people hold or play: phone, microphone, guitar, ukulele, cup, bottle, bicycle, torch, piano, keyboard? Answer with a JSON array of the matching words only, for example ["guitar"], or [] if none.',guide,'vlm_guide',64)
@@ -863,7 +901,7 @@ def generate(job):
     if plan['adapt_reference'] and not swap_figure:
         figure=adapt_request(job)['figure'];adapted_ref=adapt_prepare(job,job);refs.append(adapted_ref.relative_to(INPUT).as_posix())
         if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> shows that character in humanoid form, in the starting pose of the guide; use it for body shape, limb proportions and appearance only, it does not supply motion or a background." if figure else f" <Picture {len(refs)}> is the FIBO-prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
-    pieces=[];guide_pieces=[];previous=None;save(job,shot_urls=[])
+    pieces=[];guide_pieces=[];previous=None;save(job,shot_urls=[],shot_plans=[])
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         if shot.get('reset_context'):previous=None
@@ -878,9 +916,42 @@ def generate(job):
         skip=shot['overlap'] if shot['frames']-shot['overlap']>=context else 0
         shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
                         **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.)} if plan['representation']=='2d' else options.get('mask'),lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')));result_node,guide_node='17','18'
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**({**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.),'labels':bool(r.get('subject_guidance',{}).get('mark_labels'))} if plan['representation']=='2d' else options.get('mask') or {}),**source_blur_settings(options)},lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')),regional_attention=options.get('regional_attention'));result_node,guide_node='17','18'
+        if r['mode']=='swap' and bindings and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True):
+            # Run the exact guide node first: absence must be known before H3 sees any references.
+            preflight={'7':graph['7'],'8':graph['8'],'18':graph['18']}
+            save(job,message=f'Tracking subjects in shot {i+1}/{len(shots)}')
+            tracked=execute_graph(job,preflight,f'track_segment_{i:03d}')
+            reports=tracked.get('8',{}).get('henge_tracks')
+            if not reports:raise ValueError('Worker did not return shot tracking; refusing to generate with unverified identities')
+            report=json.loads(reports[0]);seen={subject['id'] for subject in report.get('subjects',[])}
+            active=[subject for subject in shot_bindings if subject['id'] in seen]
+            nxt=shots[i+1] if i+1<len(shots) else None
+            shot_warnings += [f'Shot {i+1}: {warning}' for warning in follow_update(follow,reports,nxt['start']-shot['start'] if nxt else None)]
+            shot_plans=list(job.get('shot_plans') or [])
+            if not active:
+                piece=work/f'piece_{i:03d}.mp4'
+                run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(path),'-an','-c:v','libx264','-threads','2','-crf','17','-y',str(piece)])
+                if r.get('output_audio',{}).get('generate'):
+                    audio_path=work/f'audio_{i:03d}.wav'
+                    if meta.get('audio'):
+                        run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(path),'-vn','-ar','48000','-ac','2','-y',str(audio_path)])
+                    else:
+                        run(['ffmpeg','-v','error','-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-t',str((shot['frames']-shot['overlap'])/24),'-y',str(audio_path)])
+                gpiece=work/f'guide_{i:03d}.mp4';shutil.copyfile(piece,gpiece)
+                pieces.append(piece);guide_pieces.append(gpiece);previous=None
+                shot_plans.append({'shot':i+1,'subjects':[],'prompt':'','action':'keep_original'})
+                save(job,shot_plans=shot_plans,shot_warnings=shot_warnings,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
+                continue
+            local_bindings,local_refs,local_prompt=shot_swap_plan(active,refs,plan.get('picture_roles',[]),plan['representation'],bool(r.get('subject_guidance',{}).get('mark_labels')))
+            graph['7']['inputs']['pictures']=json.dumps(local_refs)
+            graph['8']['inputs']['bindings']=json.dumps(local_bindings)
+            graph['9']['inputs']['prompt']=local_prompt
+            # HengeGuide runs again only when reference numbering changed, preserving label correctness.
+            shot_plans.append({'shot':i+1,'subjects':[subject['id'] for subject in active],'prompt':local_prompt,'action':'generate'})
+            save(job,shot_plans=shot_plans,shot_warnings=shot_warnings)
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
-        if bindings and plan['representation']!='original':
+        if bindings and plan['representation']!='original' and not (r['mode']=='swap' and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True)):
             nxt=shots[i+1] if i+1<len(shots) else None
             shot_warnings+=[f'Shot {i+1}: {w}' for w in follow_update(follow,outputs.get('8',{}).get('henge_tracks'),nxt['start']-shot['start'] if nxt else None)]
             save(job,shot_warnings=shot_warnings)
@@ -1192,7 +1263,7 @@ async def save_connection(request:Request):
 @app.get('/jobs')
 def list_jobs():
     # Newest first by creation: a retried or long-running job keeps its place instead of jumping to the top.
-    jobs=[job for job in (json.loads(p.read_text()) for p in JOBS.glob('*/job.json')) if (job.get('request') or {}).get('mode') not in ('frame_edit','adapt_prepare','find_people','translate')]
+    jobs=[job for job in (json.loads(p.read_text()) for p in JOBS.glob('*/job.json')) if (job.get('request') or {}).get('mode') not in ('frame_edit','adapt_prepare','find_people','translate','assistant')]
     return [public(job) for job in sorted(jobs,key=lambda job:job.get('created',0),reverse=True)][:50]
 
 @app.post('/jobs')
@@ -1644,11 +1715,46 @@ def run_job_tool(name,args):
     except HTTPException as e:raise ValueError(e.detail)
     raise ValueError(f'Unknown job tool {name}')
 
+def assistant_runtime(cfg):
+    """The provider the assistant really uses: the chosen one, or the built-in VLM when it has no key (so the assistant
+    always works, even before any setup)."""
+    if cfg['provider']=='anthropic' and not (cfg['api_key'] or os.environ.get('ANTHROPIC_API_KEY')):return {**cfg,'provider':'local','model':assistant.LOCAL_MODEL}
+    if cfg['provider']=='openai' and not cfg['api_key'] and 'api.openai.com' in (cfg['base_url'] or 'https://api.openai.com/v1'):return {**cfg,'provider':'local','model':assistant.LOCAL_MODEL}
+    return cfg
+
+def local_vlm(prompt,images,max_tokens):
+    """The built-in assistant model: the planner VLM on the active backend (local ComfyUI or serverless), as a hidden
+    job. Several images go in as one grid (TextGenerate reads one image)."""
+    image=None
+    if images:
+        tiles=[]
+        for url in images:
+            try:tiles.append(Image.open(io.BytesIO(base64.b64decode(url.split(',',1)[1]))).convert('RGB'))
+            except Exception:continue
+        if tiles:
+            side=640;tiles=[ImageOps.contain(t,(side,side)) for t in tiles];cols=min(2,len(tiles));rows=math.ceil(len(tiles)/cols)
+            grid=Image.new('RGB',(cols*side,rows*side),'black')
+            for i,t in enumerate(tiles):grid.paste(t,((i%cols)*side+(side-t.width)//2,(i//cols)*side+(side-t.height)//2))
+            # Under henge/: the remote backends upload only staged files there.
+            folder=INPUT/'henge'/'assistant_vlm';folder.mkdir(parents=True,exist_ok=True);dest=folder/(uuid.uuid4().hex+'.jpg');grid.save(dest,quality=90)
+            image=dest.relative_to(INPUT).as_posix()
+    jid=uuid.uuid4().hex;job_path(jid).mkdir(parents=True)
+    job={'id':jid,'created':time.time(),'status':'running','stage':'assistant','progress':0,'request':{'mode':'assistant'},'options':{},'message':'Built-in assistant model'};save(job)
+    try:
+        outputs=execute_graph(job,plan_graph(image,prompt,max_tokens,os.environ.get('HENGE_VLM_CLIP','qwen3.5_9b_w4a8_gptq.safetensors')),'assistant')
+        save(job,status='completed',stage='complete',progress=1)
+    except Exception as e:
+        save(job,status='failed',error=str(e)[:800]);raise
+    text=(outputs.get('4',{}).get('text',[''])[0] or '').strip()
+    return re.sub(r'^\s*Answer:\s*','',re.sub(r'<think>.*?</think>','',text,flags=re.S),flags=re.I).strip()
+
+assistant.LOCAL_VLM=local_vlm
+
 def assistant_planner():
     """The assistant's config when the user chose it to write the prompts and analyses (and it has a key or a
     local server), else None: the Qwen planner in ComfyUI (or VLM_CHAT_URL) does it."""
     cfg=assistant.load_config(ASSISTANT_CONFIG)
-    if cfg.get('planner')!='assistant':return None
+    if cfg.get('planner')!='assistant' or cfg['provider']=='local':return None
     if cfg['provider']=='anthropic' and not (cfg['api_key'] or os.environ.get('ANTHROPIC_API_KEY')):return None
     if cfg['provider']=='openai' and not (cfg['api_key'] or cfg['base_url']):return None
     return cfg
@@ -1666,6 +1772,101 @@ async def assistant_models(request:Request):
     """The models of the provider chosen in the settings (not saved yet), for the model dropdown."""
     try:return await asyncio.to_thread(assistant.list_models,assistant.load_config(ASSISTANT_CONFIG),await request.json())
     except Exception as e:raise HTTPException(400,str(e)[:300])
+
+@app.get('/assistant/pointing')
+def pointing_status():
+    model=Path(os.environ.get('HENGE_MOLMO_MODEL',''))
+    python=Path(os.environ.get('HENGE_MOLMO_PYTHON',''))
+    return {'configured':python.is_file() and (model/'config.json').is_file(),
+            'model':model.name if (model/'config.json').is_file() else None, 'max_shot_seconds':30,'match_people':{'max_people':molmo_pointing.MAX_PEOPLE,'max_seconds':molmo_pointing.MAX_MATCH_SECONDS}}
+
+@app.post('/assistant/point-video')
+async def point_video(request:Request):
+    """Propose normalized points for one shot. Does not change marks or run SAM/H3."""
+    async with request.form(max_files=1,max_fields=3) as form:
+        video=form.get('video');query=str(form.get('query') or '')
+        try:
+            start=float(form.get('start') or 0);end=float(form.get('end') or 0)
+            molmo_pointing.validate_request(query,start,end)
+        except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
+        if not hasattr(video,'read'):raise HTTPException(400,'Send the guide video')
+        if not pointing_status()['configured']:raise HTTPException(409,'Configure HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL; see docs/molmo-pointing.md')
+        folder=ROOT/'pointing'/uuid.uuid4().hex;folder.mkdir(parents=True)
+        source=folder/'source.mp4'
+        size=0
+        with source.open('wb') as output:
+            while chunk:=await video.read(1024*1024):
+                size+=len(chunk)
+                if size>500*1024*1024:raise HTTPException(413,'Guide video exceeds 500 MB')
+                output.write(chunk)
+        try:
+            meta=await asyncio.to_thread(probe,source)
+            if end>meta['duration']+.05:raise ValueError('Pointing interval exceeds the guide duration')
+            end=min(end,meta['duration'])
+            result=await asyncio.to_thread(molmo_pointing.point_video,source,query,start,end,folder)
+            return {**result,'request_id':folder.name}
+        except ValueError as exc:raise HTTPException(400,str(exc))
+        except Exception as exc:raise HTTPException(500,str(exc)[-2200:])
+
+@app.post('/assistant/ask-video')
+async def ask_video(request:Request):
+    """A free question about the guide interval (caption, who does what when, how many people...), answered by the
+    local Molmo2 watching the clip. Changes nothing."""
+    async with request.form(max_files=1,max_fields=4) as form:
+        video=form.get('video');question=str(form.get('question') or '')
+        try:
+            start=float(form.get('start') or 0);end=float(form.get('end') or 0)
+            molmo_pointing.validate_ask(question,start,end)
+        except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
+        if not hasattr(video,'read'):raise HTTPException(400,'Send the guide video')
+        if not pointing_status()['configured']:raise HTTPException(409,'Configure HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL; see docs/molmo-pointing.md')
+        folder=ROOT/'pointing'/uuid.uuid4().hex;folder.mkdir(parents=True);source=folder/'source.mp4';size=0
+        with source.open('wb') as output:
+            while chunk:=await video.read(1024*1024):
+                size+=len(chunk)
+                if size>500*1024*1024:raise HTTPException(413,'Guide video exceeds 500 MB')
+                output.write(chunk)
+        try:
+            meta=await asyncio.to_thread(probe,source)
+            if end>meta['duration']+.05:raise ValueError('The interval exceeds the guide duration')
+            return await asyncio.to_thread(molmo_pointing.ask_video,source,question,start,min(end,meta['duration']),folder)
+        except ValueError as exc:raise HTTPException(400,str(exc))
+        except Exception as exc:raise HTTPException(500,str(exc)[-2200:])
+
+@app.post('/assistant/match-people')
+async def match_people(request:Request):
+    """Find the people shown in photos (one photo per person) in every shot of the guide interval. Returns one
+    proposed anchor per person and shot; does not change marks or run SAM/H3."""
+    async with request.form(max_files=1+molmo_pointing.MAX_PEOPLE,max_fields=4) as form:
+        video=form.get('video');photos=[p for p in form.getlist('people') if hasattr(p,'read')]
+        try:
+            start=float(form.get('start') or 0);end=float(form.get('end') or 0)
+            molmo_pointing.validate_match(len(photos),start,end)
+        except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
+        if not hasattr(video,'read'):raise HTTPException(400,'Send the guide video')
+        if not pointing_status()['configured']:raise HTTPException(409,'Configure HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL; see docs/molmo-pointing.md')
+        folder=ROOT/'pointing'/uuid.uuid4().hex;folder.mkdir(parents=True)
+        source=folder/'source.mp4';size=0
+        with source.open('wb') as output:
+            while chunk:=await video.read(1024*1024):
+                size+=len(chunk)
+                if size>500*1024*1024:raise HTTPException(413,'Guide video exceeds 500 MB')
+                output.write(chunk)
+        refs=[]
+        for i,photo in enumerate(photos):
+            data=await photo.read()
+            if len(data)>25*1024*1024:raise HTTPException(413,'A photo exceeds 25 MB')
+            try:
+                with Image.open(io.BytesIO(data)) as im:ImageOps.exif_transpose(im).convert('RGB').save(folder/f'person_{i+1}.png')
+            except Exception:raise HTTPException(400,f'Photo {i+1} is not a readable image')
+            refs.append(folder/f'person_{i+1}.png')
+        try:
+            meta=await asyncio.to_thread(probe,source)
+            if end>meta['duration']+.05:raise ValueError('The interval exceeds the guide duration')
+            result=await asyncio.to_thread(molmo_pointing.match_people,source,refs,start,min(end,meta['duration']),folder)
+            return {**result,'request_id':folder.name,'frame_width':meta['width'],'frame_height':meta['height']}
+        except ValueError as exc:raise HTTPException(400,str(exc))
+        except Exception as exc:raise HTTPException(500,str(exc)[-2200:])
 
 @app.post('/assistant/people')
 async def find_people(request:Request):
@@ -1694,8 +1895,7 @@ async def find_people(request:Request):
 async def assistant_step(request:Request):
     body=await request.json();messages=body.get('messages')
     if not isinstance(messages,list) or not messages:raise HTTPException(400,'Send the conversation')
-    cfg=assistant.load_config(ASSISTANT_CONFIG)
-    if cfg['provider']=='anthropic' and not cfg['api_key'] and not os.environ.get('ANTHROPIC_API_KEY'):raise HTTPException(409,'Set up the assistant first: add an API key in its settings')
+    cfg=assistant_runtime(assistant.load_config(ASSISTANT_CONFIG))
     try:return await asyncio.to_thread(assistant.step,cfg,messages,run_job_tool)
     except Exception as e:raise HTTPException(502,f'Assistant error: {str(e)[:800]}')
 
