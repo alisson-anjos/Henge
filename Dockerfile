@@ -24,7 +24,7 @@ ENTRYPOINT ["python", "/app/docker/entrypoint.py"]
 # Full image (default target): one pod with ComfyUI + bridge + UI, or a serverless worker with HENGE_ROLE=worker.
 FROM ${PYTORCH_IMAGE} AS runtime
 ARG COMFY_REF=f5ea88af1c46c50a39792d00af80e5af941f99f6
-ARG BFS_REF=1360d01fbfb57fe69cd7c54bc0789c4847826b5b
+ARG BFS_REF=6df4276ae9666e70a54be28c605338390010ce8a
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
     COMFY_ROOT=/opt/ComfyUI COMFY_BASE_URL=http://127.0.0.1:8189 \
     HENGE_BACKEND_URL=http://127.0.0.1:8766 HENGE_DATA_DIR=/state/jobs \
