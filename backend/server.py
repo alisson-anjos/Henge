@@ -928,9 +928,9 @@ def generate(job):
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
         # The next shot's context is read from the end of this one, so the worker may drop the overlap only when
         # enough frames remain after it.
-        # Continuing shots keep JOIN_BLEND overlap frames: they are blended with the previous shot's tail (crossfade and
+        # Continuing shots keep JOIN_OVERLAP overlap frames: they are joined with the previous shot's tail (seam selection and
         # colour match), then dropped.
-        skip=max(0,shot['overlap']-JOIN_BLEND) if shot['frames']-shot['overlap']>=context else 0
+        skip=max(0,shot['overlap']-JOIN_OVERLAP) if shot['frames']-shot['overlap']>=context else 0
         shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
                         **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
         graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**({**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.),'labels':bool(r.get('subject_guidance',{}).get('mark_labels'))} if plan['representation']=='2d' else options.get('mask') or {}),**source_blur_settings(options)},lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')),regional_attention=options.get('regional_attention'));result_node,guide_node='17','18'
@@ -981,7 +981,7 @@ def generate(job):
             # Overlap still in the file (no overlap to drop, or an older worker that ignores skip_frames).
             run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(rendered),'-an','-c:v','libx264','-threads','2','-crf','17','-movflags','+faststart','-y',str(piece)])
         dup=frame_count(piece)-(shot['frames']-shot['overlap']) if shot['overlap'] and pieces else 0
-        if dup>0:blend_join(pieces[-1],piece,dup)
+        if dup>0:seam_join(pieces[-1],piece,dup)
         shot_audio(job,outputs,i,shot,piece)
         pieces.append(piece);previous=rendered
         # Each finished shot is viewable and downloadable while the next ones render.
@@ -999,7 +999,7 @@ def generate(job):
     save(job,render_size=[W,H])
     finalize(job,pieces,guide_pieces,W,H)
 
-JOIN_BLEND=8
+JOIN_OVERLAP=8
 
 def read_frames(path):
     import numpy as np
@@ -1012,20 +1012,14 @@ def write_frames(frames,path):
     subprocess.run(['ffmpeg','-v','error','-f','rawvideo','-pix_fmt','rgb24','-s',f'{w}x{h}','-r','24','-i','-','-c:v','libx264','-threads','2','-crf','17',
                     '-pix_fmt','yuv420p','-movflags','+faststart','-y',str(path)],input=frames.tobytes(),check=True)
 
-def blend_join(previous,piece,dup):
-    """Join two shots of one take: the first `dup` frames of `piece` re-render the last `dup` frames of `previous`. The
-    new shot's colours are matched to the previous one on those frames (no drift in exposure or tint from shot to
-    shot), the two are crossfaded there (no jump or ghost at the join), and the duplicates are dropped from `piece`."""
-    import numpy as np
+def seam_join(previous,piece,dup):
+    """Join overlapping windows at their closest matching frame without a dissolve."""
+    from video_join import join_overlap
     a=read_frames(previous);b=read_frames(piece)
     if len(a)<dup or len(b)<=dup or a.shape[1:]!=b.shape[1:]:return
-    tail=a[-dup:].astype(np.float32);head=b[:dup].astype(np.float32)
-    mean_t,std_t=tail.mean((0,1,2)),tail.std((0,1,2))+1e-3;mean_h,std_h=head.mean((0,1,2)),head.std((0,1,2))+1e-3
-    gain=np.clip(std_t/std_h,.85,1.15);fixed=np.clip((b.astype(np.float32)-mean_h)*gain+mean_t,0,255)
-    weight=((np.arange(dup)+1)/(dup+1))[:,None,None,None]
-    blended=tail*(1-weight)+fixed[:dup]*weight
-    write_frames(np.concatenate([a[:-dup],blended.astype(np.uint8)]),previous)
-    write_frames(fixed[dup:].astype(np.uint8),piece)
+    a,b=join_overlap(a,b,dup)
+    write_frames(a,previous)
+    write_frames(b,piece)
 
 def make_plate(job):
     """Moving plate: the selected interval with its background replaced by the uploaded picture, moving with the
@@ -2143,7 +2137,7 @@ def redo_shot(job):
     relative=graph['17']['inputs']['filename'].replace('_result.mp4','.mp4')
     rendered=FILES.download(results[0],INPUT/relative.replace('.mp4','_result.mp4'))
     piece=work/f'piece_{i:03d}.mp4';skip=graph['17']['inputs'].get('skip_frames',0)
-    # A redone shot drops the frames kept for blending: the previous shot's tail already holds the original crossfade.
+    # A redone shot drops the overlap frames: the previous piece already contains its assembled tail.
     extra=frame_count(rendered)-(shot['frames']-shot['overlap'])
     if skip and extra==0:shutil.copyfile(rendered,piece)
     elif skip and extra>0:run(['ffmpeg','-v','error','-i',str(rendered),'-vf',f'trim=start_frame={extra},setpts=PTS-STARTPTS','-an','-c:v','libx264','-threads','2','-crf','17','-movflags','+faststart','-y',str(piece)])
