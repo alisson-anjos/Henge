@@ -3,7 +3,7 @@
 Character swap, motion transfer, head swap and sharpness for video, built on **ComfyUI** with
 **MiniMax H3** and a trained LoRA per mode. One pod runs the web UI, the job bridge and ComfyUI.
 
-New to RunPod? Create your account with our link: https://runpod.io?ref=8t518hht
+New to RunPod? Create your account with our link: https://get.runpod.io/z4bz8o1va7a7
 
 **Open the app:** *Connect → HTTP Service [8188]* once the logs show the UI is up.
 

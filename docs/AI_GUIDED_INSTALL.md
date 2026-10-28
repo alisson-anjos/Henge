@@ -33,7 +33,7 @@ node --version; python3 --version; ffmpeg -version | head -1; git --version
 ```
 
 On Windows run these in PowerShell (use `Get-PSDrive` for disk). Also ask the user whether they already have
-ComfyUI and where, and whether they have a RunPod account (if not, give them https://runpod.io?ref=8t518hht).
+ComfyUI and where, and whether they have a RunPod account (if not, give them https://get.runpod.io/z4bz8o1va7a7).
 
 ## 2. Choose an option with the user
 
@@ -75,7 +75,7 @@ Steps and checks:
 
 ## B. RunPod pod
 
-The user deploys the Henge template from https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht (or follow [AGENT_DEPLOY.md → Option B](AGENT_DEPLOY.md#option-b-one-pod)). The user can also do it by hand from
+The user deploys the Henge template from https://console.runpod.io/deploy?template=mnxax277c8 (or follow [AGENT_DEPLOY.md → Option B](AGENT_DEPLOY.md#option-b-one-pod)). The user can also do it by hand from
 [RUNPOD.md](RUNPOD.md).
 
 ## C. Local UI + RunPod Serverless

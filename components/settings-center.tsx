@@ -8,8 +8,8 @@ import {AccessForm, useAccessState} from './access-settings';
  * the bridge (connection.json); environment variables still win and show here as read-only. */
 export const SETUP_KEY = 'henge-setup-done';
 // Henge's published RunPod templates and referral (supports the project).
-const RUNPOD_SIGNUP = 'https://runpod.io?ref=8t518hht';
-const RUNPOD_POD = 'https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht';
+const RUNPOD_SIGNUP = 'https://get.runpod.io/z4bz8o1va7a7';
+const RUNPOD_POD = 'https://console.runpod.io/deploy?template=mnxax277c8';
 // Serverless templates can't be public on RunPod: the guide creates the worker template in the user's account.
 const RUNPOD_SERVERLESS = 'https://github.com/alisson-anjos/Henge/blob/main/docs/SERVERLESS.md';
 type Tab = 'connection' | 'assistant' | 'access';

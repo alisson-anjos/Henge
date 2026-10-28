@@ -159,8 +159,8 @@ the Serverless endpoint and the UI on your computer.
 
 One container runs the UI, the bridge and ComfyUI; models download on the first boot into the pod volume.
 
-1. **[Deploy the Henge template on RunPod](https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht)** — image, disks, ports and environment are already set
-   (new to RunPod? [create your account with our link](https://runpod.io?ref=8t518hht)).
+1. **[Deploy the Henge template on RunPod](https://console.runpod.io/deploy?template=mnxax277c8)** — image, disks, ports and environment are already set
+   (new to RunPod? [create your account with our link](https://get.runpod.io/z4bz8o1va7a7)).
 2. Optional: a network volume keeps the models when the pod is deleted and can also feed a Serverless endpoint
    (option C). Create it first (*Storage → New volume*, 180 GB, in the datacenter of the GPU you want) and pick it
    under *Region → Network volume*. Without one, the models stay on the pod's own volume.
@@ -182,7 +182,7 @@ Every step can also be done in the RunPod console, without scripts: see
 [docs/SERVERLESS.md](docs/SERVERLESS.md) (volume filled by the pod template, then *Serverless → New endpoint →
 Docker image*).
 
-1. [Create a RunPod account](https://runpod.io?ref=8t518hht) if you have none and install
+1. [Create a RunPod account](https://get.runpod.io/z4bz8o1va7a7) if you have none and install
    [`runpodctl`](https://github.com/runpod/runpodctl) with your API key.
 2. Put the models on a network volume (once; a temporary pod downloads them and is deleted):
 

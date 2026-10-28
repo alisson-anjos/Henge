@@ -31,7 +31,7 @@ Images are built by GitHub Actions on every push and tagged `latest` (the main b
 
 ## 0. Prerequisites (check, do not assume)
 
-If the user has no RunPod account, give them this sign-up link: https://runpod.io?ref=8t518hht
+If the user has no RunPod account, give them this sign-up link: https://get.runpod.io/z4bz8o1va7a7
 
 
 ```sh
@@ -47,7 +47,7 @@ Ask the user for:
 
 ## Option B: one pod
 
-1. Use the published Henge pod template `mnxax277c8` (deploy link for the user: https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht; with runpodctl,
+1. Use the published Henge pod template `mnxax277c8` (deploy link for the user: https://console.runpod.io/deploy?template=mnxax277c8; with runpodctl,
    `--template-id mnxax277c8`). Only if the user wants their own: `scripts/runpod_template.sh` (read it first; `TEMPLATE_ID=<id>`
    updates an existing template). Settings: image `ghcr.io/alisson-anjos/henge:latest`, container
    disk 30 GB, volume 180 GB at `/workspace`, HTTP port 8188.

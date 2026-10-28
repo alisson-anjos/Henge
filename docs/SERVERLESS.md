@@ -34,7 +34,7 @@ The default setup is unchanged: one pod running UI, bridge and ComfyUI together
 
 ## Requirements
 
-- A RunPod account with credit and an API key (*Settings → API Keys*). New to RunPod? [Create your account with our link](https://runpod.io?ref=8t518hht).
+- A RunPod account with credit and an API key (*Settings → API Keys*). New to RunPod? [Create your account with our link](https://get.runpod.io/z4bz8o1va7a7).
 - For the scripts only: [`runpodctl`](https://github.com/runpod/runpodctl) configured (`runpodctl doctor`).
   Everything can also be done in the RunPod console (option B of each step).
 - For the UI: Docker, or Node + Python (step 3).
@@ -92,7 +92,7 @@ open its setup screen; delete it with `runpodctl pod delete <pod id>` when done.
 ### Option B: RunPod console
 
 1. *Storage* → *New volume*: pick the datacenter (see below), a name and 180 GB → *Create network volume*.
-2. Open the [Henge pod template](https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht). Under
+2. Open the [Henge pod template](https://console.runpod.io/deploy?template=mnxax277c8). Under
    *Region*, choose *Network volume* and select the new volume; pick a GPU with more than 32 GB of RAM in that
    datacenter (it is a normal Henge pod, so you can also use it right away) → *Deploy Pod*. To download only some
    profiles, set `HENGE_MODEL_PROFILES` in *Set overrides*.

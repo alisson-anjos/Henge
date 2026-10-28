@@ -33,8 +33,8 @@ A public package needs no credential.
 
 ## 2. Deploy the template
 
-**Use the Henge template: [Deploy on RunPod](https://console.runpod.io/deploy?template=mnxax277c8&ref=8t518hht).** It has the image, disks, ports and environment below
-already set. New to RunPod? [Create your account with our link](https://runpod.io?ref=8t518hht).
+**Use the Henge template: [Deploy on RunPod](https://console.runpod.io/deploy?template=mnxax277c8).** It has the image, disks, ports and environment below
+already set. New to RunPod? [Create your account with our link](https://get.runpod.io/z4bz8o1va7a7).
 
 In the deploy screen pick a GPU with more than 32 GB and *Deploy Pod*; no variable needs changing. To keep the models
 when the pod is deleted (and share them with a [Serverless](SERVERLESS.md) endpoint), first create a network volume
