@@ -123,6 +123,17 @@ class PointingApiTests(unittest.TestCase):
         r=self.client.post('/assistant/ask-video',files={'video':('x.mp4',b'video','video/mp4')},data={'question':'','start':0,'end':5})
         self.assertEqual(r.status_code,400)
 
+    def test_local_comfy_is_freed_before_molmo_only_when_local(self):
+        with patch.object(self.server,'REMOTE',None),patch.object(self.server,'URL','http://127.0.0.1:8189'),patch.object(self.server.requests,'post') as post:
+            self.server.free_local_comfy()
+        post.assert_called_once();self.assertEqual(post.call_args.args[0],'http://127.0.0.1:8189/free')
+        self.assertEqual(post.call_args.kwargs['json'],{'unload_models':True,'free_memory':True})
+        for remote,url in [(object(),'http://127.0.0.1:8189'),(None,'http://10.0.0.5:8188')]:
+            with patch.object(self.server,'REMOTE',remote),patch.object(self.server,'URL',url),patch.object(self.server.requests,'post') as post:
+                self.server.free_local_comfy()
+            post.assert_not_called()
+        self.assertIs(self.server.molmo_pointing.BEFORE_RUN,self.server.free_local_comfy)
+
     def test_guide_caption_is_skipped_without_molmo(self):
         job={'id':'0'*32,'request':{'mode':'swap','video':{'start_seconds':0,'end_seconds':2}},'assets':{'video':'x.mp4'}}
         with patch.object(self.server.molmo_pointing,'available',return_value=False),patch.object(self.server.molmo_pointing,'ask_video') as ask:

@@ -17,6 +17,8 @@ import threading
 from PIL import Image, ImageDraw
 
 LOCK = threading.Lock()
+# Set by the bridge: frees the VRAM of a ComfyUI on this same machine before Molmo2 loads (one GPU, two models).
+BEFORE_RUN = None
 COLORS = ['#ff3b30', '#34c759', '#0a84ff', '#ffd60a', '#bf5af2', '#ff9f0a']
 MAX_MATCH_SECONDS = 120
 MAX_PEOPLE = 6
@@ -67,8 +69,14 @@ def configured():
 def run_worker(args):
     python, model = configured()
     command = [python, str(Path(__file__).with_name('molmo_pointing_worker.py')), '--model', model, *args]
-    # Each subprocess exits after inference, so H3 and SAM do not share resident Molmo weights.
+    # Each subprocess exits after inference, so H3 and SAM do not share resident Molmo weights; before it loads, a local
+    # ComfyUI unloads its models so the two never sit in VRAM together.
     with LOCK:
+        if BEFORE_RUN is not None:
+            try:
+                BEFORE_RUN()
+            except Exception as exc:
+                print(f'[Henge] could not free ComfyUI VRAM before Molmo2: {exc}', flush=True)
         result = subprocess.run(command, capture_output=True, text=True, timeout=900)
     if result.returncode:
         raise RuntimeError('Molmo2 failed: '+(result.stderr or result.stdout)[-2200:])

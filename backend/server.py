@@ -1750,6 +1750,14 @@ def local_vlm(prompt,images,max_tokens):
 
 assistant.LOCAL_VLM=local_vlm
 
+def free_local_comfy():
+    """Before Molmo2 loads on this machine: a ComfyUI on this same machine unloads its models (H3, SAM, Qwen) so the
+    GPU never holds both. Remote ComfyUI, Comfy API and serverless have their own GPUs: nothing to free."""
+    if REMOTE is not None or urlsplit(URL).hostname not in ('127.0.0.1','localhost','::1'):return
+    requests.post(URL+'/free',json={'unload_models':True,'free_memory':True},timeout=30).raise_for_status()
+
+molmo_pointing.BEFORE_RUN=free_local_comfy
+
 def assistant_planner():
     """The assistant's config when the user chose it to write the prompts and analyses (and it has a key or a
     local server), else None: the Qwen planner in ComfyUI (or VLM_CHAT_URL) does it."""
