@@ -235,10 +235,16 @@ class HengeH3Conditioning:
             if reference_scale!=1.:
                 h,w=guide.shape[1:3];size=(max(32,int(h*reference_scale)//32*32),max(32,int(w*reference_scale)//32*32))
                 video=torch.nn.functional.interpolate(guide.movedim(-1,1),size=size,mode='bilinear',align_corners=False).movedim(1,-1)
-            print(f'[Henge H3] TARA native Video 1; reference scale {reference_scale:g}; Add Guide OFF',flush=True)
+            print(f'[Henge H3] TARA native Video 1; reference scale {reference_scale:g}; guide latents only for continuity',flush=True)
             cond,latent=MiniMaxH3ReferenceToVideo.execute(clip=clip,vae=vae,prompt=prompt,width=width,height=height,length=length,
                 ref_image_size=reference_size,ref_images=pictures,ref_videos={'ref_video_1':video},
                 audio_vae=audio_vae,ref_video_audios={'ref_video_audio_1':audio} if audio is not None else None)
+            # A still of the previous shot only says how things look; the previous generated frames locked at the head of
+            # this shot also hold the framing, pose and light at the boundary (no jump between shots of one take).
+            if context_images is not None and context_count>=5:
+                count=min(context_count,len(context_images),length);count-=max(0,(count-5)%17)
+                cond=MiniMaxH3AddGuide.execute(positive=cond,latent=latent,frame_idx=0,vae=vae,image=context_images[-count:])[0]
+                print(f'[Henge H3] TARA continuity: {count} previous frames locked at the start',flush=True)
             return cond,latent
         if conditioning_mode!='guide':raise ValueError('Unknown H3 conditioning mode')
         if guide_context:clip=clip_with_video_context(clip,{'guide':guide},length,context_fps=clip_video_fps)
