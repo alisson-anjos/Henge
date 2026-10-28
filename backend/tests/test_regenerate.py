@@ -19,7 +19,18 @@ class RegenerateTests(unittest.TestCase):
         self.assertEqual(g['73']['inputs']['model'],['72',0])
         self.assertEqual(g['72']['inputs']['lora_name'],REGENERATE['turbo'])
         self.assertEqual(g['73']['inputs']['lora_name'],REGENERATE['refiner'])
-        self.assertEqual(g['34']['inputs']['model'],['73',0])
+        self.assertEqual(g['74']['inputs']['model'],['73',0])
+        self.assertEqual(g['74']['inputs']['lora_name'],REGENERATE['lms'])
+        self.assertEqual(g['74']['inputs']['strength_model'],1.)
+        self.assertEqual(g['34']['inputs']['model'],['74',0])
+        self.assertEqual(g['34']['inputs']['conditioning'],['76',0])
+        self.assertEqual(g['76']['class_type'],'MiniMaxH3AddGuide')
+        self.assertEqual(g['76']['inputs']['positive'],['32',0])
+        self.assertEqual(g['76']['inputs']['latent'],['31',0])
+        self.assertEqual(g['76']['inputs']['image'],['75',0])
+        self.assertEqual(g['75']['inputs']['video'],'clip.mp4')
+        self.assertEqual(g['75']['inputs']['pictures'],'[]')
+        self.assertEqual((g['75']['inputs']['width'],g['75']['inputs']['height']),(2560,1440))
         self.assertEqual(g['32']['class_type'],'CLIPTextEncode')
         self.assertEqual(g['32']['inputs']['text'],'A person walks.')
         self.assertNotEqual(g['3']['inputs']['lora_name'],REGENERATE['refiner'])
@@ -45,11 +56,11 @@ class RegenerateTests(unittest.TestCase):
         status=server.regenerate_requirements({})
         self.assertFalse(status['available'])
         self.assertIn('MiniMaxH3LatentUpscaleWithModel',status['missing_nodes'])
-        self.assertEqual(len(status['missing_models']),4)
+        self.assertEqual(len(status['missing_models']),5)
 
     def test_complete_inventory_accepts_subfolder_model_names(self):
-        info={k:{} for k in ('MiniMaxH3LatentUpscaleWithModel','ManualSigmas','BasicGuider')}
-        for loader,key,names in [('UNETLoader','unet_name',[REGENERATE['base']]),('LoraLoaderModelOnly','lora_name',[REGENERATE['turbo'],REGENERATE['refiner']]),('LatentUpscaleModelLoader','model_name',[REGENERATE['upscaler']])]:
+        info={k:{} for k in ('MiniMaxH3LatentUpscaleWithModel','ManualSigmas','BasicGuider','MiniMaxH3AddGuide')}
+        for loader,key,names in [('UNETLoader','unet_name',[REGENERATE['base']]),('LoraLoaderModelOnly','lora_name',[REGENERATE['turbo'],REGENERATE['refiner'],REGENERATE['lms']]),('LatentUpscaleModelLoader','model_name',[REGENERATE['upscaler']])]:
             info[loader]={'input':{'required':{key:[['custom/'+n.split('/')[-1] for n in names]]}}}
         self.assertTrue(server.regenerate_requirements(info)['available'])
 

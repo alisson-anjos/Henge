@@ -766,10 +766,10 @@ def adapt_state(job):
     return {'enabled':True,'figure':req['figure'],'instruction':req['instruction'],'default_instruction':req['default_instruction'],'ready':cached,'preview_url':job.get('adapted_preview_url') if cached else None}
 
 def regenerate_requirements(info):
-    required=('MiniMaxH3LatentUpscaleWithModel','LatentUpscaleModelLoader','ManualSigmas','BasicGuider')
+    required=('MiniMaxH3LatentUpscaleWithModel','LatentUpscaleModelLoader','ManualSigmas','BasicGuider','MiniMaxH3AddGuide')
     missing_nodes=[name for name in required if name not in info]
     missing_models=[]
-    for loader,key,name in [('UNETLoader','unet_name',REGENERATE['base']),('LoraLoaderModelOnly','lora_name',REGENERATE['turbo']),('LoraLoaderModelOnly','lora_name',REGENERATE['refiner']),('LatentUpscaleModelLoader','model_name',REGENERATE['upscaler'])]:
+    for loader,key,name in [('UNETLoader','unet_name',REGENERATE['base']),('LoraLoaderModelOnly','lora_name',REGENERATE['turbo']),('LoraLoaderModelOnly','lora_name',REGENERATE['refiner']),('LoraLoaderModelOnly','lora_name',REGENERATE['lms']),('LatentUpscaleModelLoader','model_name',REGENERATE['upscaler'])]:
         names=set(comfy_choices(info,loader,key))
         if workflows.resolve_model(loader,name,names) not in names:missing_models.append(name)
     message='Open-H3 Regenerate needs the updated ComfyUI worker and regenerate model profile'

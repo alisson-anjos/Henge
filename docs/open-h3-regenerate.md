@@ -2,9 +2,9 @@
 
 O modo opcional **Open-H3 Regenerate 2K · refiner rank 16 (experimental)** executa primeiro a nitidez LMS do Henge e depois uma segunda passagem generativa. Pode alterar detalhes: compare sempre com o vídeo original.
 
-A segunda passagem usa uma base FL2VA independente, DMAD 4-step e o refiner rank 16 do Kijai. Esse arquivo contém **somente o refiner**, sem LMS e sem LightX2V Turbo. O LMS continua na primeira passagem; não é aplicado novamente à segunda base.
+A segunda passagem usa uma base FL2VA independente, DMAD 4-step, o refiner rank 16 do Kijai e nosso LMS v1.0 r64 em strength 1.0. Esse arquivo contém **somente o refiner**, sem LMS e sem LightX2V Turbo. O LMS é carregado separadamente nas duas passagens, uma vez por base. Na segunda passagem, `MiniMaxH3AddGuide` ancora o vídeo original do shot na resolução final, começando no frame 0.
 
-O grafo adapta `minimax_h3_2stage_testing.json`: upscaler latente nativo, condicionamento apenas textual na segunda passagem e sampler `er_sde`. O padrão usa dois passos (`0.7, 0.494118, 0`); três passos são experimentais (`0.909375, 0.857143, 0.666667, 0`), a partir do schedule alternativo não conectado no workflow. O DMAD público usado aqui é avg rank 39, diferente do arquivo rank 83 local daquele workflow. Não é uma reprodução idêntica da inferência CUDA da NVIDIA.
+O grafo adapta `minimax_h3_2stage_testing.json`: upscaler latente nativo, descrição textual mais Add Guide do vídeo original na segunda passagem e sampler `er_sde`. O padrão usa dois passos (`0.7, 0.494118, 0`); três passos são experimentais (`0.909375, 0.857143, 0.666667, 0`), a partir do schedule alternativo não conectado no workflow. O DMAD público usado aqui é avg rank 39, diferente do arquivo rank 83 local daquele workflow. Não é uma reprodução idêntica da inferência CUDA da NVIDIA.
 
 ## Instalação no worker
 
@@ -16,9 +16,9 @@ Adicione `regenerate` aos perfis existentes em `HENGE_MODEL_PROFILES` (por exemp
 python scripts/download_models.py --models-dir /opt/ComfyUI/models --profiles sharpness,regenerate
 ```
 
-O manifesto fornece a base FL2VA INT8, DMAD, o refiner rank 16 e `minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors`. O upscaler deve ficar em `models/latent_upscale_models`; o LMS upscaler anterior não o substitui.
+O manifesto fornece a base FL2VA INT8, DMAD, o refiner rank 16, LMS e `minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors`. O upscaler deve ficar em `models/latent_upscale_models`; o LMS upscaler anterior não o substitui.
 
-O Henge exige os nodes nativos e os quatro pesos no inventário do worker. No Serverless, esse inventário é atualizado pelas respostas do worker; após trocar a imagem, execute um job de um modo já disponível para atualizar o cache do Henge. O worker também suporta a operação `inventory`, mas chamá-la diretamente no RunPod não atualiza o cache do bridge. A checagem de saúde do Henge usa o cache e não acorda um worker automaticamente.
+O Henge exige os nodes nativos e os cinco pesos no inventário do worker. No Serverless, esse inventário é atualizado pelas respostas do worker; após trocar a imagem, execute um job de um modo já disponível para atualizar o cache do Henge. O worker também suporta a operação `inventory`, mas chamá-la diretamente no RunPod não atualiza o cache do bridge. A checagem de saúde do Henge usa o cache e não acorda um worker automaticamente.
 
 ## Uso e limites
 

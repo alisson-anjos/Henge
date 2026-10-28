@@ -315,7 +315,8 @@
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_lms_v1.0_r64.safetensors",
       "destination": "loras/henge/minimax_h3_lms_v1.0_r64.safetensors",
       "profiles": [
-        "sharpness"
+        "sharpness",
+        "regenerate"
       ],
       "note": "LMS sharpness LoRA extracted with Frobenius/SVD (dyn95)."
     },

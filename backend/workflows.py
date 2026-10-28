@@ -74,6 +74,7 @@ REGENERATE={
  'base':'minimax_h3_fl2va_pruned_int8_convrot.safetensors',
  'refiner':'henge/minimax_h3_open_regenerate_2k_refiner_rank_16_bf16.safetensors',
  'turbo':TURBOS['dmad4']['lora'],
+ 'lms':MODELS['sharpness']['lora'],
  'upscaler':'minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors',
 }
 REGENERATE_SIGMAS={2:'0.7, 0.494118, 0',3:'0.909375, 0.857143, 0.666667, 0'}
@@ -181,12 +182,16 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             g['71']=node('ModelAttentionBackend',model=['70',0],attention=attention)
             g['72']=node('LoraLoaderModelOnly',model=['71',0],lora_name=REGENERATE['turbo'],strength_model=1.)
             g['73']=node('LoraLoaderModelOnly',model=['72',0],lora_name=REGENERATE['refiner'],strength_model=1.)
+            g['74']=node('LoraLoaderModelOnly',model=['73',0],lora_name=REGENERATE['lms'],strength_model=1.)
             g['30']=node('LatentUpscaleModelLoader',model_name=upscale.get('model',REGENERATE['upscaler']))
             # Native node resizes video while preserving the AV latent's audio stream.
             g['31']=node('MiniMaxH3LatentUpscaleWithModel',model=['30',0],samples=['14',0],width=W,height=H)
             g['32']=node('CLIPTextEncode',clip=['5',0],text=upscale.get('prompt') or prompt)
             g['33']=node('ManualSigmas',sigmas=REGENERATE_SIGMAS[count])
-            g['34']=node('BasicGuider',model=['73',0],conditioning=['32',0])
+            # LMS follows the source through Add Guide, at the final canvas size.
+            g['75']=node('HengeLoadShot',video=video,pictures='[]',width=W,height=H,length=length)
+            g['76']=node('MiniMaxH3AddGuide',positive=['32',0],latent=['31',0],vae=['6',0],image=['75',0],frame_idx=0)
+            g['34']=node('BasicGuider',model=['74',0],conditioning=['76',0])
             g['35']=node('KSamplerSelect',sampler_name='er_sde')
             g['36']=node('RandomNoise',noise_seed=seed)
             g['37']=node('SamplerCustomAdvanced',noise=['36',0],guider=['34',0],sampler=['35',0],sigmas=['33',0],latent_image=['31',0])
