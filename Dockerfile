@@ -41,7 +41,7 @@ COPY --from=web /usr/local/bin/node /usr/local/bin/node
 COPY --from=web /app /app
 # Pin the base image's torch stack so custom-node requirements cannot swap the CUDA build.
 RUN python -m pip freeze | grep -iE '^(torch|torchvision|torchaudio)==' > /tmp/torch-constraints.txt || true; cat /tmp/torch-constraints.txt \
- && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt runpod==1.12.0 nvidia-vfx 'click>=8,!=8.3.0,<8.4' \
+ && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt runpod==1.12.0 nvidia-vfx \
  && python -m venv --system-site-packages /opt/molmo \
  && /opt/molmo/bin/pip install --no-cache-dir 'transformers==4.57.1' 'tokenizers==0.22.2' 'huggingface_hub==0.36.2' 'accelerate==1.5.2' 'safetensors==0.8.0' 'decord2==3.4.0' 'molmo-utils==0.0.1' 'compressed-tensors==0.20.0' \
  && ln -s /app/backend/comfy_nodes/henge /opt/ComfyUI/custom_nodes/henge \
