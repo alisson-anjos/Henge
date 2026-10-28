@@ -1926,6 +1926,7 @@ SUGGEST_CUTS=('List the moments in this video where it could be split into separ
 async def suggest_cuts(request:Request):
     """Split points for the shots: natural breaks from Molmo2 plus the camera cuts, and the shot plan they give with
     the requested maximum shot length. Seconds from start. Changes nothing."""
+    if active_jobs():raise HTTPException(409,'Wait for active generation to finish before suggesting shot splits')
     async with request.form(max_files=1,max_fields=4) as form:
         video=form.get('video')
         try:

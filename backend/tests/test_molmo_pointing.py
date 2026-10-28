@@ -117,6 +117,12 @@ class PointingApiTests(unittest.TestCase):
         r=self.client.post('/assistant/point-video',files={'video':('x.mp4',b'video','video/mp4')},data={'query':'man','start':0,'end':31})
         self.assertEqual(r.status_code,400)
 
+    def test_suggest_cuts_rejects_active_generation_before_running_molmo(self):
+        with patch.object(self.server,'active_jobs',return_value=['running-job']),patch.object(self.server.molmo_pointing,'ask_video') as ask:
+            r=self.client.post('/assistant/suggest-cuts',files={'video':('x.mp4',b'video','video/mp4')},data={'start':0,'end':1})
+        self.assertEqual(r.status_code,409)
+        ask.assert_not_called()
+
     def test_cancel_endpoint_terminates_molmo_request(self):
         with patch.object(self.server.molmo_pointing,'cancel_request',return_value=True) as cancel:
             r=self.client.post('/assistant/cancel',json={'request_id':'playwright-request'})
