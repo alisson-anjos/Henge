@@ -909,3 +909,5 @@ img{display:block;max-width:100%}
 .molmo-settings{display:grid;gap:10px}.molmo-settings .toggle-row{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}.molmo-settings .field{display:grid;gap:5px;font-size:12px}.molmo-settings .field small{color:var(--muted);font-size:11px}.molmo-settings .settings-actions{display:flex;align-items:center;gap:12px}
 
 .seed-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:end;margin:16px 0}.seed-control label{display:grid;gap:6px;font-size:12px;color:var(--muted)}.seed-control input{width:100%;min-width:0;padding:10px;background:var(--n-17191b);color:var(--n-eeeeee);border:1px solid var(--n-36383b);border-radius:8px}.seed-control small{grid-column:1/-1;color:var(--muted);line-height:1.5}
+
+@media(max-width:700px){.topbar-end .guide-link{display:flex;padding:0 8px;min-height:34px}}

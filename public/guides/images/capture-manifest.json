@@ -1,0 +1,38 @@
+{
+  "captured_at": "2026-10-28T14:48:56.976Z",
+  "viewport": "1440×1000",
+  "jobs": {
+    "tara": "35118dd687384e65a8a731888808cbc6",
+    "character": "36862c27eae24ec28394b44ae91ddb99",
+    "marks": "cf2e8193efc746178c74751eefe93828"
+  },
+  "images": [
+    "01-estudio.png",
+    "02-referencias.png",
+    "03-tara-seed.png",
+    "04-seed.png",
+    "05-marcas.png",
+    "06-prompt.png",
+    "07-revisar-plano.png",
+    "08-resultado.png",
+    "09-comparacao.png",
+    "10-intervalo.png",
+    "11-shots.png",
+    "12-molmo.png",
+    "20-novo-cenario.png",
+    "21-audio-saida.png",
+    "22-primeiro-quadro.png",
+    "23-avancado.png",
+    "17-assistente.png",
+    "24-historico.png",
+    "13-prompt-multiplos.png",
+    "19-mascara.png",
+    "15-head-swap.png",
+    "16-nitidez.png",
+    "14-previa-mascaras.png",
+    "18-shots-por-corte.png"
+  ],
+  "api_writes_blocked": [],
+  "browser_errors": [],
+  "note": "Real UI captures from existing jobs; isolated browser storage. No new AI generations. The prompt editor example is an unsent draft in the isolated browser."
+}

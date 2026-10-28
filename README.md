@@ -4,6 +4,10 @@
 few pictures, and it swaps characters, transfers motion, swaps heads or sharpens the video — locally, on a RunPod pod
 or on RunPod Serverless.
 
+[Visual usage guide (Português)](docs/GUIA-VISUAL.md) · In the studio, open **Dicas** for screenshots and practical tips.
+
+[Update the UI on Render (Português)](docs/RENDER.md).
+
 [![Watch the Henge 2-minute demo — studio interface](docs/images/demo/studio.jpg)](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-demo-under-2min.mp4)
 
 [Watch the demo — 1:58](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-demo-under-2min.mp4)
