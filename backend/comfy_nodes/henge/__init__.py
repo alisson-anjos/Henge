@@ -453,3 +453,6 @@ NODE_CLASS_MAPPINGS.update(UPSCALE_NODES)
 
 from .regional_attention import HengeRegionalAttention
 NODE_CLASS_MAPPINGS['HengeRegionalAttention']=HengeRegionalAttention
+
+from .molmo import HengeMolmo
+NODE_CLASS_MAPPINGS['HengeMolmo']=HengeMolmo

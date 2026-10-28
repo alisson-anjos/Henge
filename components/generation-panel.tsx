@@ -39,7 +39,7 @@ function normalizeSettings(o: Record<string, unknown>) {
   return {
     motionModel: typeof o.profile === 'string' && o.profile.startsWith('motion') ? o.profile : 'motion',
     adapt: (o.adapt ?? o.fibo) === 'off' ? 'off' : 'auto',
-    conditioningMode: o.conditioning_mode === 'tara' ? 'tara' : 'guide',
+    conditioningMode: o.conditioning_mode === 'tara' || (o.conditioning_mode === undefined && o.profile === 'motion_tara') ? 'tara' : 'guide',
     // Default: the text encoder also sees the guide (Latents + CLIP), in every mode.
     guideClip: (['auto', 'off'].includes(o.guide_clip as string) ? o.guide_clip : 'on') as 'auto' | 'on' | 'off',
     referenceScale: num(o.reference_scale, .25, 1, 1),
@@ -83,7 +83,9 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   const [guideClip, setGuideClip] = useState(initial.guideClip);
   const fixedRecipe = isFixedRecipe(mode);
   // Sharpness follows the source video with Guide Latents: no TARA there.
+  const taraCompatible = profile === 'motion_tara';
   const activeConditioning = mode === 'sharpness' ? 'guide' : conditioningMode;
+  useEffect(() => {if (taraCompatible) setConditioningMode('tara');}, [taraCompatible]);
   const taraWithMarks = activeConditioning === 'tara' && ['2d', '3d'].includes(request?.subject_guidance?.representation || '') && !!request?.subject_guidance?.bindings?.length;
   const [referenceScale, setReferenceScale] = useState(initial.referenceScale);
   const [seed, setSeed] = useState(initial.seed);
@@ -243,6 +245,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
     {mode === 'swap' && activeConditioning === 'guide' && ['2d', '3d'].includes(request?.subject_guidance?.representation || '') && <label className="prompt-assist-row"><input type="checkbox" checked={regionalAttention} onChange={e => setRegionalAttention(e.target.checked)}/><span>{tr('Focus each reference on its marked person (experimental)', 'Concentrar cada referência na pessoa marcada (experimental)', 'Concentrar cada referencia en la persona marcada (experimental)')}<small>{tr('Guides attention without locking pixels. May increase render time.', 'Orienta a atenção sem travar pixels. Pode aumentar o tempo de geração.', 'Orienta la atención sin bloquear píxeles. Puede aumentar el tiempo de generación.')}</small></span></label>}
     <details className="generation-advanced"><summary>{tr('Advanced', 'Avançado', 'Avanzado')}</summary><div className="generation-options">
       {conditioningMode === 'tara' && <label>{tr('Reference scale', 'Escala da referência', 'Escala de referencia')}<Select value={referenceScale} onChange={e => setReferenceScale(Number(e.target.value))}>{[1, .75, .5].map(n => <option key={n} value={n}>{n}</option>)}</Select></label>}
+      {activeConditioning === 'tara' && !taraCompatible && <p className="validation" role="alert">{tr('Strongly recommended: use the Motion Transfer TARA LoRA with TARA. Other LoRAs may ignore the guide or produce artifacts.', 'É fortemente recomendado usar o LoRA Motion Transfer TARA com o método TARA. Outros LoRAs podem ignorar o guia ou produzir artefatos.', 'Se recomienda encarecidamente usar el LoRA Motion Transfer TARA con TARA. Otros LoRAs pueden ignorar la guía o producir artefactos.')}</p>}
       {activeConditioning === 'tara' && ['2d', '3d'].includes(request?.subject_guidance?.representation || '') && !!request?.subject_guidance?.bindings?.length && <p className="validation" role="alert">{tr('TARA was trained without color marks. Use the Original or Mask guide with TARA, or switch to Guide Latents for 2D/3D marks.', 'O TARA foi treinado sem marcações de cor. Use o guia Original ou Mask com o TARA, ou troque para Guide Latents para marcações 2D/3D.', 'TARA se entrenó sin marcas de color. Usa la guía Original o Mask con TARA, o cambia a Guide Latents para marcas 2D/3D.')}</p>}
       {conditioningMode === 'tara' && <label>{tr('TARA structure guidance (1 = off · ~1.5 follows Video 1 more, 2× slower)', 'Structure guidance do TARA (1 = desligado · ~1,5 segue mais o Video 1, 2× mais lento)', 'Structure guidance de TARA (1 = apagado · ~1,5 sigue más el Video 1, 2× más lento)')}<Select value={structureCfg} onChange={e => setStructureCfg(Number(e.target.value))}>{[1, 1.25, 1.5, 2].map(n => <option key={n} value={n}>{n}</option>)}</Select></label>}
       {health?.editor_ready && (mode === 'swap' || mode === 'motion') && <label>{tr('Prepare reference automatically', 'Preparar referência automaticamente', 'Preparar referencia automáticamente')}<input type="checkbox" checked={adapt === 'auto'} onChange={e => setAdapt(e.target.checked ? 'auto' : 'off')}/><small>{tr('Suggest a compatible pose when the guide and reference have different anatomy.', 'Sugere uma pose compatível quando o guia e a referência têm anatomias diferentes.', 'Sugiere una pose compatible cuando la guía y la referencia tienen anatomías diferentes.')}</small></label>}

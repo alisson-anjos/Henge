@@ -36,18 +36,32 @@ class PointNormalizationTests(unittest.TestCase):
                 molmo_pointing.point_video('video','person',0,1,'.')
             run.assert_not_called()
 
+
+class MolmoCancellationTests(unittest.TestCase):
+    def test_cancel_terminates_the_active_worker(self):
+        proc=SimpleNamespace(poll=lambda:None,terminate=lambda:None)
+        with molmo_pointing.ACTIVE_LOCK:
+            molmo_pointing.ACTIVE['test-cancel']=proc
+            molmo_pointing.CANCELLED.discard('test-cancel')
+        with patch.object(proc,'terminate') as terminate:
+            self.assertTrue(molmo_pointing.cancel_request('test-cancel'))
+        terminate.assert_called_once()
+        with molmo_pointing.ACTIVE_LOCK:
+            molmo_pointing.ACTIVE.pop('test-cancel',None)
+            molmo_pointing.CANCELLED.discard('test-cancel')
+
     def test_bridge_uses_isolated_worker_and_preserves_proposals(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);python=root/'python';python.touch();model=root/'model';model.mkdir();(model/'config.json').write_text('{}')
             payload={'points':[{'object_id':2,'time_seconds':.5,'x':.2,'y':.3}]}
             def execute(args,**kwargs):
                 Path(args[args.index('--output')+1]).write_text(json.dumps(payload))
-                return SimpleNamespace(returncode=0,stdout='',stderr='')
-            with patch.dict(os.environ,{'HENGE_MOLMO_PYTHON':str(python),'HENGE_MOLMO_MODEL':str(model)}),patch.object(molmo_pointing.subprocess,'run',side_effect=execute) as run,patch.object(molmo_pointing,'point_previews',return_value=['preview']):
+                return SimpleNamespace(communicate=lambda timeout:('', ''),returncode=0)
+            with patch.dict(os.environ,{'HENGE_MOLMO_PYTHON':str(python),'HENGE_MOLMO_MODEL':str(model)}),patch.object(molmo_pointing.subprocess,'Popen',side_effect=execute) as run,patch.object(molmo_pointing,'point_previews',return_value=['preview']):
                 result=molmo_pointing.point_video('video','person',0,1,root)
             self.assertEqual(result['points'],payload['points'])
             self.assertEqual(result['previews'],['preview'])
-            self.assertEqual(run.call_args.kwargs['timeout'],900)
+            self.assertEqual(run.call_args.kwargs['text'],True)
 
 
 class MatchPeopleTests(unittest.TestCase):
@@ -102,6 +116,13 @@ class PointingApiTests(unittest.TestCase):
         self.assertEqual(r.status_code,409)
         r=self.client.post('/assistant/point-video',files={'video':('x.mp4',b'video','video/mp4')},data={'query':'man','start':0,'end':31})
         self.assertEqual(r.status_code,400)
+
+    def test_cancel_endpoint_terminates_molmo_request(self):
+        with patch.object(self.server.molmo_pointing,'cancel_request',return_value=True) as cancel:
+            r=self.client.post('/assistant/cancel',json={'request_id':'playwright-request'})
+        self.assertEqual(r.status_code,200,r.text)
+        self.assertEqual(r.json(),{'cancelled':True})
+        cancel.assert_called_once_with('playwright-request')
 
     def test_api_returns_points_without_starting_generation(self):
         expected={'points':[dict(object_id=1,time_seconds=.5,x=.2,y=.3)],'previews':[]}

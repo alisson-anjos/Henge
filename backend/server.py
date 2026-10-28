@@ -1949,8 +1949,10 @@ async def suggest_cuts(request:Request):
                 output.write(chunk)
         try:
             meta=await asyncio.to_thread(probe,source);end=min(end,meta['duration'])
-            answer=(await asyncio.to_thread(molmo_pointing.ask_video,source,SUGGEST_CUTS,start,end,folder))['answer']
+            request_id=str(form.get('request_id') or '')
+            answer=(await asyncio.to_thread(molmo_pointing.ask_video,source,SUGGEST_CUTS,start,end,folder,request_id=request_id or None))['answer']
             cuts=[round(c-start,2) for c in await asyncio.to_thread(molmo_pointing.detect_cuts,source,start,end)]
+        except molmo_pointing.MolmoCancelled:raise HTTPException(409,'Molmo2 request cancelled')
         except ValueError as exc:raise HTTPException(400,str(exc))
         except Exception as exc:raise HTTPException(500,str(exc)[-2200:])
     breaks=sorted({round(float(x),2) for x in re.findall(r'\d+(?:\.\d+)?',answer) if 0<float(x)<end-start})
@@ -1961,6 +1963,13 @@ async def suggest_cuts(request:Request):
     natural={round(round(b*24)/24,2) for b in breaks}
     return {'points':[p for p in used if p in natural and p not in cuts],'camera_cuts':cuts,'breaks':breaks,'molmo':answer,
             'shots':[{'start':round(s['start']/24,2),'end':round((s['start']+s['frames'])/24,2),'context_seconds':round(s['overlap']/24,2)} for s in shots]}
+
+@app.post('/assistant/cancel')
+async def cancel_assistant_request(request:Request):
+    body=await request.json()
+    request_id=body.get('request_id') if isinstance(body,dict) else None
+    if not isinstance(request_id,str) or not request_id or len(request_id)>100:raise HTTPException(400,'Invalid request_id')
+    return {'cancelled':molmo_pointing.cancel_request(request_id)}
 
 @app.post('/assistant/match-people')
 async def match_people(request:Request):

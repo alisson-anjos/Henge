@@ -155,6 +155,22 @@ export default function Studio() {
   // Split points inside a take (seconds from the selection start), suggested by Molmo2 or the assistant.
   const [splitPoints, setSplitPoints] = useState<number[]>([]);
   const [suggesting, setSuggesting] = useState(false);
+  const suggestRequest = useRef<{id: string; controller: AbortController} | null>(null);
+  const [serverGenerationActive, setServerGenerationActive] = useState(false);
+  const generationActive = serverGenerationActive || (!!generationJob && !['completed', 'failed', 'cancelled'].includes(generationJob.status));
+  useEffect(() => {
+    let disposed = false, timer: ReturnType<typeof setTimeout>;
+    async function refresh() {
+      try {
+        const response = await fetch('/api/backend/jobs', {cache: 'no-store'});
+        const jobs = response.ok ? await response.json() as {status: string}[] : [];
+        if (!disposed) setServerGenerationActive(jobs.some(job => !['completed', 'failed', 'cancelled'].includes(job.status)));
+      } catch { /* The bridge's health state reports connection problems separately. */ }
+      if (!disposed) timer = setTimeout(refresh, 2500);
+    }
+    void refresh();
+    return () => {disposed = true; clearTimeout(timer);};
+  }, []);
   // Molmo2 set up and turned on (Settings → Molmo2): the split suggestion needs it.
   const [molmoReady, setMolmoReady] = useState(false);
   useEffect(() => {fetch('/api/backend/assistant/pointing').then(r => r.json()).then(s => setMolmoReady(!!s.configured)).catch(() => {});}, []);
@@ -287,13 +303,21 @@ export default function Studio() {
       selected_job: c.generationJob ? {id: c.generationJob.id, reference: `#${c.generationJob.id.slice(0, 8)}`, status: c.generationJob.status, stage: c.generationJob.stage, message: c.generationJob.message} : null};
   };
   /** Molmo2's split points for the selection with the current shot length: {points, camera_cuts, shots, molmo}. */
-  async function suggestSplits(longest: number) {
+  async function suggestSplits(longest: number, requestId = crypto.randomUUID(), signal?: AbortSignal) {
+    if (generationActive || working) throw Error('Molmo2 cannot suggest cuts while a generation is running.');
     const v = studioLive.current.video; if (!v?.range) throw Error('Attach and trim the guide video first');
-    const body = new FormData(); body.set('video', v.file); body.set('start', String(v.range.start)); body.set('end', String(v.range.end)); body.set('max_seconds', String(Math.min(15, Math.max(1, longest))));
-    const response = await fetch('/api/backend/assistant/suggest-cuts', {method: 'POST', body}); const reply = await response.json();
+    const body = new FormData(); body.set('video', v.file); body.set('start', String(v.range.start)); body.set('end', String(v.range.end)); body.set('max_seconds', String(Math.min(15, Math.max(1, longest)))); body.set('request_id', requestId);
+    const response = await fetch('/api/backend/assistant/suggest-cuts', {method: 'POST', body, ...(signal ? {signal} : {})}); const reply = await response.json();
     if (!response.ok) throw Error(reply.detail || `HTTP ${response.status}`);
     return reply as {points: number[]; camera_cuts: number[]; breaks: number[]; molmo: string; shots: {start: number; end: number; context_seconds: number}[]};
   }
+  function cancelSuggestion() {
+    const active = suggestRequest.current; if (!active) return;
+    active.controller.abort();
+    void fetch('/api/backend/assistant/cancel', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({request_id: active.id})}).catch(() => {});
+    setNotice(tr('Cancelling Molmo2…', 'A cancelar o Molmo2…', 'Cancelando Molmo2…'));
+  }
+  useEffect(() => {if (generationActive && suggestRequest.current) cancelSuggestion();}, [generationActive]);
   async function runStudioCall(call: StudioCall): Promise<StudioResult> {
     const c = studioLive.current, input = call.input;
     const num = (k: string) => Number(input[k]);
@@ -517,7 +541,7 @@ export default function Studio() {
   const estimatedShots = selectedDuration ? Math.ceil(Math.round(selectedDuration * timelineFps) / shotFrames) : 0;
   const subjectErrors = subjects.some(s => !s.anchors.length || !s.picture_slots.length || s.picture_slots.some(n => !pictures.some(p => p.slot === n)) || s.anchors.some(a => !video?.range || a.time_seconds < video.range.start || a.time_seconds >= video.range.end));
   const executionPrompt = prompt + (subjects.length && !subjectErrors ? '\n\n' + bindingPrompt(subjects, guideRepresentation) : '');
-  const canExport = !!video?.range && !editingVideo && ready && !busy && (fixedRecipe
+  const canExport = !!video?.range && !editingVideo && ready && !busy && !suggesting && (fixedRecipe
     ? activePictures.length === maxPictures
     // Motion's first-frame propagate model also runs from the prompt alone; the bridge rejects that for other models.
     : (pictures.length > 0 || mode === 'motion') && !!prompt.trim() && !invalid.length && !subjectErrors);
@@ -831,7 +855,8 @@ export default function Studio() {
             {generatedOpen && <div className="generated-picker">{generated === null ? <small className="muted">{tr('Loading…', 'Carregando…', 'Cargando…')}</small> : generated.length ? generated.slice(0, 12).map(item => <button key={item.id} disabled={!!loadingGenerated} onClick={() => useGenerated(item)}><video muted playsInline preload="metadata" src={item.result_url + '#t=0.5'}/><span><strong>{item.project || 'Henge'}</strong><small className="mono">{item.mode ? modeName(item.mode) : ''}{item.duration ? ` · ${item.duration.toFixed(1)}s` : ''}</small></span>{loadingGenerated === item.id && <small className="muted">…</small>}</button>) : <small className="muted">{tr('No finished generations yet.', 'Nenhuma geração concluída ainda.', 'Aún no hay generaciones terminadas.')}</small>}</div>}
             {video?.range && <button className="interval-summary" onClick={() => setEditingVideo(true)}><Icon name="scissors" size={14}/><span className="mono nc">{formatTime(video.range.start)} → {formatTime(video.range.end)}</span><span className="accent mono nc">{selectedDuration.toFixed(1)}s</span></button>}
             {video?.range && (molmoReady || splitPoints.length > 0) && <div className="split-points"><span>{tr('Split points', 'Pontos de corte', 'Puntos de corte')}: {splitPoints.length ? <b className="mono">{splitPoints.map(p => p.toFixed(1) + ' s').join(' · ')}</b> : <span className="muted">{tr('automatic', 'automáticos', 'automáticos')}</span>}</span>
-              <span className="split-actions"><button type="button" className="text-link" disabled={suggesting} onClick={async () => {setSuggesting(true); try {const r = await suggestSplits(shotSeconds); setSplitPoints(r.points); setNotice(r.points.length ? tr(`Molmo2 split the shots at ${r.points.join(', ')} s (max ${shotSeconds} s per shot).`, `O Molmo2 dividiu os trechos em ${r.points.join(', ')} s (máx. ${shotSeconds} s por trecho).`, `Molmo2 dividió los tramos en ${r.points.join(', ')} s (máx. ${shotSeconds} s por tramo).`) : tr('Molmo2 found no better split points: the shots follow the camera cuts and the length.', 'O Molmo2 não achou pontos melhores: os trechos seguem os cortes e o comprimento.', 'Molmo2 no encontró mejores puntos: los tramos siguen los cortes y la duración.'));} catch (e) {setNotice(e instanceof Error ? e.message : String(e));} finally {setSuggesting(false);}}}>{suggesting ? tr('Molmo2 is watching…', 'O Molmo2 está assistindo…', 'Molmo2 está viendo…') : tr('Suggest with Molmo2', 'Sugerir com o Molmo2', 'Sugerir con Molmo2')}</button>
+              <span className="split-actions"><button type="button" className="text-link" disabled={suggesting || working || generationActive} onClick={async () => {const id=crypto.randomUUID(), controller=new AbortController(); suggestRequest.current={id,controller}; setSuggesting(true); try {const r = await suggestSplits(shotSeconds,id,controller.signal); setSplitPoints(r.points); setNotice(r.points.length ? tr(`Molmo2 split the shots at ${r.points.join(', ')} s (max ${shotSeconds} s per shot).`, `O Molmo2 dividiu os trechos em ${r.points.join(', ')} s (máx. ${shotSeconds} s por trecho).`, `Molmo2 dividió los tramos en ${r.points.join(', ')} s (máx. ${shotSeconds} s por tramo).`) : tr('Molmo2 found no better split points: the shots follow the camera cuts and the length.', 'O Molmo2 não achou pontos melhores: os trechos seguem os cortes e o comprimento.', 'Molmo2 no encontró mejores puntos: los tramos siguen los cortes y la duración.'));} catch (e) {if (!(e instanceof DOMException && e.name === 'AbortError')) setNotice(e instanceof Error ? e.message : String(e));} finally {if(suggestRequest.current?.id===id)suggestRequest.current=null; setSuggesting(false);}}}>{suggesting ? tr('Molmo2 is watching…', 'O Molmo2 está assistindo…', 'Molmo2 está viendo…') : tr('Suggest with Molmo2', 'Sugerir com o Molmo2', 'Sugerir con Molmo2')}</button>
+              {suggesting && <button type="button" className="text-link" onClick={cancelSuggestion}>{tr('Cancel', 'Cancelar', 'Cancelar')}</button>}
               {splitPoints.length > 0 && <button type="button" className="text-link" onClick={() => setSplitPoints([])}>{tr('Clear', 'Limpar', 'Borrar')}</button>}</span></div>}
             {video && !contextWindow && <label className="cut-mode-field short-cut-mode">{tr('Camera cuts', 'Cortes de câmera', 'Cortes de cámara')}<Select value={cutMode} onChange={e => setCutMode(e.target.value as CutMode)}>{(['fit', 'every', 'off'] as CutMode[]).map(m => <option key={m} value={m}>{cutModeLabel(m, lang)}</option>)}</Select><small className="muted">{tr('Up to 15 s is one shot, unless you choose a shot at every cut (automatic when people are marked).', 'Até 15 s é um trecho só, a menos que você escolha um trecho por corte (automático com pessoas marcadas).', 'Hasta 15 s es un solo tramo, salvo que elijas un tramo por corte (automático con personas marcadas).')}</small></label>}
             {contextWindow && <details className="context-window-panel" open><summary><Icon name="scissors" size={16}/><strong>{t.autoCut}</strong><span className="mini-badge">{t.unlimited}</span></summary><p>{tr('This interval uses short segments joined in order.', 'Este intervalo usa segmentos curtos unidos em sequência.', 'Este intervalo usa segmentos cortos unidos en orden.')}</p><div className="shot-settings"><label>{t.fixedLabel}<input aria-label={t.fixedLabel} type="number" min="1" max="15" step="0.1" value={shotSeconds} onChange={e => setShotSeconds(Math.min(15, Math.max(1, Number(e.target.value) || 4.5)))}/></label><label>Timeline FPS<input aria-label="Timeline FPS" type="number" min="1" max="120" value={timelineFps} onChange={e => setTimelineFps(Math.min(120, Math.max(1, Number(e.target.value) || 24)))}/></label></div><div className="label-row"><span>{t.ctxLen}</span><div className="context-options">{[5, 22, 39].map(f => <button key={f} aria-pressed={contextFrames === f} className={contextFrames === f ? 'chosen' : ''} onClick={() => setContextFrames(f)}>{f}f</button>)}</div></div><label className="cut-mode-field">{tr('Camera cuts', 'Cortes de câmera', 'Cortes de cámara')}<Select value={cutMode} onChange={e => setCutMode(e.target.value as CutMode)}>{(['fit', 'every', 'off'] as CutMode[]).map(m => <option key={m} value={m}>{cutModeLabel(m, lang)}</option>)}</Select></label><small className="muted">{shotFrames}f · 17n+5 · {cutMode === 'every' ? tr('a shot per camera cut', 'um trecho por corte de câmera', 'un tramo por corte de cámara') : `~${estimatedShots} ${t.cutsWord}`}</small></details>}

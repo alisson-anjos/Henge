@@ -17,6 +17,10 @@ import threading
 from PIL import Image, ImageDraw
 
 LOCK = threading.Lock()
+ACTIVE_LOCK = threading.Lock()
+ACTIVE = {}
+CANCELLED = set()
+class MolmoCancelled(RuntimeError): pass
 # Set by the bridge: frees the VRAM of a ComfyUI on this same machine before Molmo2 loads (one GPU, two models).
 BEFORE_RUN = None
 # Set by the bridge: the user's Molmo2 settings {model_path, keep_warm_minutes, image_quality}.
@@ -91,7 +95,7 @@ def _cli_to_request(args):
     return out
 
 
-def run_worker(args):
+def run_worker(args, request_id=None):
     python, model = configured()
     cfg = SETTINGS() or {}
     crops = 4 if cfg.get('image_quality') == 'fast' else 8
@@ -107,9 +111,26 @@ def run_worker(args):
         if not warm:
             # Default: one process per request, exiting after it, so no Molmo weights stay resident.
             if _WARM['process']: release_locked()
-            result = subprocess.run(command + list(args), capture_output=True, text=True, timeout=900)
-            if result.returncode:
-                raise RuntimeError('Molmo2 failed: '+(result.stderr or result.stdout)[-2200:])
+            with ACTIVE_LOCK:
+                if request_id in CANCELLED: raise MolmoCancelled('Molmo2 request cancelled')
+            proc = subprocess.Popen(command + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if request_id:
+                with ACTIVE_LOCK: ACTIVE[request_id] = proc
+            try:
+                try: stdout, stderr = proc.communicate(timeout=900)
+                except subprocess.TimeoutExpired:
+                    proc.terminate()
+                    try: proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired: proc.kill(); proc.wait()
+                    raise RuntimeError('Molmo2 request timed out after 15 minutes')
+            finally:
+                if request_id:
+                    with ACTIVE_LOCK: ACTIVE.pop(request_id, None)
+            with ACTIVE_LOCK:
+                cancelled = request_id in CANCELLED
+                if cancelled: CANCELLED.discard(request_id)
+            if cancelled: raise MolmoCancelled('Molmo2 request cancelled')
+            if proc.returncode: raise RuntimeError('Molmo2 failed: '+(stderr or stdout)[-2200:])
             return
         key = (model, crops)
         proc = _WARM['process']
@@ -117,6 +138,11 @@ def run_worker(args):
             if proc: release_locked()
             proc = subprocess.Popen(command + ['--serve'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             _WARM.update(process=proc, key=key)
+        if request_id:
+            with ACTIVE_LOCK:
+                if request_id in CANCELLED:
+                    release_locked(); CANCELLED.discard(request_id); raise MolmoCancelled('Molmo2 request cancelled')
+                ACTIVE[request_id] = proc
         if _WARM['timer']: _WARM['timer'].cancel()
         proc.stdin.write(json.dumps(_cli_to_request(args)) + '\n'); proc.stdin.flush()
         tail = []
@@ -126,10 +152,34 @@ def run_worker(args):
             tail = (tail + [line])[-40:]
         else:
             _WARM.update(process=None, key=None)
+            if request_id:
+                with ACTIVE_LOCK:
+                    ACTIVE.pop(request_id, None)
+                    cancelled = request_id in CANCELLED
+                    if cancelled: CANCELLED.discard(request_id)
+                if cancelled: raise MolmoCancelled('Molmo2 request cancelled')
             raise RuntimeError('Molmo2 stopped: ' + ''.join(tail)[-2200:])
+        if request_id:
+            with ACTIVE_LOCK:
+                ACTIVE.pop(request_id, None)
+                cancelled = request_id in CANCELLED
+                if cancelled: CANCELLED.discard(request_id)
+            if cancelled: raise MolmoCancelled('Molmo2 request cancelled')
         timer = threading.Timer(warm * 60, release); timer.daemon = True; timer.start(); _WARM['timer'] = timer
     if not reply.get('ok'):
         raise RuntimeError('Molmo2 failed: ' + str(reply.get('error'))[-2200:])
+
+
+def cancel_request(request_id):
+    """Stop a Molmo worker subprocess if the user cancels an in-flight request."""
+    if not isinstance(request_id, str) or not request_id or len(request_id) > 100: return False
+    with ACTIVE_LOCK:
+        CANCELLED.add(request_id)
+        proc = ACTIVE.get(request_id)
+        if proc and proc.poll() is None:
+            proc.terminate()
+            return True
+        return False
 
 
 def release_locked():
@@ -165,12 +215,12 @@ def validate_ask(question, start, end):
         raise ValueError(f'The interval must be positive, at most {MAX_ASK_SECONDS} seconds, with start >= 0')
 
 
-def ask_video(video, question, start, end, work, fps=2.):
+def ask_video(video, question, start, end, work, fps=2., request_id=None):
     """Molmo2 answers a question about the video interval (it sees the whole clip with timestamps)."""
     validate_ask(question, start, end)
     output = Path(work)/'answer.json'
     run_worker(['--mode', 'ask', '--video', str(video), '--query', question, '--start', str(start), '--end', str(end),
-        '--fps', str(fps), '--output', str(output)])
+        '--fps', str(fps), '--output', str(output)], request_id=request_id)
     return json.loads(output.read_text())
 
 

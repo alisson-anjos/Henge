@@ -30,6 +30,7 @@ ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
     HENGE_BACKEND_URL=http://127.0.0.1:8766 HENGE_DATA_DIR=/state/jobs \
     HENGE_MODELS_DIR=/opt/ComfyUI/models HENGE_MODEL_PROFILES=character,motion,headswap,sharpness,omniref,fibo,klein,sam2d,sam3d,audio \
     HENGE_MODEL_MANIFEST=/app/config/model-repos.example.json \
+    HENGE_MOLMO_PYTHON=/opt/molmo/bin/python HENGE_MOLMO_REPO=tollea1234/Molmo2-8B-FP8 \
     HF_HOME=/state/huggingface HF_XET_HIGH_PERFORMANCE=1 \
     PIP_BREAK_SYSTEM_PACKAGES=1 PIP_ROOT_USER_ACTION=ignore
 RUN apt-get update && apt-get install -y --no-install-recommends git ffmpeg ca-certificates openssh-server curl libgl1 libglib2.0-0 fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
@@ -41,8 +42,11 @@ COPY --from=web /app /app
 # Pin the base image's torch stack so custom-node requirements cannot swap the CUDA build.
 RUN python -m pip freeze | grep -iE '^(torch|torchvision|torchaudio)==' > /tmp/torch-constraints.txt || true; cat /tmp/torch-constraints.txt \
  && python -m pip install --no-cache-dir -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt -r /opt/ComfyUI/custom_nodes/bfsnodes/requirements.txt -r /app/backend/requirements.txt runpod==1.12.0 nvidia-vfx \
+ && python -m venv --system-site-packages /opt/molmo \
+ && /opt/molmo/bin/pip install --no-cache-dir 'transformers==4.57.1' 'tokenizers==0.22.2' 'huggingface_hub==0.36.2' 'accelerate==1.5.2' 'safetensors==0.8.0' 'decord2==3.4.0' 'molmo-utils==0.0.1' 'compressed-tensors==0.20.0' \
  && ln -s /app/backend/comfy_nodes/henge /opt/ComfyUI/custom_nodes/henge \
- && python -c "import torch;print('torch',torch.__version__,'cuda',torch.version.cuda)"
+ && python -c "import torch;print('torch',torch.__version__,'cuda',torch.version.cuda)" \
+ && /opt/molmo/bin/python -c "import torch,transformers,molmo_utils,compressed_tensors;print('Molmo2 env',transformers.__version__,'torch',torch.__version__)"
 # Optional TARA one-pass Kitchen kernel: source pinned here, the per-GPU binary is installed at boot.
 RUN git clone --quiet https://github.com/alisson-anjos/comfy-kitchen.git /opt/comfy-kitchen-tara \
  && git -C /opt/comfy-kitchen-tara checkout --quiet 0413d43878606425a84aa400f1e5da50ed9dcdad
