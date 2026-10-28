@@ -69,3 +69,38 @@ Downloads:
 - `maverick_character_vs_motion_100pct.mp4` (Character Swap left / Motion Transfer right)
 
 User feedback on the TARA join preview: the version without crossfade appears better.
+
+## Motion Transfer TARA comparison
+
+Job `88b7199752094a8bb2ce6f62f93af513`, completed.
+Same frozen prompt as Motion Transfer, same references, seed, 100% opacity and first-shot interval.
+Changed profile to `motion_tara` and conditioning to native `tara`; structure guidance 1.
+Verified training adapter + `motion_tara_4500` legacy alias + DMD8, and native temporal node.
+This is an isolated prepared-plan experiment: normal studio validation still rejects TARA with 2D/3D colours,
+because the published TARA profile was trained on plain video. No general validation rule was removed.
+
+Visual inspection at 0.4, 1.8 and 3.1 seconds shows an improvement over Motion Transfer / Guide Latents:
+the green subject has Picture 1's cap and sunglasses, the purple subject has an uncovered head,
+and the cyan subject has Picture 3's navy cap. Guide poses are also closer in the inspected frames.
+The purple subject is missing Picture 2's sunglasses, so reference appearance remains incomplete.
+These observations cover the first shot only, not the full project across cuts.
+
+Downloads:
+- `maverick_tara_100pct_shot1.mp4`
+- `maverick_motion_vs_tara_100pct.mp4` (Guide Latents left / TARA right)
+
+Follow-up `35118dd687384e65a8a731888808cbc6` tests the same TARA configuration with a manually reviewed,
+more explicit prompt and reference descriptions. Prompt: `maverick-explicit-color-prompt.txt`.
+Completed. Visual review at 0.4, 1.8 and 3.1 seconds shows that the purple subject now has
+Picture 2's aviator sunglasses and uncovered hair, while green retains Picture 1's cap/glasses
+and cyan retains Picture 3's navy cap. This improves the inspected accessory assignments;
+it is not a measurement of exact identity fidelity or a validation across the other camera shots.
+Best inspected first-shot configuration so far: Motion Transfer TARA + native TARA + explicit prompt,
+100% colour opacity, seed 42, 8 steps, DMD8, structure guidance 1.
+
+Downloads:
+- `maverick_tara_prompt_explicito_shot1.mp4`
+- `maverick_tara_prompt_antes_vs_depois.mp4` (previous prompt left / explicit prompt right)
+
+Next required validation for the complete project: the middle and final camera shots,
+including absent subjects and reference renumbering after cuts.
