@@ -330,15 +330,6 @@
       "note": "MiniMax H3 3D latent upscaler (LBH-123-AI base, MIT) fine-tuned on the LMS data, for the Sharpness H3 2K/4K upscale."
     },
     {
-      "id": "regenerate_fl2va",
-      "url": "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
-      "destination": "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
-      "profiles": [
-        "regenerate"
-      ],
-      "note": "Optional FL2VA base for the separate Open-H3 Regenerate refinement stage."
-    },
-    {
       "id": "regenerate_refiner_rank16",
       "url": "https://huggingface.co/Kijai/MiniMax-H3-experimental/resolve/f5c3b1d5a63e008a691fca1b6096fd57a5307536/loras/minimax_h3_open_regenerate_2k_refiner_rank_16_bf16.safetensors",
       "destination": "loras/henge/minimax_h3_open_regenerate_2k_refiner_rank_16_bf16.safetensors",

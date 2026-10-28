@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import server
-from workflows import h3_graph, REGENERATE, REGENERATE_SIGMAS
+from workflows import h3_graph, REGENERATE, REGENERATE_SIGMAS, BASES
 
 class RegenerateTests(unittest.TestCase):
     def graph(self,steps=2):
@@ -14,7 +14,8 @@ class RegenerateTests(unittest.TestCase):
 
     def test_refiner_has_independent_base_and_text_conditioning(self):
         g=self.graph()
-        self.assertEqual(g['70']['inputs']['unet_name'],REGENERATE['base'])
+        self.assertEqual(g['70']['inputs']['unet_name'],BASES['h3']['unet'])
+        self.assertEqual(g['70']['inputs']['unet_name'],g['1']['inputs']['unet_name'])
         self.assertEqual(g['72']['inputs']['model'],['71',0])
         self.assertEqual(g['73']['inputs']['model'],['72',0])
         self.assertEqual(g['72']['inputs']['lora_name'],REGENERATE['turbo'])
@@ -74,3 +75,10 @@ class RegenerateTests(unittest.TestCase):
         for changes,options in [({'mode':'motion'},{'regenerate_steps':2}),({'quality':'2160p'},{}),({}, {'regenerate_steps':4}),({}, {'regenerate_prompt':None})]:
             with self.subTest(changes=changes,options=options),self.assertRaises(ValueError):
                 server.validate_request({**base,**changes},{'upscale_method':'regenerate',**options},[])
+
+    def test_regenerate_download_profile_has_no_fl2va_dependency(self):
+        import json
+        manifest=json.loads((Path(__file__).resolve().parents[2]/'config/model-repos.example.json').read_text())
+        selected=[m for m in manifest['models'] if set(m['profiles']) & {'common','regenerate'}]
+        self.assertFalse(any('fl2va' in m['destination'].lower() for m in selected))
+        self.assertIn('diffusion_models/'+BASES['h3']['unet'],[m['destination'] for m in selected])

@@ -71,7 +71,7 @@ BASES={
 # nvidia: NVIDIA RTX Video Super Resolution on the decoded frames (no diffusion, no invented detail).
 UPSCALE_METHODS=('h3','regenerate','nvidia','none')
 REGENERATE={
- 'base':'minimax_h3_fl2va_pruned_int8_convrot.safetensors',
+ 'base':BASES['h3']['unet'],
  'refiner':'henge/minimax_h3_open_regenerate_2k_refiner_rank_16_bf16.safetensors',
  'turbo':TURBOS['dmad4']['lora'],
  'lms':MODELS['sharpness']['lora'],
@@ -174,7 +174,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             # 2K/4K frames: decode in tiles so the VAE fits beside the model.
             g['16']=node('VAEDecodeTiled',samples=['38',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
         elif upscale['method']=='regenerate':
-            # Separate FL2VA stack, following the supplied two-stage workflow.
+            # Separate Ref2VA model stack; reuse the installed H3 base without carrying first-pass patches.
             # Kijai's rank-16 contains only the refiner, not LMS or the turbo.
             count=int(upscale.get('steps',2))
             if count not in REGENERATE_SIGMAS:raise ValueError('Regenerate needs 2 or 3 refine steps')
