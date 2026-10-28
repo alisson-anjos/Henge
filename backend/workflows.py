@@ -296,6 +296,32 @@ def split_at_every_cut(total,per_shot,context,cuts,min_gap=24):
     return output
 
 
+def split_at_points(total,per_shot,context,cuts,points,min_gap=24,every_cut=False):
+    # Like split_on_cuts, with a second kind of preferred end: suggested points inside a take (the end of a line, a pause
+    # between actions). A camera cut starts the next shot clean; a point ends the shot there and the next one carries
+    # `context` frames, since it is the same take. every_cut: each camera cut ends a shot (marked people are tracked
+    # shot by shot). Without a cut or point in reach the shot keeps the requested length.
+    def keep(values):
+        out=[]
+        for c in sorted({int(c) for c in values}):
+            if c-(out[-1] if out else 0)>=min_gap and total-c>=min_gap:out.append(c)
+        return out
+    cuts=keep(cuts);points=[p for p in keep(points) if p not in cuts]
+    output=[];start=0;overlap=0
+    while start<total:
+        reach=min(total,start+per_shot)
+        near=[c for c in cuts if start+overlap+min_gap<=c<=reach and c<total]
+        if near:
+            end=near[0] if every_cut else near[-1]
+            output.append({'start':start,'frames':end-start,'overlap':overlap,'length':grid_frames(end-start),'reset_context':overlap==0});start=end;overlap=0;continue
+        if reach>=total:
+            output.append({'start':start,'frames':total-start,'overlap':overlap,'length':grid_frames(total-start),'reset_context':overlap==0});break
+        end=([c for c in points if start+overlap+min_gap<=c<=reach] or [reach])[-1]
+        output.append({'start':start,'frames':end-start,'overlap':overlap,'length':grid_frames(end-start),'reset_context':overlap==0})
+        start=end-context;overlap=context
+    return output
+
+
 def split_on_cuts(total,per_shot,context,cuts,min_gap=24):
     # Shots stay as long as the requested length allows; a camera cut only chooses where one ends: the last cut
     # within reach, so the next shot starts clean at the cut (no context). Cuts inside a shot are rendered straight

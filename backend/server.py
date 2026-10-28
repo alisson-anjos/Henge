@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageFont,ImageOps
 import workflows
 import moving_plate
-from workflows import klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,fibo_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements
 from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
@@ -212,6 +212,8 @@ def validate_request(r,options,slots):
     clamp_float(options.get('reference_scale',1.),.25,1.,'native reference scale')
     clamp_float(options.get('seed',42),0,2**32-1,'seed');clamp_float(options.get('steps',8),1,60,'steps');clamp_float(options.get('clip_fps',2),.5,24,'CLIP video fps')
     p=r.get('processing',{});clamp_float(p.get('requested_seconds_per_shot',4.5),1,15,'segment length')
+    points=p.get('split_points',[])
+    if not isinstance(points,list) or len(points)>200 or not all(isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x) and x>0 for x in points):raise ValueError('split_points must be a list of seconds from the start of the selection')
     if p.get('cut_mode',CUT_MODES[0]) not in CUT_MODES:raise ValueError('Camera cuts must be fit, every or off')
     if p.get('context_frames',22) not in [5,22,39]:raise ValueError('Unsupported context length')
     # Slots must be dense for native H3 references, otherwise Picture indices silently shift.
@@ -616,8 +618,16 @@ def planning(job):
                'Writing the final H3 prompt' if stage=='vlm_prompt' else
                'Checking the references for real public figures' if stage.startswith('vlm_likeness_') else 'Planning runtime options')
         save(job,stage=stage,message=label)
-        planner_cfg=assistant_planner()
-        if planner_cfg:raw=assistant.complete(planner_cfg,instruction,image,tokens)
+        planner_cfg=assistant_planner();raw=None
+        if stage=='vlm_guide' and caption:
+            # A question about the guide itself: Molmo2 answers it watching the whole interval, not a sheet of frames.
+            try:
+                folder=work/'molmo_guide_question';folder.mkdir(exist_ok=True)
+                start,end=r['video']['start_seconds'],r['video']['end_seconds']
+                raw=molmo_pointing.ask_video(INPUT/job['assets']['video'],instruction.replace('Look at these frames of a video.','Watch this video.'),start,min(end,start+molmo_pointing.MAX_ASK_SECONDS),folder)['answer']
+            except Exception as e:print(f'[Henge] Molmo2 guide question skipped: {e}',flush=True)
+        if raw:pass
+        elif planner_cfg:raw=assistant.complete(planner_cfg,instruction,image,tokens)
         elif os.environ.get('VLM_CHAT_URL') and os.environ.get('VLM_MODEL'):
             content=[{'type':'text','text':instruction}]
             if image is not None:
@@ -798,6 +808,9 @@ def plan_shots(job):
     # A single or causal render follows the guide straight through its cuts.
     if processing.get('mode')=='causal':return [{'start':0,'frames':total,'overlap':0,'length':grid_frames(total),'reset_context':True}],context
     mode=cut_mode(job)
+    # Suggested points (Molmo2 or the user) end shots inside a take; camera cuts still start clean shots.
+    points=[round(float(x)*24) for x in processing.get('split_points') or [] if 0<float(x)*24<total]
+    if points:return split_at_points(total,per,context,camera_cuts(job) if mode!='off' else [],points,every_cut=mode=='every'),context
     # A short interval is one shot, except when a shot at every camera cut is asked for (or implied by marked people).
     if mode=='off' or (processing.get('mode')=='single' and mode!='every') or (mode=='fit' and total<=per):return split_frames(total,per,context),context
     return (split_on_cuts if mode=='fit' else split_at_every_cut)(total,per,context,camera_cuts(job)),context
@@ -1840,6 +1853,44 @@ async def ask_video(request:Request):
             return await asyncio.to_thread(molmo_pointing.ask_video,source,question,start,min(end,meta['duration']),folder)
         except ValueError as exc:raise HTTPException(400,str(exc))
         except Exception as exc:raise HTTPException(500,str(exc)[-2200:])
+
+SUGGEST_CUTS=('List the moments in this video where it could be split into separate clips without cutting an action or a '
+    'sentence in half: camera cuts, the end of a spoken sentence, a pause between two actions. Answer with a JSON array of '
+    'seconds from the start of the video only, for example [2.4, 5.1].')
+
+@app.post('/assistant/suggest-cuts')
+async def suggest_cuts(request:Request):
+    """Split points for the shots: natural breaks from Molmo2 plus the camera cuts, and the shot plan they give with
+    the requested maximum shot length. Seconds from start. Changes nothing."""
+    async with request.form(max_files=1,max_fields=4) as form:
+        video=form.get('video')
+        try:
+            start=float(form.get('start') or 0);end=float(form.get('end') or 0);longest=float(form.get('max_seconds') or 5)
+            molmo_pointing.validate_ask(SUGGEST_CUTS,start,end)
+            if not 1<=longest<=15:raise ValueError('max_seconds must be between 1 and 15')
+        except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
+        if not hasattr(video,'read'):raise HTTPException(400,'Send the guide video')
+        if not pointing_status()['configured']:raise HTTPException(409,'Configure HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL; see docs/molmo-pointing.md')
+        folder=ROOT/'pointing'/uuid.uuid4().hex;folder.mkdir(parents=True);source=folder/'source.mp4';size=0
+        with source.open('wb') as output:
+            while chunk:=await video.read(1024*1024):
+                size+=len(chunk)
+                if size>500*1024*1024:raise HTTPException(413,'Guide video exceeds 500 MB')
+                output.write(chunk)
+        try:
+            meta=await asyncio.to_thread(probe,source);end=min(end,meta['duration'])
+            answer=(await asyncio.to_thread(molmo_pointing.ask_video,source,SUGGEST_CUTS,start,end,folder))['answer']
+            cuts=[round(c-start,2) for c in await asyncio.to_thread(molmo_pointing.detect_cuts,source,start,end)]
+        except ValueError as exc:raise HTTPException(400,str(exc))
+        except Exception as exc:raise HTTPException(500,str(exc)[-2200:])
+    breaks=sorted({round(float(x),2) for x in re.findall(r'\d+(?:\.\d+)?',answer) if 0<float(x)<end-start})
+    total=max(1,round((end-start)*24));per=max(22,min(362,5+17*math.floor((round(longest*24)-5)/17)))
+    shots=split_at_points(total,per,22,[round(c*24) for c in cuts],[round(b*24) for b in breaks])
+    used=[round(s['start']/24+s['frames']/24,2) for s in shots[:-1]]
+    # Only the natural breaks that became shot ends are split points; fixed-length ends and camera cuts are automatic.
+    natural={round(round(b*24)/24,2) for b in breaks}
+    return {'points':[p for p in used if p in natural and p not in cuts],'camera_cuts':cuts,'breaks':breaks,'molmo':answer,
+            'shots':[{'start':round(s['start']/24,2),'end':round((s['start']+s['frames'])/24,2),'context_seconds':round(s['overlap']/24,2)} for s in shots]}
 
 @app.post('/assistant/match-people')
 async def match_people(request:Request):

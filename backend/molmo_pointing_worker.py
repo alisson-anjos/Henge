@@ -101,19 +101,29 @@ def match(model, processor, args):
         inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors='pt', return_dict=True)
         return [(x, y) for index, _, x, y in parse(generate(model, processor, inputs, 128)) if index == 2]
 
-    matches = []
-    for key in json.loads(Path(args.keys).read_text()):
-        frame = Image.open(key['path']).convert('RGB')
+    def check(key, frame, ref_index, ref):
+        forward = ask(ref, frame)
+        if not forward:
+            return dict(ref=ref_index, shot=key['shot'], time=key['time'], ok=False, reason='not found')
+        x, y = forward[0]
+        back = ask(crop_at(frame, x, y), board)
+        back_ref = next((i for i, (a, b) in enumerate(spans) for bx, _ in back[:1] if a <= bx <= b), None)
+        return dict(ref=ref_index, shot=key['shot'], time=key['time'], x=x, y=y, back_ref=back_ref, ok=back_ref == ref_index,
+            reason='' if back_ref == ref_index else f'reverse check chose person {back_ref+1}' if back_ref is not None else 'reverse check found nobody')
+
+    keys = json.loads(Path(args.keys).read_text()); matches = []
+    for shot in sorted({k['shot'] for k in keys}):
+        shot_keys = [k for k in keys if k['shot'] == shot]
+        frames = [Image.open(k['path']).convert('RGB') for k in shot_keys]
         for ref_index, ref in enumerate(refs):
-            forward = ask(ref, frame)
-            if not forward:
-                matches.append(dict(ref=ref_index, shot=key['shot'], time=key['time'], ok=False, reason='not found')); continue
-            x, y = forward[0]
-            back = ask(crop_at(frame, x, y), board)
-            back_ref = next((i for i, (a, b) in enumerate(spans) for bx, _ in back[:1] if a <= bx <= b), None)
-            matches.append(dict(ref=ref_index, shot=key['shot'], time=key['time'], x=x, y=y, back_ref=back_ref, ok=back_ref == ref_index,
-                reason='' if back_ref == ref_index else f'reverse check chose person {back_ref+1}' if back_ref is not None else 'reverse check found nobody'))
-        print('keyframe', key['time'], [(m['ref'], m['ok']) for m in matches if m['time'] == key['time']], flush=True)
+            # A person needs 2 of 3 keyframes: two agreeing answers decide; the third is looked at only on a split.
+            results = []
+            for key, frame in zip(shot_keys, frames):
+                if len(results) >= 2 and results[0]['ok'] == results[1]['ok']:
+                    break
+                results.append(check(key, frame, ref_index, ref))
+            matches += results
+        print('shot', shot, [(m['ref'], m['time'], m['ok']) for m in matches if m['shot'] == shot], flush=True)
     return dict(matches=matches)
 
 

@@ -107,6 +107,20 @@ def point_video(video: str, query: str, start: float, end: float) -> list:
 
 
 @mcp.tool()
+def suggest_cuts(video: str, max_seconds: float = 5, start: float = 0, end: float | None = None) -> str:
+    """Let local Molmo2 choose where a video splits into shots of at most max_seconds: natural breaks (end of a
+    sentence, a pause between actions) plus camera cuts. Returns points (seconds from start) and the shots; pass the
+    points as split_points to create_job. Requires Molmo2 on the Henge bridge machine.
+    """
+    source = Path(video).expanduser()
+    end = probe(source)['duration'] if end is None else end
+    with source.open('rb') as stream:
+        result = api('POST', '/assistant/suggest-cuts', files={'video': (source.name, stream, 'video/mp4')},
+                     data={'start': str(start), 'end': str(end), 'max_seconds': str(max_seconds)}, timeout=1000).json()
+    return json.dumps(result)
+
+
+@mcp.tool()
 def ask_video(video: str, question: str, start: float = 0, end: float | None = None) -> str:
     """Ask local Molmo2 about a video: it watches the whole interval with timestamps. Use it for captions, timelines,
     how many people and where, who does or says what and when, camera moves and cuts. Timestamps in the answer are
@@ -143,7 +157,7 @@ def match_people(video: str, photos: list[str], start: float = 0, end: float | N
 @mcp.tool()
 def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | None = None, start: float = 0, end: float | None = None,
                quality: str = '480p', project: str = 'Henge', subjects: list[dict] | None = None, auto_approve: bool = False,
-               keep_audio: bool = True, generate_audio: bool = False, background: str | None = None, seconds_per_shot: float = 4.5, options: dict | None = None) -> dict:
+               keep_audio: bool = True, generate_audio: bool = False, background: str | None = None, seconds_per_shot: float = 4.5, options: dict | None = None, split_points: list[float] | None = None) -> dict:
     """Start a generation from local files.
     mode: 'swap' | 'motion' | 'headswap' | 'sharpness'. video: path of the guide video. pictures: paths, in order Picture 1, 2...
     (swap/motion 1-11, headswap exactly 1 face, sharpness none). prompt: the request, naming pictures as @Picture1, @Picture2
@@ -152,6 +166,7 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
     subjects (swap with several people): [{"picture_slots": [1], "x": 0.42, "y": 0.35, "time": 2.0, "label": "driver"}], x/y from find_people.
     Each subject can instead supply anchors: [{"x": 0.42, "y": 0.35, "time_seconds": 2.0}, ...] for multiple marks/cuts.
     auto_approve: render straight after planning instead of stopping at the plan for review.
+    split_points: seconds (from start) where shots must end, e.g. from suggest_cuts.
     background: optional path of a picture that replaces what is behind the people, moving with the guide's camera
     (moving plate, built before planning; swap and motion).
     generate_audio: keep the soundtrack H3 generates per shot (joined at the cuts) instead of the guide's sound; write spoken
@@ -170,7 +185,7 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
         native += f"\n<Subject {i + 1}> uses the identity and appearance from {refs} and follows its selected performer in <Video 1>. Keep this assignment through position changes, occlusion and cuts."
     fixed = mode in ('headswap', 'sharpness')
     direction = {'schema_version': 2, 'project': project, 'mode': mode, 'quality': quality,
-                 'processing': {'mode': 'context_window' if duration > 15 else 'single', 'max_shots': 0, 'requested_seconds_per_shot': seconds_per_shot, 'frames_per_shot': frames,
+                 'processing': {**({'split_points': split_points} if split_points else {}), 'mode': 'context_window' if duration > 15 else 'single', 'max_shots': 0, 'requested_seconds_per_shot': seconds_per_shot, 'frames_per_shot': frames,
                                 'timeline_fps': 24, 'frame_grid': '17n+5', 'trim_to_source_length': True, 'join': 'ordered', 'execution_status': 'comfy_backend', 'context_frames': 22, 'cut_mode': 'fit'},
                  'audio_conditioning': {'enabled': False, 'source': None}, 'output_audio': {'keep_source': keep_audio and not generate_audio, 'generate': generate_audio},
                  'prompt': '' if fixed else native.strip(), 'editor_prompt': '' if fixed else prompt,

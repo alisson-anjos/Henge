@@ -20,7 +20,7 @@ export async function coverFit(src: string, width: number, height: number): Prom
 /** The guide's first selected frame, edited with FLUX.3 / FLUX.2 [klein] (or FIBO 2) or replaced by an uploaded image. Paint a
  * mask to edit only that area; Replace, Remove, Add or a free instruction. The result is cropped and resized to the frame's
  * exact size so it can be propagated (Motion Transfer · first-frame propagate). */
-export default function FirstFrameModal({videoUrl, start, image, pictures, lang, onUse, onClose}: {videoUrl?: string; start?: number; image?: File; pictures: Picture[]; lang: Language; onUse: (file: File, edit: {id: string; width: number; height: number} | null) => void; onClose: () => void}) {
+export default function FirstFrameModal({videoUrl, start, end, image, pictures, lang, onUse, onClose}: {videoUrl?: string; start?: number; end?: number; image?: File; pictures: Picture[]; lang: Language; onUse: (file: File, edit: {id: string; width: number; height: number} | null, at?: number) => void; onClose: () => void}) {
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const dialog = useRef<HTMLDialogElement>(null), upload = useRef<HTMLInputElement>(null);
   const [frame, setFrame] = useState<Image & {width: number; height: number} | null>(null);
@@ -35,9 +35,18 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
   const [erase, setErase] = useState(false);
   const [painted, setPainted] = useState(false);
   const [instruction, setInstruction] = useState('');
-  const [useRefs, setUseRefs] = useState(false);
+  // References for the edit (FLUX Klein reads several images): any of the studio's Pictures, plus images uploaded only for
+  // this edit. They reach the editor as image 2, image 3... in this order.
+  const [refSlots, setRefSlots] = useState<number[]>([]);
+  const [extraRefs, setExtraRefs] = useState<{file: File; url: string}[]>([]);
+  const refUpload = useRef<HTMLInputElement>(null);
+  const editRefs = [...pictures.filter(p => refSlots.includes(p.slot)).map(p => ({key: `p${p.slot}`, file: p.file, url: p.url, label: `Picture ${p.slot}`})),
+    ...extraRefs.map((r, i) => ({key: `x${i}`, file: r.file, url: r.url, label: r.file.name}))].slice(0, 12);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Which guide frame to edit: the start by default; any frame of the interval can be chosen.
+  const [at, setAt] = useState(start ?? 0);
+  const player = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     dialog.current?.showModal();
@@ -51,7 +60,7 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
       load(URL.createObjectURL(image)).then(im => setFrame({blob: image, url: URL.createObjectURL(image), width: im.naturalWidth, height: im.naturalHeight})).catch(() => setError(tr('Could not read the picture.', 'Não foi possível ler a imagem.', 'No se pudo leer la imagen.')));
       return () => clearTimeout(timer);
     }
-    const video = document.createElement('video');
+    const video = document.createElement('video'); player.current = video;
     video.muted = true; video.preload = 'auto'; video.src = videoUrl ?? '';
     video.onloadedmetadata = () => {video.currentTime = Math.min((start ?? 0) + .001, Math.max(0, video.duration - .05));};
     video.onseeked = () => {
@@ -74,7 +83,7 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
       const body = new FormData();
       body.set('frame', frame.blob, 'frame.png'); body.set('instruction', instruction.trim()); body.set('op', op); body.set('what', what.trim());
       if (painted && paint.current) {const mask = await new Promise<Blob | null>(r => paint.current!.toBlob(r, 'image/png')); if (mask) body.set('mask', mask, 'mask.png');}
-      if (useRefs) pictures.forEach(p => body.append(`picture_${String(p.slot).padStart(2, '0')}`, p.file, p.file.name));
+      editRefs.forEach((r, i) => body.append(`picture_${String(i + 1).padStart(2, '0')}`, r.file, r.file.name));
       const response = await fetch('/api/backend/frame-edit', {method: 'POST', body});
       if (!response.ok) {const reply = await response.json().catch(() => ({})); throw Error(reply.detail || reply.error || `HTTP ${response.status}`);}
       const blob = await response.blob(), edit = response.headers.get('x-henge-edit') || undefined;
@@ -88,7 +97,12 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
   }
   async function use() {
     if (!frame || !result) return;
-    onUse(await coverFit(result.url, frame.width, frame.height), result.edit ? {id: result.edit, width: frame.width, height: frame.height} : null);
+    onUse(await coverFit(result.url, frame.width, frame.height), result.edit ? {id: result.edit, width: frame.width, height: frame.height} : null, image ? undefined : at);
+  }
+  function chooseFrame(t: number) {
+    // Another guide frame: grab it and drop an edit made on the previous one.
+    const video = player.current; if (!video) return;
+    setAt(t); setResult(null); video.currentTime = Math.min(t + .001, Math.max(0, video.duration - .05));
   }
 
   // The painted mask: white where the edit may change the frame; drawn at the frame's own resolution.
@@ -112,7 +126,7 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
   const ops: [typeof op, string][] = [['replace', tr('Replace', 'Substituir', 'Reemplazar')], ['remove', tr('Remove', 'Remover', 'Quitar')], ['add', tr('Add', 'Adicionar', 'Añadir')], ['free', tr('Describe', 'Descrever', 'Describir')]];
 
   return <dialog ref={dialog} className={`trim-modal first-frame-modal${frame && frame.width > frame.height ? ' landscape' : ''}`} aria-labelledby="first-frame-heading" onCancel={e => {e.preventDefault(); onClose();}}>
-    <header className="trim-header"><div><span className="eyebrow">{image ? tr('PICTURE', 'IMAGEM', 'IMAGEN') : tr('FIRST FRAME', 'PRIMEIRO QUADRO', 'PRIMER FOTOGRAMA')}</span><h2 id="first-frame-heading">{image ? tr('Edit this picture', 'Edite esta imagem', 'Edita esta imagen') : tr('Edit the start, propagate it', 'Edite o início e propague', 'Edita el inicio y propágalo')}</h2>
+    <header className="trim-header"><div><span className="eyebrow">{image ? tr('PICTURE', 'IMAGEM', 'IMAGEN') : tr('FRAME', 'QUADRO', 'FOTOGRAMA')}</span><h2 id="first-frame-heading">{image ? tr('Edit this picture', 'Edite esta imagem', 'Edita esta imagen') : tr('Edit a frame, propagate it', 'Edite um quadro e propague', 'Edita un fotograma y propágalo')}</h2>
       <p>{image ? tr('Replace, remove or add something, or paint the area to change; the result replaces the picture.', 'Substitua, remova ou adicione algo, ou pinte a área a mudar; o resultado substitui a imagem.', 'Reemplaza, quita o añade algo, o pinta el área a cambiar; el resultado sustituye la imagen.') : tr('The edited frame becomes a picture of the edit. Use the "First-frame propagate" model in Motion Transfer.', 'O quadro editado vira uma Picture da edição. Use o modelo "First-frame propagate" no Motion Transfer.', 'El fotograma editado se convierte en una imagen de la edición. Usa el modelo "First-frame propagate" en Motion Transfer.')}</p></div>
       <button type="button" className="trim-close" aria-label={tr('Close', 'Fechar', 'Cerrar')} onClick={onClose}>×</button></header>
     <div className="first-frame-body">
@@ -120,6 +134,9 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
       <figure><figcaption className="eyebrow muted">{image ? tr('Picture', 'Imagem', 'Imagen') : tr('Guide frame', 'Quadro do guia', 'Fotograma de la guía')}{frame ? ` · ${frame.width}×${frame.height}` : ''}</figcaption>{frame ? <div className="first-frame-paint" style={shape}><img src={frame.url} alt=""/>{editor && <canvas ref={paint} aria-label={tr('Paint the area to edit', 'Pinte a área a editar', 'Pinta el área a editar')} onPointerDown={e => {drawing.current = true; e.currentTarget.setPointerCapture(e.pointerId); stroke(e);}} onPointerMove={stroke} onPointerUp={() => {drawing.current = false;}}/>}</div> : <div className="first-frame-empty">{tr('Reading the frame…', 'Lendo o quadro…', 'Leyendo el fotograma…')}</div>}</figure>
       <figure><figcaption className="eyebrow muted">{tr('Edited', 'Editado', 'Editado')}</figcaption>{result ? <img src={result.url} alt="" style={shape}/> : <div className="first-frame-empty" style={shape}>{busy ? tr(`${editorName} is editing… (about 1 min)`, `${editorName} está editando… (cerca de 1 min)`, `${editorName} está editando… (alrededor de 1 min)`) : editor ? tr(`Edit with ${editorName} or upload an image`, `Edite com ${editorName} ou envie uma imagem`, `Edita con ${editorName} o sube una imagen`) : tr('Upload an edited image', 'Envie uma imagem editada', 'Sube una imagen editada')}</div>}</figure>
     </div>
+    {!image && end !== undefined && end - (start ?? 0) > .1 && <label className="frame-chooser"><span className="eyebrow muted">{tr('Frame to edit', 'Quadro a editar', 'Fotograma a editar')} <b className="mono">{(at - (start ?? 0)).toFixed(2)} s</b></span>
+      <input type="range" min={start ?? 0} max={Math.max(start ?? 0, end - 1 / 24)} step={1 / 24} value={at} onChange={e => chooseFrame(Number(e.target.value))}/>
+      <small>{tr('Pick the frame where the subject is clearest. Generation starts at the frame you edit.', 'Escolha o quadro em que o assunto aparece melhor. A geração começa no quadro que você editar.', 'Elige el fotograma donde el sujeto se ve mejor. La generación empieza en el fotograma que edites.')}</small></label>}
     <div className="first-frame-controls">
       {editor ? <>
         <div className="edit-ops" role="group" aria-label={tr('Edit', 'Edição', 'Edición')}>{ops.map(([k, label]) => <button key={k} type="button" aria-pressed={op === k} className={op === k ? 'chosen' : ''} onClick={() => setOp(k)}>{label}</button>)}</div>
@@ -129,7 +146,12 @@ export default function FirstFrameModal({videoUrl, start, image, pictures, lang,
           <button type="button" className="quiet-button" disabled={!painted} onClick={clearMask}>{tr('Clear', 'Limpar', 'Borrar')}</button></div>
         {(op === 'replace' || op === 'remove') && <label>{op === 'remove' ? tr('What should go away?', 'O que deve sumir?', '¿Qué debe desaparecer?') : tr('What do you replace?', 'O que você vai substituir?', '¿Qué reemplazas?')}<input value={what} onChange={e => setWhat(e.target.value)} placeholder={tr('the black hoodie', 'o moletom preto', 'la sudadera negra')}/></label>}
         {op !== 'remove' && <label>{op === 'replace' ? tr('With what?', 'Pelo quê?', '¿Por qué?') : op === 'add' ? tr('What do you add, and where?', 'O que adicionar, e onde?', '¿Qué añades y dónde?') : tr('What should change in this frame?', 'O que deve mudar neste quadro?', '¿Qué debe cambiar en este fotograma?')}<textarea value={instruction} onChange={e => setInstruction(e.target.value)} placeholder={op === 'add' ? tr('a small dragon on his shoulder', 'um pequeno dragão no ombro dele', 'un pequeño dragón en su hombro') : op === 'replace' ? tr('a red leather jacket', 'uma jaqueta de couro vermelha', 'una chaqueta de cuero roja') : tr('Set his hands on fire', 'Coloque fogo nas mãos dele', 'Pon fuego en sus manos')}/></label>}
-        {pictures.length > 0 && <label className="prompt-assist-row"><input type="checkbox" checked={useRefs} onChange={e => setUseRefs(e.target.checked)}/><span><strong>{tr(`Send my pictures to ${editorName} as references`, `Enviar minhas Pictures ao ${editorName} como referência`, `Enviar mis imágenes a ${editorName} como referencia`)}</strong></span></label>}
+        <div className="edit-refs"><span className="eyebrow muted">{tr(`References for ${editorName} (optional)`, `Referências para o ${editorName} (opcional)`, `Referencias para ${editorName} (opcional)`)}</span>
+          <div className="edit-ref-list">{pictures.map(p => <button type="button" key={p.slot} aria-pressed={refSlots.includes(p.slot)} className={refSlots.includes(p.slot) ? 'chosen' : ''} title={`Picture ${p.slot}`} onClick={() => setRefSlots(cur => cur.includes(p.slot) ? cur.filter(n => n !== p.slot) : [...cur, p.slot])}><img src={p.url} alt={`Picture ${p.slot}`}/><span>P{p.slot}</span></button>)}
+            {extraRefs.map((r, i) => <button type="button" key={r.url} className="chosen" title={tr('Remove this reference', 'Remover esta referência', 'Quitar esta referencia')} onClick={() => setExtraRefs(cur => {URL.revokeObjectURL(r.url); return cur.filter((_, k) => k !== i);})}><img src={r.url} alt={r.file.name}/><span>×</span></button>)}
+            {editRefs.length < 12 && <button type="button" className="edit-ref-add" onClick={() => refUpload.current?.click()}>+<span>{tr('Upload', 'Enviar', 'Subir')}</span></button>}</div>
+          {editRefs.length > 0 && <small className="muted">{tr('Mention them in the edit as ', 'Cite-as na edição como ', 'Menciónalas en la edición como ')}{editRefs.map((r, i) => `image ${i + 2} (${r.label})`).join(', ')}{tr(', e.g. "his jacket from image 2".', ', p.ex. "a jaqueta da image 2".', ', p.ej. "su chaqueta de la image 2".')}</small>}
+          <input hidden ref={refUpload} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e => {const files = Array.from(e.target.files ?? []); setExtraRefs(cur => [...cur, ...files.map(file => ({file, url: URL.createObjectURL(file)}))]); e.target.value = '';}}/></div>
       </> : <small className="muted">{tr('No image editor (FLUX Klein or FIBO) is installed on this ComfyUI; upload an edited frame instead.', 'Nenhum editor de imagem (FLUX Klein ou FIBO) está instalado neste ComfyUI; envie um quadro já editado.', 'No hay editor de imagen (FLUX Klein o FIBO) en este ComfyUI; sube un fotograma editado.')}</small>}
       {edits.length > 0 && <div className="recent-edits"><span className="eyebrow muted">{tr('Recent edits', 'Edições recentes', 'Ediciones recientes')}</span><div>{edits.map(e => <button key={e.id} title={e.instruction} aria-pressed={result?.edit === e.id} onClick={() => pick(e)}><img src={e.url} alt={e.instruction} loading="lazy"/></button>)}</div></div>}
       {error && <p className="validation" role="alert">{error}</p>}

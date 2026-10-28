@@ -33,6 +33,7 @@ const label = (name: string, input: Record<string, unknown>) => {
   const v = (k: string) => input[k] as string | number | undefined;
   switch (name) {
     case 'point_video': return `point_video · ${v('start')}–${v('end')}s · ${v('query')}`;
+    case 'suggest_cuts': return `suggest_cuts · max ${v('max_seconds') ?? '?'}s`;
     case 'ask_video': return `ask_video · ${String(v('question') ?? '').slice(0, 60)}`;
     case 'match_people': return `match_people · ${Array.isArray(input.people) ? input.people.length : 0} people`;
     case 'find_people': return `find_people · ${v('time')}s`;
@@ -218,7 +219,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         const results: Result[] = [...reply.job_results];
         for (const call of reply.studio_calls) {
           if (stop.current) {results.push({id: call.id, name: call.name, text: 'Stopped by the user.', is_error: true}); continue;}
-          setBusy(call.name === 'ask_video'
+          setBusy(call.name === 'ask_video' || call.name === 'suggest_cuts'
             ? tr('Molmo2 is watching the video on this computer…', 'O Molmo2 está assistindo ao vídeo neste computador…', 'Molmo2 está viendo el vídeo en este equipo…')
             : call.name === 'match_people'
             ? tr('Finding the people with Molmo2 on this computer (about a minute per shot)…', 'Procurando as pessoas com o Molmo2 neste computador (cerca de 1 minuto por shot)…', 'Buscando a las personas con Molmo2 en este equipo (cerca de 1 minuto por plano)…')

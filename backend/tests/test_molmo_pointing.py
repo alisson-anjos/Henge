@@ -71,6 +71,17 @@ class MatchPeopleTests(unittest.TestCase):
             with self.assertRaises(ValueError):molmo_pointing.validate_match(people,start,end)
 
 
+class SplitPointTests(unittest.TestCase):
+    def test_points_end_shots_inside_a_take_and_cuts_stay_clean(self):
+        from workflows import split_at_points
+        shots=split_at_points(254,107,22,[98,175,236],[60,140],every_cut=True)
+        self.assertEqual([(s['start'],s['start']+s['frames']) for s in shots],[(0,98),(98,175),(175,254)])  # 236 would leave an 18-frame shot (< min_gap)
+        self.assertTrue(all(s['overlap']==0 for s in shots))
+        # One take, no cuts: the shot ends at the last suggested point in reach and the next carries context.
+        shots=split_at_points(300,107,22,[],[80,150,250])
+        self.assertEqual([(s['start'],s['frames'],s['overlap']) for s in shots],[(0,80,0),(58,92,22),(128,107,22),(213,87,22)])
+
+
 class PointingApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
