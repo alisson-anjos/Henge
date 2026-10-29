@@ -299,7 +299,7 @@ export default function Studio() {
     return {mode: c.mode, guide_video: c.video ? {name: c.video.file.name, duration: c.video.duration ?? null, selected: c.video.range ?? null} : null,
       pictures: c.pictures.map(p => ({slot: p.slot, name: p.file.name})), max_pictures: c.maxPictures,
       subjects: c.subjects.map((s, i) => ({subject: i + 1, label: s.label, color: s.color, picture_slots: s.picture_slots, marks: s.anchors.map(a => a.time_seconds)})),
-      guide_representation: c.guideRepresentation, mark_opacity: c.markOpacity, prompt: c.prompt, prompt_mode: c.promptMode, quality: c.quality,
+      generation: panelControls.current?.getOptions() ?? null, guide_representation: c.guideRepresentation, mark_opacity: c.markOpacity, prompt: c.prompt, prompt_mode: c.promptMode, quality: c.quality,
       shots: {seconds: c.shotSeconds, cut_mode: c.cutMode, context_frames: c.contextFrames, split_points: c.splitPoints}, output: {keep_audio: c.keepAudio, audio_conditioning: c.audioConditioning, timeline_fps: c.timelineFps}, project: c.project,
       selected_job: c.generationJob ? {id: c.generationJob.id, reference: `#${c.generationJob.id.slice(0, 8)}`, status: c.generationJob.status, stage: c.generationJob.stage, message: c.generationJob.message} : null};
   };
@@ -352,7 +352,7 @@ export default function Studio() {
         const body = new FormData(); body.set('video', c.video!.file); body.set('question', String(input.question ?? '')); body.set('start', String(start)); body.set('end', String(end));
         const response = await fetch('/api/backend/assistant/ask-video', {method: 'POST', body}); const reply = await response.json();
         if (!response.ok) throw Error(reply.detail || `HTTP ${response.status}`);
-        return {text: `Molmo2 (${start.toFixed(2)}–${end.toFixed(2)} s; times are seconds from ${start.toFixed(2)} s): ${reply.answer}`};
+        return {text: `${reply.model || 'Video analysis'} (${start.toFixed(2)}–${end.toFixed(2)} s; times are seconds from ${start.toFixed(2)} s): ${reply.answer}`};
       }
       case 'suggest_cuts': {
         const reply = await suggestSplits(input.max_seconds === undefined ? c.shotSeconds : num('max_seconds'));
@@ -473,6 +473,13 @@ export default function Studio() {
         await settle(); return {text: 'Output settings updated.'};
       }
       case 'set_project': setProject(String(input.name ?? '').slice(0, 80)); await settle(); return {text: 'Project renamed.'};
+      case 'get_settings':
+      case 'set_settings': {
+        const routes: Record<string, string> = {connection: 'connection', assistant: 'assistant/config', molmo: 'molmo/settings'};
+        const route = routes[String(input.section)]; if (!route) throw Error('Unknown settings section');
+        const response = await fetch(`/api/backend/${route}`, call.name === 'set_settings' ? {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(input.settings || {})} : {cache: 'no-store'});
+        const result = await readJson(response); if (!response.ok) throw Error(result.detail || `HTTP ${response.status}`); return {text: JSON.stringify(result)};
+      }
       case 'get_options': {if (!panelControls.current) throw Error('The generation panel is not ready'); return {text: JSON.stringify(panelControls.current.getOptions())};}
       case 'set_options': {
         if (!panelControls.current) throw Error('The generation panel is not ready');
@@ -499,6 +506,7 @@ export default function Studio() {
       case 'set_guide': {
         const rep = String(input.representation) as GuideRepresentation;
         if (!['original', '2d', '3d', 'mask'].includes(rep)) throw Error('Unknown representation');
+        if (rep === 'mask' && !c.subjects.some(s => s.anchors.length && s.picture_slots.length)) throw Error('Mask requires an existing subject mark bound to a reference. Keep original for an ordinary edit; if the user explicitly requested masking, inspect view_frame and mark_subject first.');
         setGuideRepresentation(rep); if (input.mark_opacity !== undefined) setMarkOpacity(Math.min(1, Math.max(.1, num('mark_opacity'))));
         await settle(); return {text: `Guide is ${rep}${rep === '2d' ? `, mark opacity ${studioLive.current.markOpacity}` : ''}.`};
       }
@@ -510,6 +518,7 @@ export default function Studio() {
         // Say exactly what blocks Generate, so the assistant can fix it instead of asking the user.
         const c = studioLive.current, missing: string[] = [], fixed = c.mode === 'headswap' || c.mode === 'sharpness';
         if (!c.video?.range) missing.push('attach a guide video and confirm its interval');
+        if (c.guideRepresentation === 'mask' && !c.subjects.some(s => s.anchors.length && s.picture_slots.length)) missing.push('mask has no subject marks: mark the requested region first; use original only when masking was not explicitly required');
         if (!fixed && !c.prompt.trim()) missing.push('the prompt is empty: call set_prompt');
         if (!fixed && !c.pictures.length && c.mode !== 'motion') missing.push('attach at least one picture');
         c.subjects.forEach((s, i) => {

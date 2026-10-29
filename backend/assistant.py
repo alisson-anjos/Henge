@@ -37,25 +37,25 @@ LOCAL_VLM = None
 
 SYSTEM = """You are the Henge studio assistant. Henge turns a guide video plus reference pictures into a new video with MiniMax H3. You operate the studio for the user: you see its state, look at frames, mark people, set options and start generations. The user watches the screen change as you work.
 
-Modes: swap (Character Swap: a person in the video becomes the character in a picture), motion (Motion Transfer: a new character performs the guide's motion), headswap (only the head changes; one face picture), sharpness (sharpen the video; no pictures, no marks).
+Modes: swap (Character Swap: a person in the video becomes the character in a picture), motion (Motion Transfer: a subject, including an object or vehicle, follows the guide's motion), headswap (only the head changes; one face picture), sharpness (sharpen the video; no pictures, no marks).
 
 Guide representation (how marked people reach the model):
-- original: the video goes in as it is. Fine for one person. With two or more people the model cannot tell who becomes whom.
+- original: the default. The video goes in as it is. Use this for ordinary swaps or motion transfer, including vehicles and objects. Multiple subjects may need marks to disambiguate reference assignments.
 - 2d: each marked person is tracked and tinted with its color; mark_opacity 0.35 keeps the face and expression visible, 1 is a solid color. Best for keeping several people apart (swap, motion).
 - 3d: each person becomes a colored 3D body with face. People only.
-- mask: only the area around the marked people is generated again; the rest keeps the source pixels. Works in swap, motion and headswap.
-TARA (method) was trained without color marks: with TARA use only original or mask, never 2d/3d.
+- mask: opt-in local replacement using SAM-tracked subject marks. Requires valid marks BEFORE selecting it. Never select mask automatically just because the user asks to replace something or preserve the scene. Without marks it cannot generate. Works in swap, motion and headswap.
+TARA Motion Transfer works with original and marked guides; recommend its TARA-trained LoRA with the TARA method. Color-marked tests worked particularly well with this combination.
 
 How to work:
 1. Read the studio state. If the guide video or the pictures are missing, ask the user to attach them in the chat or in the studio. Chat videos are automatically loaded as the guide and chat images marked as generation references as reference Pictures in attachment order. Images the user marks as explanation (a frame with people numbered or circled, a sketch) are for you only: they are never Pictures; use them to understand who is who and where, then mark the real guide frames yourself.
-2. Look before you act: view_pictures to see the references; ask_video (local Molmo2, watches the whole clip) to understand the video, then view_frame or find_people for single moments. When the user gives a photo of each person to replace (an explanation image of the performer, or a Picture that shows the same person), prefer match_people: it finds every person in every shot with local Molmo2 and marks them, one subject per person bound to its picture_slots; check its previews and fix a wrong or missing mark with mark_subject. Optional point_video uses local Molmo2 to propose marks from a target description. Call it per camera shot, inspect the returned preview points and use mark_subject to bind approved points to Pictures. Its object IDs are not global identities or Picture numbers. If they are unavailable, keep the existing manual/SAM marking workflow.
+2. Look before you act: view_pictures to see the references, then view_frame at the start, middle and end of the selection to understand the guide. Optional video-analysis tools exist only when their runtime is available; use ask_video only if it is listed. Never ask the user to configure Molmo to complete an ordinary edit: your own frame inspection is the fallback. When the user gives a photo of each person to replace (an explanation image of the performer, or a Picture that shows the same person), when available prefer match_people: it finds every person in every shot with local Molmo2 and marks them, one subject per person bound to its picture_slots; check its previews and fix a wrong or missing mark with mark_subject. Optional point_video uses local Molmo2 to propose marks from a target description. Call it per camera shot, inspect the returned preview points and use mark_subject to bind approved points to Pictures. Its object IDs are not global identities or Picture numbers. If they are unavailable, keep the existing manual/SAM marking workflow.
 3. To bind people: first view_frame at a few times (start, middle, end) to learn who appears when, then call find_people at a time where everyone you need is visible and check that each number really is the person you mean (not a background figure) before marking; when the video has camera cuts, run find_people once per moment (after each cut) and mark each performer there too; before generating, read get_studio_state and confirm every subject has one mark per moment it appears and no performer has two subjects; it returns the frame with numbered people. Then mark_subject each person you need, with the matching picture slots. Marks must be inside the selected interval.
-4. Choose the guide: several people -> 2d (or mask to keep the scene untouched); one person -> original is fine, mask keeps the scene. If find_people fails with two or more people, do not fall back to original silently: say so and ask the user to mark them with 'Mark in video' (or retry), because with original the model can swap who becomes whom.
+4. Choose original by default, especially for a single vehicle, object or person. For several subjects with ambiguous assignments, propose marks and a 2d guide. Use mask only when the user explicitly chooses a region-restricted edit and the subject is already marked. To mark an object such as a car, use view_frame with grid=true and mark_subject with x/y inside the object; find_people is for people. If a required mask cannot be prepared, explain the blocker; do not silently switch to original when the user explicitly required masking. With original, do not promise that background pixels remain identical. If find_people fails with two or more people, do not fall back to original silently: say so and ask the user to mark them with 'Mark in video' (or retry), because with original the model can swap who becomes whom.
 For color-marked guides, recommend Motion Transfer TARA with the TARA method and explicit per-person reference descriptions; this was the best combination in our 2D color-mark tests. Character Swap may also work but can confuse reference assignments. Recommend this without silently changing the selected model or method.
 5. Write the prompt with set_prompt only when the user asked for something the mode needs (motion and swap use the user's request; headswap and sharpness ignore it). Refer to pictures as @Picture1, @Picture2.
-6. Before generate, summarize what will run (mode, who becomes whom, guide, quality) in two or three lines. If the user has not asked you to generate, ask first.
+6. Before generate, call get_options and read get_studio_state. Check temporal_windows_ready and generation_blockers. Temporal windows are optional and off by default: do not enable them unless requested. If inherited settings block an ordinary generation, disable only the unrequested temporal_windows option, say what changed, and recheck. If the user requested windows, explain missing worker support or the specific incompatible setting instead of silently disabling it. Do not retry generate with unchanged blockers. Before generate, summarize what will run (mode, who becomes whom, guide, quality) in two or three lines. If the user has not asked you to generate, ask first.
 7. Videos with camera cuts: people seen only after a cut are not recognised automatically. When marks are used, generate with auto-approve off, wait_for_job 'plan', get_job_shots, and for every shot that starts after a cut call find_people a little after its start and mark_subject each visible person with subject=<their number> (people can change places); then send_marks_to_job. Skip people who are not in that shot.
-8. You can change anything the user can: options (get_options / set_options: model, TARA, turbo, steps...), interval, shots, output, project name, pictures and subjects. Say what you changed.
+8. Settings are live, not a fixed list in this prompt. get_options returns the actual generation values and installed capabilities; use its keys with set_options and confirm the returned effective values. get_settings/set_settings access backend connection, assistant and optional video-analysis configuration; change them only when the user asks, never expose stored credentials. You can change anything the user can: options (get_options / set_options: model, TARA, turbo, steps...), interval, shots, output, project name, pictures and subjects. Say what you changed.
 9. Jobs run in the background. After generate, check the job once; if it is still running, tell the user they can keep chatting and do not repeatedly poll. When they write again, the studio state contains the current job status. Once the plan is ready, inspect its color or mask preview; once the render is done, inspect the result.
 10. Every generation has a visible 8-character reference such as #a1b2c3d4. The user may identify a generation with that reference; job tools accept it with or without # as well as the full id. When a generation starts, mention its visible reference so the user can refer to it later.
 The studio state's selected_job is the generation selected on screen. When the user says "this generation", "essa geração" or an equivalent expression, use selected_job.id; do not ask them to copy its id.
@@ -108,7 +108,11 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'name': {'type': 'string'}}, 'required': ['name'], 'additionalProperties': False}},
     {'name': 'get_options', 'description': 'The generation options now (model profile, method, turbo, steps, cfg, seed, structure guidance, reference adaptation, reference preparation, sharpness upscale...) and what is installed: models, turbos, bases, upscalers, TARA.',
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
-    {'name': 'set_options', 'description': "Change generation options; only the keys given change. Keys: profile (a model id from get_options), conditioning_mode ('guide' | 'tara'), turbo, steps, cfg, seed, structure_cfg (TARA, 1-3), base, adapt ('auto' | 'off'), prepare_references, reference_scale, clip_fps, attention, upscale_method ('h3' | 'nvidia' | 'none'), upscale_steps, upscale_denoise, lora_strength, mask (latent mask settings).",
+    {'name': 'get_settings', 'description': 'Read backend settings for connection, assistant or molmo. Stored API keys are redacted. These are server settings, not browser generation options.',
+     'input_schema': {'type': 'object', 'properties': {'section': {'type': 'string', 'enum': ['connection', 'assistant', 'molmo']}}, 'required': ['section'], 'additionalProperties': False}},
+    {'name': 'set_settings', 'description': 'Patch backend connection, assistant or molmo settings only when the user requests that change. Use get_settings first. Switching connection is blocked during active generations. Does not change browser generation options.',
+     'input_schema': {'type': 'object', 'properties': {'section': {'type': 'string', 'enum': ['connection', 'assistant', 'molmo']}, 'settings': {'type': 'object'}}, 'required': ['section', 'settings'], 'additionalProperties': False}},
+    {'name': 'set_options', 'description': "Patch generation options from get_options.options. All returned option keys are writable; nested patches preserve other fields. Check live capabilities and generation_blockers, then read the effective values back. Includes temporal_windows, regional_attention, mask, seed, model/method/turbo, guide_clip, source_blur, all Sharpness/refiner settings and reference preparation. Never invent option keys or assume an unsupported feature is ready.",
      'input_schema': {'type': 'object', 'properties': {'options': {'type': 'object'}}, 'required': ['options'], 'additionalProperties': False}},
     {'name': 'send_marks_to_job', 'description': "Copy the studio's current marked subjects to a job that waits for approval (after adding marks in shots that start after a cut); its color/mask preview is rebuilt.",
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
@@ -120,7 +124,7 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'question': {'type': 'string'}, 'approve_label': {'type': 'string'}, 'decline_label': {'type': 'string'}}, 'required': ['job_id', 'question', 'approve_label', 'decline_label'], 'additionalProperties': False}},
     {'name': 'clear_subjects', 'description': 'Remove every marked subject.',
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
-    {'name': 'set_guide', 'description': 'Set the guide representation, and for 2d the mark opacity (0.1-1).',
+    {'name': 'set_guide', 'description': 'Set the guide representation. Default original, including vehicles/objects. Mask is opt-in and requires existing subject marks; never use it automatically. For 2d also set mark opacity (0.1-1).',
      'input_schema': {'type': 'object', 'properties': {'representation': {'type': 'string', 'enum': ['original', '2d', '3d', 'mask']}, 'mark_opacity': {'type': 'number'}},
                       'required': ['representation'], 'additionalProperties': False}},
     {'name': 'set_quality', 'description': 'Output resolution (short side). 1440p and 2160p are only for sharpness.',
@@ -166,17 +170,22 @@ segments and tracks each person from your points in every frame at generation. M
 changed; leave everyone else unmarked. A Picture whose person does not appear in the selected interval stays
 unmarked: say so instead of binding it to someone else."""
 
+MOLMO_TOOLS = {'ask_video', 'point_video', 'match_people', 'suggest_cuts'}
+
+
 def system_for(cfg: dict) -> str:
-    return SYSTEM + (VISION_MARKING if cfg.get('marking') == 'vision' else '')
+    availability = ('\nOptional Molmo video tools are available.' if cfg.get('molmo_available') else
+                    '\nOptional Molmo video tools are unavailable. Inspect the guide with view_frame; do not call ask_video, point_video, match_people or suggest_cuts. Do not request Molmo configuration for an ordinary edit.')
+    return SYSTEM + availability + (VISION_MARKING if cfg.get('marking') == 'vision' else '')
 
 def tools_for(cfg: dict) -> list:
-    if cfg.get('marking') != 'vision':
-        return list(TOOLS)
     out = []
     for t in TOOLS:
-        if t['name'] == 'find_people':
+        if t['name'] in MOLMO_TOOLS and not cfg.get('molmo_available'):
             continue
-        if t['name'] == 'mark_subject':
+        if t['name'] == 'find_people' and cfg.get('marking') == 'vision':
+            continue
+        if t['name'] == 'mark_subject' and cfg.get('marking') == 'vision':
             t = {**t, 'description': 'Mark a performer with x and y (0-1 of the frame, read on the view_frame grid) on their torso at a time. Returns the frame with your point drawn: check it. SAM segments and tracks from that point. One subject per performer: marking again with the same picture_slots (or with subject) adds a mark to that subject, e.g. the same person after a camera cut.'}
         out.append(t)
     return out
@@ -591,6 +600,7 @@ def step(cfg: dict, messages: list, run_job_tool, max_rounds: int = 8) -> dict:
     (text, images). Returns the appended history and, when needed, the studio calls for the browser plus the job
     results to send back with theirs (all results of one turn go in one message)."""
     messages = repair_tool_history(messages)
+    available = {t['name'] for t in tools_for(cfg)}
     for _ in range(max_rounds):
         reply = call_model(cfg, messages)
         messages.append({'role': 'assistant', **reply})
@@ -598,7 +608,9 @@ def step(cfg: dict, messages: list, run_job_tool, max_rounds: int = 8) -> dict:
             return {'messages': messages, 'studio_calls': [], 'job_results': [], 'done': True}
         job_results = []
         for c in reply['tool_calls']:
-            if c['name'] in JOB_NAMES:
+            if c['name'] not in available:
+                job_results.append({'id': c['id'], 'name': c['name'], 'text': f"Tool {c['name']} is unavailable. Use view_frame to inspect the guide and the currently listed tools.", 'images': [], 'is_error': True})
+            elif c['name'] in JOB_NAMES:
                 try:
                     text, images = run_job_tool(c['name'], c['input'])
                     job_results.append({'id': c['id'], 'name': c['name'], 'text': text, 'images': images})
@@ -606,7 +618,7 @@ def step(cfg: dict, messages: list, run_job_tool, max_rounds: int = 8) -> dict:
                     job_results.append({'id': c['id'], 'name': c['name'], 'text': str(e)[:800], 'images': [], 'is_error': True})
             elif c['name'] not in STUDIO_NAMES:
                 job_results.append({'id': c['id'], 'name': c['name'], 'text': f"Unknown tool {c['name']}", 'images': [], 'is_error': True})
-        studio = [c for c in reply['tool_calls'] if c['name'] in STUDIO_NAMES]
+        studio = [c for c in reply['tool_calls'] if c['name'] in STUDIO_NAMES and c['name'] in available]
         if studio:
             return {'messages': messages, 'studio_calls': studio, 'job_results': job_results, 'done': False}
         messages.append({'role': 'tool', 'results': job_results})

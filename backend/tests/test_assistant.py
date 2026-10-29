@@ -5,6 +5,24 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import assistant
 
 class AssistantTest(unittest.TestCase):
+ def test_optional_video_tools_follow_live_availability(self):
+  for marking in ('sam','vision'):
+   unavailable={t['name'] for t in assistant.tools_for({'marking':marking,'molmo_available':False})}
+   self.assertTrue(assistant.MOLMO_TOOLS.isdisjoint(unavailable))
+   self.assertTrue({'view_frame','view_pictures','get_options','set_options','get_settings','set_settings'} <= unavailable)
+   available={t['name'] for t in assistant.tools_for({'marking':marking,'molmo_available':True})}
+   self.assertTrue(assistant.MOLMO_TOOLS <= available)
+   self.assertEqual('find_people' in available, marking=='sam')
+
+ def test_stale_unavailable_tool_call_never_reaches_browser(self):
+  replies=[{'text':'','tool_calls':[{'id':'a','name':'ask_video','input':{'question':'Where is the car?'}}],'native':None},
+           {'text':'','tool_calls':[{'id':'b','name':'view_frame','input':{'time':1}}],'native':None}]
+  with patch.object(assistant,'call_model',side_effect=replies):
+   out=assistant.step({'molmo_available':False},[{'role':'user','text':'Replace the car'}],lambda *args: self.fail('No backend tool should run'))
+  self.assertEqual([c['name'] for c in out['studio_calls']],['view_frame'])
+  error=out['messages'][2]['results'][0]
+  self.assertTrue(error['is_error']);self.assertIn('view_frame',error['text'])
+
  def test_config_never_returns_the_key(self):
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/'assistant.json'

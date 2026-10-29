@@ -29,6 +29,7 @@ COLORS = ['red', 'blue', 'green', 'yellow', 'magenta', 'cyan', 'orange', 'purple
 mcp = FastMCP('henge', instructions="""Henge turns a guide video plus reference pictures into a new video on ComfyUI with MiniMax H3.
 Modes: swap (Character Swap: people in the guide become the pictures), motion (Motion Transfer: the pictures perform the guide's motion),
 headswap (exactly one face picture), sharpness (video only, restores detail and upscales).
+Use status to inspect current capabilities and get_settings for backend configuration. Original guide is the default, including vehicles/objects. Mask is opt-in and requires subject anchors. Temporal windows are optional, disabled by default and require temporal_windows_ready. Use view_frame for visual inspection; call Molmo tools only if pointing_status reports configured. Never require Molmo for an ordinary edit.
 Typical flow: status -> (find_people to pick who is replaced) -> create_job -> wait_for_job until 'plan' -> look at the plan -> approve_job
 -> wait_for_job until 'done' -> download_result. Start at 480p (fastest, cheapest) unless the user asks otherwise.
 Jobs run in the background: one wait_for_job call blocks at most `timeout` seconds; call it again while the job is still running.""")
@@ -61,9 +62,45 @@ def summary(job):
 def status() -> dict:
     """Whether Henge and its GPU backend are online, which backend is in use, and which models, turbos and upscalers are installed."""
     h = api('GET', '/health').json()
-    keep = ('online', 'comfy_url', 'offline_reason', 'training_busy', 'tara_ready', 'editor_ready')
+    keep = ('online', 'comfy_url', 'offline_reason', 'training_busy', 'tara_ready', 'temporal_windows_ready', 'editor_ready', 'bases', 'regenerate', 'guides')
     return {**{k: h.get(k) for k in keep}, 'models': {k: {'label': v.get('label'), 'task': v.get('task'), 'available': v.get('available', True)} for k, v in (h.get('models') or {}).items()},
-            'turbos': {k: v.get('label') for k, v in (h.get('turbos') or {}).items() if v.get('available', True)}, 'upscalers': h.get('upscalers')}
+            'turbos': h.get('turbos'), 'upscalers': h.get('upscalers'), 'video_analysis': pointing_status()}
+
+
+SETTINGS_ROUTES = {'connection': '/connection', 'assistant': '/assistant/config', 'molmo': '/molmo/settings'}
+
+
+@mcp.tool()
+def get_settings(section: str = 'all') -> dict:
+    """Read current backend connection, assistant and Molmo settings; 'all' returns all sections.
+    Stored credentials stay redacted. Browser draft/generation settings are separate; pass generation options to create_job.
+    """
+    if section == 'all': return {key: api('GET', path).json() for key, path in SETTINGS_ROUTES.items()}
+    if section not in SETTINGS_ROUTES: raise ValueError('Choose connection, assistant, molmo or all')
+    return api('GET', SETTINGS_ROUTES[section]).json()
+
+
+@mcp.tool()
+def set_settings(section: str, settings: dict) -> dict:
+    """Patch connection, assistant or molmo backend settings after reading get_settings, when requested by the user.
+    Existing API validation and active-job connection locks apply. Blank credentials preserve stored keys.
+    Does not edit the web browser draft or start a generation.
+    """
+    if section not in SETTINGS_ROUTES: raise ValueError('Choose connection, assistant or molmo')
+    return api('POST', SETTINGS_ROUTES[section], json=settings).json()
+
+
+@mcp.tool()
+def view_frame(video: str, time: float = 0) -> list:
+    """Inspect a local guide frame without Molmo or a GPU. Use start/middle/end frames to understand vehicles,
+    objects and motion. Coordinates for subject anchors are normalized x/y from 0 to 1.
+    """
+    source = Path(video).expanduser()
+    if time < 0 or time >= probe(source)['duration']: raise ValueError('Choose a time inside the video')
+    with tempfile.TemporaryDirectory() as folder:
+        frame = Path(folder) / 'frame.jpg'
+        subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(time), '-i', str(source), '-frames:v', '1', '-vf', 'scale=960:960:force_original_aspect_ratio=decrease', '-y', str(frame)], check=True)
+        return [json.dumps({'time': time}), Image(data=frame.read_bytes(), format='jpeg')]
 
 
 @mcp.tool()
@@ -157,7 +194,7 @@ def match_people(video: str, photos: list[str], start: float = 0, end: float | N
 @mcp.tool()
 def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | None = None, start: float = 0, end: float | None = None,
                quality: str = '480p', project: str = 'Henge', subjects: list[dict] | None = None, auto_approve: bool = False,
-               keep_audio: bool = True, generate_audio: bool = False, background: str | None = None, seconds_per_shot: float = 4.5, options: dict | None = None, split_points: list[float] | None = None) -> dict:
+               keep_audio: bool = True, generate_audio: bool = False, background: str | None = None, seconds_per_shot: float = 4.5, options: dict | None = None, split_points: list[float] | None = None, guide_representation: str = 'original', mark_opacity: float = 1, processing: dict | None = None, audio_conditioning: bool = False, first_frame_slot: int | None = None) -> dict:
     """Start a generation from local files.
     mode: 'swap' | 'motion' | 'headswap' | 'sharpness'. video: path of the guide video. pictures: paths, in order Picture 1, 2...
     (swap/motion 1-11, headswap exactly 1 face, sharpness none). prompt: the request, naming pictures as @Picture1, @Picture2
@@ -171,8 +208,13 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
     (moving plate, built before planning; swap and motion).
     generate_audio: keep the soundtrack H3 generates per shot (joined at the cuts) instead of the guide's sound; write spoken
     lines in the prompt as <d>[language] text</d>. Needs the H3 audio VAE on the backend (profile audio).
-    options: generation options, e.g. {"profile": "character", "conditioning_mode": "guide"|"tara", "turbo": "dmd8", "seed": 42, "upscale": "h3"|"nvidia"|"none"}.
+    guide_representation: original (default), 2d, 3d or mask; mask requires subjects with anchors.
+    mark_opacity: color-guide opacity 0.1-1. processing: backend processing fields (cut_mode, context_frames, mode, etc.).
+    audio_conditioning: use guide audio as conditioning. first_frame_slot: optional reference slot used as first frame.
+    options: all backend generation options, including temporal_windows, regional_attention, mask and refiner settings, e.g. {"profile": "character", "conditioning_mode": "guide"|"tara", "turbo": "dmd8", "seed": 42, "upscale_method": "h3"|"regenerate"|"nvidia"|"none"}.
     Returns the job; follow it with wait_for_job."""
+    if guide_representation not in ('original', '2d', '3d', 'mask'): raise ValueError('Unknown guide representation')
+    if guide_representation == 'mask' and not subjects: raise ValueError('Mask requires subject anchors; use original for an ordinary edit')
     pictures = [Path(p).expanduser() for p in pictures or []]
     source = Path(video).expanduser(); meta = probe(source)
     end = meta['duration'] if end is None else min(end, meta['duration'])
@@ -187,12 +229,14 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
     direction = {'schema_version': 2, 'project': project, 'mode': mode, 'quality': quality,
                  'processing': {**({'split_points': split_points} if split_points else {}), 'mode': 'context_window' if duration > 15 else 'single', 'max_shots': 0, 'requested_seconds_per_shot': seconds_per_shot, 'frames_per_shot': frames,
                                 'timeline_fps': 24, 'frame_grid': '17n+5', 'trim_to_source_length': True, 'join': 'ordered', 'execution_status': 'comfy_backend', 'context_frames': 22, 'cut_mode': 'fit'},
-                 'audio_conditioning': {'enabled': False, 'source': None}, 'output_audio': {'keep_source': keep_audio and not generate_audio, 'generate': generate_audio},
+                 'audio_conditioning': {'enabled': audio_conditioning, 'source': 'guide' if audio_conditioning else None}, 'output_audio': {'keep_source': keep_audio and not generate_audio, 'generate': generate_audio},
                  'prompt': '' if fixed else native.strip(), 'editor_prompt': '' if fixed else prompt,
-                 'subject_guidance': {'representation': 'original', 'bindings': [] if mode == 'sharpness' else bindings, 'status': 'selection_only', 'marker_colors_are_output_appearance': False},
+                 'subject_guidance': {'representation': guide_representation, 'mark_opacity': mark_opacity, 'bindings': [] if mode == 'sharpness' else bindings, 'status': 'selection_only', 'marker_colors_are_output_appearance': False},
                  'video': {'name': source.name, 'source_signature': f'{source.name}:{source.stat().st_size}', 'conditioning': 'guide_latents', 'source_duration': meta['duration'],
                            'start_seconds': start, 'end_seconds': end, 'duration': duration},
                  'pictures': [{'slot': i + 1, 'token': f'<Picture {i + 1}>', 'name': p.name} for i, p in enumerate(pictures)], 'generation_status': 'not_submitted'}
+    if processing: direction['processing'].update(processing)
+    if first_frame_slot is not None: direction['first_frame_slot'] = first_frame_slot
     opts = {'auto_approve': auto_approve, 'enhance_prompt': True, **(options or {})}
     files = [('video', (source.name, source.open('rb'), 'video/mp4'))] + [(f'picture_{i + 1}', (p.name, p.open('rb'), 'application/octet-stream')) for i, p in enumerate(pictures)]
     if background: files.append(('background', (Path(background).name, Path(background).expanduser().open('rb'), 'application/octet-stream')))

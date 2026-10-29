@@ -205,7 +205,8 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   async function submit(): Promise<string> {
     if (!request || !video || !canSubmit || submitting) throw Error(!video ? 'Attach a guide video first' : !canSubmit ? 'The studio is not ready: check the pictures, marks and prompt' : 'A generation is being sent');
     if (regenerateUnavailable || regenerateResolutionInvalid) throw Error('Open-H3 Regenerate requires an updated worker, its model profile, and 1080p or 2K output');
-    if (windowsUnavailable || windowsConflict) throw Error('Pure temporal windows need an updated worker and cannot run with Causal or regional attention');
+    if (windowsUnavailable) throw Error('Temporal windows are enabled but this worker has not reported support. Refresh its inventory or, if windows were not requested, disable temporal_windows.enabled.');
+    if (windowsConflict) throw Error('Temporal windows conflict with the current configuration: use non-Causal processing without regional attention; refiner_full also requires Sharpness + Open-H3 Refiner at 1080p or 2K.');
     setError(''); setSubmitting(true);
     try {
       const body = new FormData(); body.set('direction', JSON.stringify(enhancePrompt ? request : {...request, prompt: request.editor_prompt})); body.set('options', JSON.stringify({temporal_windows: temporalWindows, regional_attention: {enabled: regionalAttention && mode === 'swap' && activeConditioning === 'guide' && ['2d', '3d'].includes(request?.subject_guidance?.representation || ''), strength: .5, reference_budget: .35, layers: '10,25,40'}, profile, adapt, seed, steps, clip_fps: activeConditioning === 'tara' ? 2 : clipFps, conditioning_mode: activeConditioning, guide_clip: guideClip, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, attention, prepare_references: prepareReferences, ...(mode !== 'sharpness' && sourceBlur !== 'off' ? {source_blur: sourceBlur, source_blur_effect: sourceBlurEffect} : {}), base, cfg, ...(activeConditioning === 'tara' ? {structure_cfg: structureCfg} : {}), ...(usesMask ? {mask: maskSettings} : {}), turbo,...(mode === 'sharpness' ? {lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise, regenerate_steps: regenerateSteps, refiner_lms: refinerLms, refiner_lms_strength: refinerLmsStrength, refiner_upscaler: refinerUpscaler, regenerate_prompt: regeneratePrompt} : {})})); body.set('video', video); if (background) body.set('background', background);
@@ -219,8 +220,17 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   useEffect(() => {onEnhanceChange?.(enhancePrompt);}, [enhancePrompt]);
   // The assistant always calls the latest closures (they read this render's request and options).
   useEffect(() => {registerControls?.({submit, setAutoApprove, setEnhancePrompt, selectJob: id => void selectJob(id),
-    getOptions: () => ({options: {...shareOptions, profile}, models: health?.models, turbos: health?.turbos, bases: health?.bases, upscalers: health?.upscalers, tara_ready: health?.tara_ready}),
-    applyOptions: patch => applySettings({...shareOptions, profile, ...patch})});});
+    getOptions: () => ({options: {...shareOptions, profile}, models: health?.models, turbos: health?.turbos, bases: health?.bases, upscalers: health?.upscalers, tara_ready: health?.tara_ready, temporal_windows_ready: health?.temporal_windows_ready === true, generation_blockers: [...(windowsUnavailable ? ['Temporal windows enabled but worker support is unavailable or unknown'] : []), ...(windowsConflict ? ['Temporal windows conflict with Causal, regional attention, or refiner_full requirements'] : [])]}),
+    applyOptions: patch => {
+      const current: Record<string, unknown> = {...shareOptions, profile};
+      const unknown = Object.keys(patch).filter(key => !(key in current));
+      if (unknown.length) throw Error('Unknown generation options: ' + unknown.join(', ') + '. Read get_options for writable keys.');
+      const merged = {...current, ...patch};
+      for (const key of ['temporal_windows', 'mask', 'regional_attention']) {
+        if (patch[key] && typeof patch[key] === 'object' && !Array.isArray(patch[key])) merged[key] = {...current[key] as Record<string, unknown>, ...patch[key] as Record<string, unknown>};
+      }
+      applySettings(merged);
+    }});});
   async function setPreparation(enabled: boolean) {
     if (!job || submitting) return;
     setSubmitting(true); setError('');

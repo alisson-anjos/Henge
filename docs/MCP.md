@@ -1,6 +1,6 @@
 # Drive Henge from your own AI (MCP)
 
-Henge has a built-in studio assistant (the chat in the studio) that needs an API key in its settings. If you
+Henge has a built-in studio assistant (the chat in the studio), with a built-in planner VLM or an optional external provider. If you
 would rather use the AI client you already have — Claude Code, Claude Desktop, Cursor, Codex, or any other
 [MCP](https://modelcontextprotocol.io) client — connect it to Henge with the MCP server in
 [`mcp/henge_mcp.py`](../mcp/henge_mcp.py). Your client then creates and follows generations with your own
@@ -50,7 +50,11 @@ On Windows use a path like `C:/AI/Henge/mcp/henge_mcp.py`.
 
 | Tool | What it does |
 |---|---|
-| `status` | Online or not, the backend in use, installed models, turbos and upscalers |
+| `status` | Live backend inventory, model/turbo/base/upscaler availability, temporal-window support and optional video-analysis readiness |
+| `get_settings`, `set_settings` | Read or patch backend connection, assistant and Molmo configuration; stored credentials remain redacted |
+| `view_frame` | Inspect a guide frame without Molmo or a GPU |
+| `pointing_status` | Check optional Molmo availability before using its tools |
+| `ask_video`, `point_video`, `match_people`, `suggest_cuts` | Optional Molmo video analysis, point proposals, matching and shot suggestions |
 | `find_people` | Numbers the people (or animals) in one frame of a local video and shows the frame |
 | `create_job` | Starts a generation from local files: mode, guide video, pictures, prompt, interval, quality, subjects, options; `generate_audio` keeps the soundtrack H3 generates; `background` (a picture) puts a new background behind the people that follows the camera |
 | `wait_for_job` | Waits until the plan is ready for review (`plan`) or the job finishes (`done`) |
@@ -82,3 +86,34 @@ The modes:
 - `motion` (Motion Transfer): the pictures perform the guide's motion. 1–11 pictures.
 - `headswap`: exactly one face picture.
 - `sharpness`: the video only; restores detail and can upscale to 1440p/2160p.
+
+## Configuration and defaults
+
+Read `status` before choosing features. `temporal_windows_ready` is the worker's reported support, not a promise
+that any combination is valid. Temporal windows default to disabled and cannot be combined with Causal or regional
+attention. The `refiner_full` scope additionally needs Sharpness, Open-H3 Refiner and 1080p or 2K output.
+
+`create_job.options` passes all backend generation settings through to the normal API validator, including model
+profile, Guide Latents/TARA, turbo, seed, attention, mask settings, regional attention, temporal windows and
+Sharpness/refiner options. Use `upscale_method`, not `upscale`. Additional arguments expose `guide_representation`,
+`mark_opacity`, `processing`, `audio_conditioning` and `first_frame_slot`.
+
+Use `guide_representation="original"` by default, including vehicles and objects. Masking is an explicit choice
+that requires subject anchors bound to reference pictures. Do not choose it automatically for an ordinary
+replacement request. With Original, unchanged background pixels are not guaranteed. A requested mask must not be
+silently removed to get past validation.
+
+Molmo is optional. Check `pointing_status` first; if unavailable, inspect `view_frame` at several times and use
+your client's vision. `find_people` detects people or animals, not vehicles. Molmo configuration is not required
+for ordinary generation.
+
+`get_settings(section="all")` reads the `connection`, `assistant` and `molmo` sections. To change a section, call
+`set_settings(section=..., settings={...})`. Existing backend validation, environment locks and active-job
+connection protection still apply; stored API keys are not returned. These are persistent bridge settings.
+Generation options passed to `create_job` apply to that job. The MCP server does not edit another browser's local
+draft, theme or language; the built-in assistant uses the live studio tools to change those generation controls.
+
+When updating Henge features, update both the assistant tool instructions and MCP documentation. Assistant
+`get_options` reads current UI generation values and capabilities; nested option patches preserve other values
+and unknown top-level keys are rejected. Optional Molmo tools are exposed to the built-in assistant only when
+configured, and stale unavailable tool calls are rejected before reaching the browser.

@@ -9,6 +9,21 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Live assistant configuration and MCP controls
+
+- Updated assistant guidance: Original is the default for ordinary edits, including vehicles; masks are opt-in
+  and require marks. Removed outdated TARA color-guide restrictions and added temporal-window preflight guidance.
+- Optional Molmo tools are exposed only when configured; stale calls are rejected with a frame-inspection fallback.
+- Studio state now includes generation values, window readiness and blockers. Nested option patches preserve
+  sibling values; unknown option keys are rejected, and mask selection without marks fails before submission.
+- Added backend configuration tools to the assistant and MCP. MCP now reports live window/Molmo capabilities,
+  supports frame inspection without Molmo, and exposes guide, processing, audio and first-frame job controls.
+- **Deployment:** source changes only; hosted UI/bridge must be redeployed and external MCP clients restarted.
+  Existing running jobs and worker images are unchanged. MCP does not modify a browser's local draft.
+- **Validation:** 189 backend tests and 23 subtests passed (4 optional skips); 3 MCP contract tests passed in an
+  isolated SDK environment. TypeScript/production build passed. Playwright with simulated backend replies verified
+  readiness, nested patches, settings reads, mask prerequisites and unknown-option rejection. No generation ran.
+
 ### Comparison download feedback
 
 - Comparison + references downloads show an immediate preparation indicator in the result menu and history.

@@ -2266,7 +2266,7 @@ async def find_people(request:Request):
 async def assistant_step(request:Request):
     body=await request.json();messages=body.get('messages')
     if not isinstance(messages,list) or not messages:raise HTTPException(400,'Send the conversation')
-    cfg=assistant_runtime(assistant.load_config(ASSISTANT_CONFIG))
+    cfg={**assistant_runtime(assistant.load_config(ASSISTANT_CONFIG)), 'molmo_available':pointing_status()['configured']}
     try:return await asyncio.to_thread(assistant.step,cfg,messages,run_job_tool)
     except Exception as e:raise HTTPException(502,f'Assistant error: {str(e)[:800]}')
 
