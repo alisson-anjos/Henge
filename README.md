@@ -222,7 +222,8 @@ Details, costs and troubleshooting: [docs/SERVERLESS.md](docs/SERVERLESS.md).
 - **C**: pull the new `henge-ui` image; for the workers, `ENDPOINT_ID=<id> TEMPLATE_ID=<id>
   IMAGE=ghcr.io/alisson-anjos/henge:sha-<commit> scripts/runpod_serverless.sh` switches the image and drains
   the old workers.
-- **UI hosted on Render** (optional): see [Hosting the UI on Render](docs/RENDER.md).
+- **UI hosted elsewhere** (optional): see [Hosting only the UI](docs/HOSTING-UI.md) (Render, a VPS, Fly.io,
+  Railway).
 
 Images are built by GitHub Actions and published to GitHub Container Registry:
 `ghcr.io/alisson-anjos/henge` (everything; the serverless worker uses it with `HENGE_ROLE=worker`) and

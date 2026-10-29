@@ -1,7 +1,7 @@
 # Hosting the UI on Render
 
 Optional: run the Henge UI and bridge (`henge-ui` image) on [Render](https://render.com), with the GPU on RunPod
-Serverless (option C in the README).
+Serverless (option C in the README). Requirements and other hosts: [Hosting only the UI](HOSTING-UI.md).
 
 Render needs code or an image that has already been published. A commit that only exists locally does not show up
 in the remote service.
