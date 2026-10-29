@@ -113,7 +113,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   const [regenerateSteps, setRegenerateSteps] = useState(initial.regenerateSteps);
   const [regeneratePrompt, setRegeneratePrompt] = useState(initial.regeneratePrompt);
   const regenerateUnavailable = mode === 'sharpness' && upscaleMethod === 'regenerate' && health?.upscalers?.regenerate !== true;
-  const regenerateResolutionInvalid = mode === 'sharpness' && upscaleMethod === 'regenerate' && !['1080p','1440p'].includes(request?.quality || '');
+  const regenerateResolutionInvalid = mode === 'sharpness' && upscaleMethod === 'regenerate' && !!request && !['1080p','1440p'].includes(request.quality);
   const [turbo, setTurbo] = useState(initial.turbo);
   const [prepareReferences, setPrepareReferences] = useState(initial.prepareReferences);
   const [attention, setAttention] = useState(initial.attention);
@@ -248,7 +248,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
     ...(mode === 'sharpness' && upscaleMethod === 'nvidia' ? [{name: 'NVIDIA RTX VSR', role: tr('2K/4K upscale', 'upscale 2K/4K', 'escalado 2K/4K')}] : []),
     {name: base === 'omniref' && mode !== 'sharpness' ? 'MiniMax H3 OmniRef' : 'MiniMax H3', role: tr('video generation', 'geração do vídeo', 'generación del vídeo')},
   ];
-  const sharpnessControls = mode === 'sharpness' && <fieldset className="mask-settings"><legend>{tr('Sharpness', 'Nitidez', 'Nitidez')}</legend>
+  const sharpnessControls = mode === 'sharpness' && <fieldset className="sharpness-settings"><legend>{tr('Sharpness', 'Nitidez', 'Nitidez')}</legend>
         <label>{tr('Sharpness strength (LoRA, 1.0 recommended)', 'Força do sharpness (LoRA, 1,0 recomendado)', 'Fuerza de nitidez (LoRA, 1,0 recomendado)')}<input type="number" min="0" max="2" step="0.05" value={loraStrength} onChange={e => setLoraStrength(Math.min(2, Math.max(0, Number(e.target.value) || 0)))}/></label>
         <label>{tr('Upscale after sharpening', 'Upscale após a nitidez', 'Escalado después de la nitidez')}<Select value={upscaleMethod} onChange={e => setUpscaleMethod(e.target.value as 'h3' | 'regenerate' | 'nvidia' | 'none')}>
           <option value="regenerate" disabled={health?.upscalers?.regenerate !== true}>{tr('Open-H3 Refiner + LMS · default', 'Open-H3 Refiner + LMS · padrão', 'Open-H3 Refiner + LMS · predeterminado')}{health?.upscalers?.regenerate !== true ? tr(' · requires worker update/models', ' · requer atualização/modelos no worker', ' · requiere actualizar worker/modelos') : ''}</option>

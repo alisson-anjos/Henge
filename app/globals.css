@@ -920,4 +920,14 @@ img{display:block;max-width:100%}
 .molmo-settings .select-button{width:100%}
 .regenerate-scene{grid-column:1/-1}.regenerate-scene textarea{width:100%;min-width:0;padding:10px;border-radius:8px;background:var(--n-17191b);color:var(--n-eeeeee);border:1px solid var(--n-36383b);font:inherit;resize:vertical}
 
-#sharpness-controls{min-width:0}#sharpness-controls .mask-settings{min-width:0}#sharpness-controls .mask-settings>p{grid-column:1/-1}
+#sharpness-controls{min-width:0;padding:0 20px 18px}
+.sharpness-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;min-inline-size:0;max-width:100%;margin:0;padding:16px;border:1px solid var(--line);border-radius:12px}
+.sharpness-settings legend{padding:0 6px;font-size:11px;color:var(--accent)}
+.sharpness-settings>label{display:flex;flex-direction:column;gap:7px;min-width:0;font-size:12px;line-height:1.5;color:var(--muted)}
+.sharpness-settings :is(input,.select-button,textarea){width:100%;min-width:0;min-height:40px;padding:10px 12px;background:var(--n-17191b);color:var(--n-eeeeee);border:1px solid var(--n-36383b);border-radius:8px;font:inherit}
+.sharpness-settings .select-button{font-size:12px}
+.sharpness-settings :is(p,.regenerate-scene){grid-column:1/-1;min-width:0}
+.sharpness-settings p{margin:0;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.sharpness-settings small{font-size:11px;line-height:1.5;color:var(--muted)}
+.sharpness-settings textarea{min-height:120px;resize:vertical}
+@media(max-width:700px){#sharpness-controls{padding:0 15px 15px}.sharpness-settings{grid-template-columns:minmax(0,1fr);padding:12px;gap:14px}}
