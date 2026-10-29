@@ -9,6 +9,16 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Comparison download feedback
+
+- Comparison + references downloads show an immediate preparation indicator in the result menu and history.
+- Transfer status shows a percentage when the response includes its size, otherwise received megabytes.
+- Repeated clicks are ignored while downloading; failures show a retry message instead of failing silently.
+- **Validation:** TypeScript and production build passed. Playwright with simulated responses verified preparation,
+  duplicate suppression, browser download, visible failure and successful retry; no generation was started.
+- **Limitations:** comparison rendering has no numerical progress API, so preparation stays indeterminate.
+  Downloads are buffered in the browser before saving. Code only; Render deployment is still required.
+
 ### Native H3 context-window comparison
 
 - Compared Henge with ComfyUI PR #17425 at its reviewed commit, using source inspection and focused CPU probes.
