@@ -1,6 +1,6 @@
 """Local Henge job bridge: durable jobs, validated VLM plans, ComfyUI API graphs."""
 import asyncio,base64,hashlib,io,json,math,os,re,shutil,subprocess,tempfile,threading,time,uuid,zipfile
-from pathlib import Path
+from pathlib import Path,PurePosixPath
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 import requests
@@ -10,6 +10,7 @@ from fastapi import FastAPI,Request,HTTPException
 from fastapi.responses import FileResponse,Response
 from PIL import Image,ImageDraw,ImageFont,ImageOps
 import workflows
+import workflow_export
 import moving_plate
 from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
@@ -1857,6 +1858,68 @@ def workflow(jid:str,stage:str|None=None):
     if name not in graphs:raise HTTPException(404,'Unknown workflow stage')
     return Response(json.dumps(graphs[name],indent=2),media_type='application/json',headers={'Content-Disposition':f'attachment; filename="henge-{jid[:8]}-{stage}.json"'})
 
+
+MODEL_EXTENSIONS=('.safetensors','.pt','.pth','.ckpt','.gguf','.bin')
+
+def workflow_readme(job,stage,graph,notes):
+    """What a person needs to re-run one exported graph: versions, node packs and every model with its link."""
+    app=Path(__file__).resolve().parents[1]
+    refs=dict(re.findall(r'^ARG (COMFY_REF|BFS_REF)=(\S+)',(app/'Dockerfile').read_text(),re.M)) if (app/'Dockerfile').is_file() else {}
+    try:manifest=json.loads((app/'config'/'model-repos.example.json').read_text())['models']
+    except (OSError,ValueError,KeyError):manifest=[]
+    links={PurePosixPath(m.get('destination','')).name:(m.get('url'),m.get('destination')) for m in manifest}
+    models=sorted({v for n in graph.values() for v in n['inputs'].values() if isinstance(v,str) and v.lower().endswith(MODEL_EXTENSIONS)})
+    rows=[]
+    for m in models:
+        url,dest=links.get(PurePosixPath(m).name,(None,None))
+        rows.append(f"| `{m}` | {f'`models/{PurePosixPath(dest).parent}/`' if dest else '—'} | {f'[download]({url})' if url else '[model setup](https://github.com/alisson-anjos/Henge/blob/main/docs/models-and-downloads.md)'} |")
+    tara=any(n['class_type']=='BFSMiniMaxH3NativeTemporal' for n in graph.values())
+    bfs=f" at commit `{refs['BFS_REF']}`" if 'BFS_REF' in refs else '';comfy=f" at commit `{refs['COMFY_REF']}` or newer" if 'COMFY_REF' in refs else ''
+    return '\n'.join([f'# Henge workflow · job {job["id"][:8]} · {stage}','',
+        'The graph this job ran, with Henge loaders and conditioning replaced by Load Image, Henge Load Video and the native',
+        'MiniMax H3 nodes they call, plus the exact input files. This preserves the shot settings, seed and conditioning.',
+        'Model weights are not included: use the same versions as the original job. GPU, driver and dependency differences',
+        'can change the result; pixel-identical output across installations is not guaranteed.','',
+        '## Steps','',
+        '1. Copy everything in `input/` into your ComfyUI `input/` folder.',
+        '2. Copy `custom_nodes/henge/` into your ComfyUI `custom_nodes/` (the Henge nodes this export was made with).',
+        f'3. Install [BFSNodes](https://github.com/alisson-anjos/ComfyUI-BFSNodes){bfs} into `custom_nodes/bfsnodes` and install its requirements with your ComfyUI Python.',
+        f'4. Use ComfyUI{comfy} and restart it.',
+        '5. Put the models below in place, then drag `workflow.json` into ComfyUI and press Run.',
+        *(['6. For TARA with Comfy Kitchen, install the [modified temporal kernel](https://github.com/alisson-anjos/Henge/blob/main/docs/motion-transfer.md#comfy-kitchen-works-with-tara--use-the-modified-temporal-kernel); PyTorch attention does not need it.'] if tara else []),'',
+        '## Models','','| File (as the graph names it) | Folder | Link |','| --- | --- | --- |',*rows,'',
+        '## Notes','',*[f'- {n}.' for n in notes],
+        '- Henge Load Video decodes like the job did; ComfyUI\'s own Load Video converts colours slightly differently.',
+        '- To try your own video or pictures, upload them in the Henge Load Video / Load Image nodes. Keep the width,',
+        '  height and length of Henge Load Video (length is on the H3 17n+5 frame grid).',
+        '- Open `workflow.json` in the editor: it keeps reference connections and uses fixed seed controls.',
+        '- `workflow.api.json` is the portable API graph; `original.api.json` is the original graph for comparison.',''])
+
+@app.get('/jobs/{jid}/workflow-pack')
+def workflow_pack(jid:str,stage:str='h3_segment_000'):
+    """One graph as a ready-to-run package: portable workflow.json, the input files it reads, the Henge nodes and a
+    README with versions and model links."""
+    from starlette.background import BackgroundTask
+    job=load(jid);work=job_path(jid)
+    if not re.fullmatch(r'[a-z0-9_]+',stage) or not (work/f'{stage}.api.json').is_file():raise HTTPException(404,'Unknown workflow stage')
+    graph=json.loads((work/f'{stage}.api.json').read_text());graph=graph.get('prompt',graph)
+    try:
+        portable,files,notes=workflow_export.portable_graph(graph,f'henge_{jid[:8]}_')
+        visual=workflow_export.visual_workflow(portable)
+    except ValueError as e:raise HTTPException(409,f'This workflow cannot be exported as a portable package: {e}')
+    if any(not (INPUT/src).resolve().is_relative_to(INPUT.resolve()) for src in files):raise HTTPException(409,'A workflow input points outside the input directory')
+    missing=[src for src in files if not (INPUT/src).is_file()]
+    if missing:raise HTTPException(409,'Input files of this workflow are no longer on this Henge: '+', '.join(PurePosixPath(m).name for m in missing))
+    nodes=Path(__file__).resolve().parent/'comfy_nodes'/'henge'
+    fd,tmp=tempfile.mkstemp(suffix='.zip',dir=ROOT);os.close(fd)
+    with zipfile.ZipFile(tmp,'w',zipfile.ZIP_DEFLATED) as z:
+        z.writestr('workflow.json',json.dumps(visual,indent=2));z.writestr('workflow.api.json',json.dumps(portable,indent=2));z.writestr('original.api.json',json.dumps(graph,indent=2))
+        z.writestr('README.md',workflow_readme(job,stage,portable,notes))
+        for src,name in files.items():z.write(INPUT/src,f'input/{name}')
+        for path in workflow_export.runtime_node_files(nodes):z.write(path,f'custom_nodes/henge/{path.relative_to(nodes).as_posix()}')
+        license_path=Path(__file__).resolve().parents[1]/'LICENSE'
+        if license_path.is_file():z.write(license_path,'custom_nodes/henge/LICENSE')
+    return FileResponse(tmp,filename=f'henge-{jid[:8]}-{stage}-workflow.zip',media_type='application/zip',background=BackgroundTask(os.unlink,tmp))
 
 # --- Studio assistant (backend/assistant.py): an LLM that operates the studio ---
 ASSISTANT_CONFIG=ROOT/'assistant.json'

@@ -9,6 +9,19 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Portable ComfyUI workflow packages
+
+- Workflow downloads now include an editable visual workflow, portable and original API graphs, the input files,
+  runtime Henge nodes and setup/model links. Internal conditioning expands into native H3/BFS nodes.
+- Explicit dynamic sockets retain references on import; seed controls stay fixed. Henge timing/mask/attention
+  widgets preserve float precision instead of rounding job settings.
+- Video loading keeps the original FFmpeg decode and invalidates its cache when the uploaded file changes.
+- Node packages exclude session notes, caches and external symlinks; packaged inputs must remain inside staging.
+- **Components:** UI/bridge and packaged custom nodes. Existing inference graphs are unchanged.
+- **Validation:** real ComfyUI prompt validation including the generated output; loader RGB parity; frontend
+  round trip with TARA references and continuity. Full model inference was not repeated for export validation.
+- [Package contents, setup and limits](docs/workflow-export.md).
+
 ### Export the ComfyUI workflow from History and per shot
 
 - History cards list **Workflow (ComfyUI)** next to the other downloads; each finished shot has a `{ }` link with

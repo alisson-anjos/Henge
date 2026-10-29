@@ -1,5 +1,5 @@
 """Henge media, guide preparation and H3 conditioning nodes. No model downloads."""
-import json,math,os,subprocess
+import hashlib,json,math,os,subprocess
 from pathlib import Path
 import numpy as np
 import torch
@@ -34,6 +34,26 @@ class HengeLoadShot:
             with Image.open(input_path(p)) as im:refs.append(torch.from_numpy(np.asarray(im.convert('RGB')).copy()).float()[None]/255)
         return read_frames(input_path(video),width,height,length),refs
 
+
+VIDEO_EXTENSIONS=('.mp4','.mov','.webm','.mkv','.avi','.m4v')
+
+class HengeLoadVideo:
+    """Load Video for exported Henge workflows: a file from ComfyUI's input folder (with an upload button), decoded
+    exactly like HengeLoadShot (FFmpeg at 24 fps, fit and pad to width x height, last frame repeated up to length).
+    ComfyUI's own Load Video decodes colours slightly differently, so a re-run would not match the original job."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        root=folder_paths.get_input_directory()
+        files=sorted(f for f in os.listdir(root) if f.lower().endswith(VIDEO_EXTENSIONS) and os.path.isfile(os.path.join(root,f)))
+        return {'required':{'video':(files,{'video_upload':True}),'width':('INT',{'default':512,'min':32,'step':32}),'height':('INT',{'default':288,'min':32,'step':32}),'length':('INT',{'default':107,'min':1})}}
+    RETURN_TYPES=('IMAGE',);FUNCTION='load';CATEGORY='Henge'
+    def load(self,video,width,height,length):return (read_frames(input_path(video),width,height,length),)
+    @classmethod
+    def IS_CHANGED(cls,video,**kwargs):
+        digest=hashlib.sha256()
+        with input_path(video).open('rb') as source:
+            for chunk in iter(lambda:source.read(1<<20),b''):digest.update(chunk)
+        return digest.hexdigest()
 
 def scene_cuts(images,threshold=.18,spike=.1,window=6):
     """Frame indexes where a camera cut starts (a big jump between consecutive small grey thumbnails). A cut between
@@ -102,7 +122,7 @@ def blur_guide(images,spec,area=None):
 
 class HengeGuide:
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'representation':(['original','2d','3d','mask'],),'bindings':('STRING',{'default':'[]'}),'source_kind':(['human','animal','other'],),'segment_start':('FLOAT',{'default':0}),'sam_checkpoint':('STRING',{'default':'sam3.1_multiplex_fp16.safetensors'}),'body_model':('STRING',{'default':'sam_3d_body_dinov3_bf16.safetensors'}),'preserve_objects':('STRING',{'default':'[]'})},'optional':{'mask_settings':('STRING',{'default':'{}'})}}
+    def INPUT_TYPES(cls):return {'required':{'images':('IMAGE',),'representation':(['original','2d','3d','mask'],),'bindings':('STRING',{'default':'[]'}),'source_kind':(['human','animal','other'],),'segment_start':('FLOAT',{'default':0,'round':False,'precision':15,'step':.000001}),'sam_checkpoint':('STRING',{'default':'sam3.1_multiplex_fp16.safetensors'}),'body_model':('STRING',{'default':'sam_3d_body_dinov3_bf16.safetensors'}),'preserve_objects':('STRING',{'default':'[]'})},'optional':{'mask_settings':('STRING',{'default':'{}'})}}
     RETURN_TYPES=('IMAGE','MASK','HENGE_REGIONS');FUNCTION='prepare';CATEGORY='Henge'
     def prepare(self,images,representation,bindings,source_kind,segment_start,sam_checkpoint,body_model,preserve_objects="[]",mask_settings='{}'):
         spec={**DEFAULT_MASK,**json.loads(mask_settings or '{}')}
@@ -371,7 +391,7 @@ class HengeLatentMask:
     """Start sampling from the encoded source video and regenerate only the masked region.
     Per-row mixed-timestep masking for H3: credit to Neko (Nekodificador) and AbleJones, as in BFSNodes inpaint_latent."""
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'latent':('LATENT',),'vae':('VAE',),'images':('IMAGE',),'mask':('MASK',),'grow':('INT',{'default':1,'min':0,'max':8})},'optional':{'strength':('FLOAT',{'default':1.,'min':0.,'max':1.,'step':.05})}}
+    def INPUT_TYPES(cls):return {'required':{'latent':('LATENT',),'vae':('VAE',),'images':('IMAGE',),'mask':('MASK',),'grow':('INT',{'default':1,'min':0,'max':8})},'optional':{'strength':('FLOAT',{'default':1.,'min':0.,'max':1.,'step':.05,'round':False,'precision':15})}}
     RETURN_TYPES=('LATENT',);FUNCTION='apply';CATEGORY='Henge'
     def apply(self,latent,vae,images,mask,grow,strength=1.):
         import comfy.nested_tensor
@@ -422,7 +442,7 @@ class HengeSaveVideo:
         entry={'filename':p.name,'subfolder':str(p.parent.relative_to(root)),'type':'output'}
         return {'ui':{'videos':[entry],'gifs':[entry]}}
 
-NODE_CLASS_MAPPINGS={c.__name__:c for c in [HengeLoadShot,HengeGuide,HengeH3Conditioning,HengeLatentMask,HengeMaskPreview,HengeSaveVideo]}
+NODE_CLASS_MAPPINGS={c.__name__:c for c in [HengeLoadShot,HengeLoadVideo,HengeGuide,HengeH3Conditioning,HengeLatentMask,HengeMaskPreview,HengeSaveVideo]}
 
 class HengeTextResult:
     @classmethod

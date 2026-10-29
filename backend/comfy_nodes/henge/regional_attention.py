@@ -61,8 +61,8 @@ class HengeRegionalAttention:
     @classmethod
     def INPUT_TYPES(cls):
         return {'required':{'model':('MODEL',),'regions':('HENGE_REGIONS',),
-            'strength':('FLOAT',{'default':.5,'min':0.,'max':1.}),
-            'reference_budget':('FLOAT',{'default':.35,'min':.01,'max':.95}),
+            'strength':('FLOAT',{'default':.5,'min':0.,'max':1.,'round':False,'precision':15}),
+            'reference_budget':('FLOAT',{'default':.35,'min':.01,'max':.95,'round':False,'precision':15}),
             'layers':('STRING',{'default':'10,25,40'})}}
     RETURN_TYPES=('MODEL',);FUNCTION='patch';CATEGORY='Henge/experimental'
 

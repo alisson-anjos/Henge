@@ -1,0 +1,2264 @@
+{
+  "format": 1,
+  "nodes": {
+    "BFSMiniMaxH3NativeTemporal": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "motion_video_index",
+          "type": "INT",
+          "widget": {
+            "name": "motion_video_index"
+          }
+        },
+        {
+          "name": "strength",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength"
+          }
+        },
+        {
+          "name": "window_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "window_seconds"
+          }
+        },
+        {
+          "name": "falloff_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "falloff_seconds"
+          }
+        },
+        {
+          "name": "max_penalty",
+          "type": "FLOAT",
+          "widget": {
+            "name": "max_penalty"
+          }
+        },
+        {
+          "name": "attention_backend",
+          "type": "COMBO",
+          "shape": 7,
+          "widget": {
+            "name": "attention_backend"
+          }
+        },
+        {
+          "name": "structure_guidance",
+          "type": "FLOAT",
+          "shape": 7,
+          "widget": {
+            "name": "structure_guidance"
+          }
+        },
+        {
+          "name": "structure_sigma_min",
+          "type": "FLOAT",
+          "shape": 7,
+          "widget": {
+            "name": "structure_sigma_min"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "motion_video_index",
+          "default": 1
+        },
+        {
+          "name": "strength",
+          "default": 2
+        },
+        {
+          "name": "window_seconds",
+          "default": 0.2
+        },
+        {
+          "name": "falloff_seconds",
+          "default": 0.25
+        },
+        {
+          "name": "max_penalty",
+          "default": 6
+        },
+        {
+          "name": "attention_backend",
+          "default": "flash partitions (no compile)"
+        },
+        {
+          "name": "structure_guidance",
+          "default": 1
+        },
+        {
+          "name": "structure_sigma_min",
+          "default": 0
+        }
+      ]
+    },
+    "BFSMiniMaxH3ReferenceToVideoGuideContext": {
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP"
+        },
+        {
+          "name": "guide_video_0",
+          "type": "IMAGE",
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "shape": 7
+        },
+        {
+          "name": "ref_images.ref_image_0",
+          "type": "IMAGE",
+          "shape": 7
+        },
+        {
+          "name": "ref_videos.ref_video_0",
+          "type": "IMAGE",
+          "shape": 7
+        },
+        {
+          "name": "ref_video_audios.ref_video_audio_0",
+          "type": "AUDIO",
+          "shape": 7
+        },
+        {
+          "name": "ref_audios.ref_audio_0",
+          "type": "AUDIO",
+          "shape": 7
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          }
+        },
+        {
+          "name": "ref_image_size",
+          "type": "COMBO",
+          "widget": {
+            "name": "ref_image_size"
+          }
+        },
+        {
+          "name": "clip_video_fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "clip_video_fps"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "prompt",
+          "default": ""
+        },
+        {
+          "name": "width",
+          "default": 1344
+        },
+        {
+          "name": "height",
+          "default": 768
+        },
+        {
+          "name": "length",
+          "default": 124
+        },
+        {
+          "name": "ref_image_size",
+          "default": "match"
+        },
+        {
+          "name": "clip_video_fps",
+          "default": 2
+        }
+      ],
+      "dynamic": {
+        "ref_images": {
+          "prefix": "ref_image_",
+          "type": "IMAGE",
+          "max": 100
+        },
+        "ref_videos": {
+          "prefix": "ref_video_",
+          "type": "IMAGE",
+          "max": 3
+        },
+        "ref_video_audios": {
+          "prefix": "ref_video_audio_",
+          "type": "AUDIO",
+          "max": 3
+        },
+        "ref_audios": {
+          "prefix": "ref_audio_",
+          "type": "AUDIO",
+          "max": 3
+        }
+      }
+    },
+    "BasicGuider": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER"
+        }
+      ],
+      "widgets": []
+    },
+    "BasicScheduler": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "scheduler",
+          "type": "COMBO",
+          "widget": {
+            "name": "scheduler"
+          }
+        },
+        {
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          }
+        },
+        {
+          "name": "denoise",
+          "type": "FLOAT",
+          "widget": {
+            "name": "denoise"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "scheduler",
+          "default": "simple"
+        },
+        {
+          "name": "steps",
+          "default": 20
+        },
+        {
+          "name": "denoise",
+          "default": 1
+        }
+      ]
+    },
+    "CFGGuider": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "cfg",
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "cfg",
+          "default": 8
+        }
+      ]
+    },
+    "CLIPLoader": {
+      "inputs": [
+        {
+          "name": "clip_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "clip_name"
+          }
+        },
+        {
+          "name": "type",
+          "type": "COMBO",
+          "widget": {
+            "name": "type"
+          }
+        },
+        {
+          "name": "device",
+          "type": "COMBO",
+          "shape": 7,
+          "widget": {
+            "name": "device"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "clip_name",
+          "default": null
+        },
+        {
+          "name": "type",
+          "default": "stable_diffusion"
+        },
+        {
+          "name": "device",
+          "default": "default"
+        }
+      ]
+    },
+    "CLIPTextEncode": {
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP"
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "text",
+          "default": ""
+        }
+      ]
+    },
+    "ConditioningZeroOut": {
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING"
+        }
+      ],
+      "widgets": []
+    },
+    "EmptyMiniMaxH3LatentAV": {
+      "inputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "width",
+          "default": 1344
+        },
+        {
+          "name": "height",
+          "default": 768
+        },
+        {
+          "name": "length",
+          "default": 124
+        }
+      ]
+    },
+    "HengeCausalSampler": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "latent",
+          "type": "LATENT"
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          }
+        },
+        {
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          }
+        },
+        {
+          "name": "chunk",
+          "type": "INT",
+          "widget": {
+            "name": "chunk"
+          }
+        },
+        {
+          "name": "window",
+          "type": "INT",
+          "widget": {
+            "name": "window"
+          }
+        },
+        {
+          "name": "sampler",
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler"
+          }
+        },
+        {
+          "name": "cache",
+          "type": "COMBO",
+          "widget": {
+            "name": "cache"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "seed",
+          "default": 0
+        },
+        {
+          "name": "control_after_generate",
+          "default": "fixed"
+        },
+        {
+          "name": "steps",
+          "default": 8
+        },
+        {
+          "name": "chunk",
+          "default": 5
+        },
+        {
+          "name": "window",
+          "default": 6
+        },
+        {
+          "name": "sampler",
+          "default": "euler"
+        },
+        {
+          "name": "cache",
+          "default": "auto"
+        }
+      ]
+    },
+    "HengeGuide": {
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE"
+        },
+        {
+          "name": "representation",
+          "type": "COMBO",
+          "widget": {
+            "name": "representation"
+          }
+        },
+        {
+          "name": "bindings",
+          "type": "STRING",
+          "widget": {
+            "name": "bindings"
+          }
+        },
+        {
+          "name": "source_kind",
+          "type": "COMBO",
+          "widget": {
+            "name": "source_kind"
+          }
+        },
+        {
+          "name": "segment_start",
+          "type": "FLOAT",
+          "widget": {
+            "name": "segment_start"
+          }
+        },
+        {
+          "name": "sam_checkpoint",
+          "type": "STRING",
+          "widget": {
+            "name": "sam_checkpoint"
+          }
+        },
+        {
+          "name": "body_model",
+          "type": "STRING",
+          "widget": {
+            "name": "body_model"
+          }
+        },
+        {
+          "name": "preserve_objects",
+          "type": "STRING",
+          "widget": {
+            "name": "preserve_objects"
+          }
+        },
+        {
+          "name": "mask_settings",
+          "type": "STRING",
+          "shape": 7,
+          "widget": {
+            "name": "mask_settings"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        },
+        {
+          "name": "MASK",
+          "type": "MASK"
+        },
+        {
+          "name": "HENGE_REGIONS",
+          "type": "HENGE_REGIONS"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "representation",
+          "default": "original"
+        },
+        {
+          "name": "bindings",
+          "default": "[]"
+        },
+        {
+          "name": "source_kind",
+          "default": "human"
+        },
+        {
+          "name": "segment_start",
+          "default": 0
+        },
+        {
+          "name": "sam_checkpoint",
+          "default": null
+        },
+        {
+          "name": "body_model",
+          "default": null
+        },
+        {
+          "name": "preserve_objects",
+          "default": "[]"
+        },
+        {
+          "name": "mask_settings",
+          "default": "{}"
+        }
+      ]
+    },
+    "HengeH3Conditioning": {
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP"
+        },
+        {
+          "name": "vae",
+          "type": "VAE"
+        },
+        {
+          "name": "guide",
+          "type": "IMAGE"
+        },
+        {
+          "name": "references",
+          "type": "HENGE_REFS"
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "shape": 7
+        },
+        {
+          "name": "context_images",
+          "type": "IMAGE",
+          "shape": 7
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          }
+        },
+        {
+          "name": "clip_video_fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "clip_video_fps"
+          }
+        },
+        {
+          "name": "reference_size",
+          "type": "COMBO",
+          "widget": {
+            "name": "reference_size"
+          }
+        },
+        {
+          "name": "guide_context",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "guide_context"
+          }
+        },
+        {
+          "name": "audio_conditioning",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "audio_conditioning"
+          }
+        },
+        {
+          "name": "audio_video",
+          "type": "STRING",
+          "widget": {
+            "name": "audio_video"
+          }
+        },
+        {
+          "name": "context_count",
+          "type": "INT",
+          "shape": 7,
+          "widget": {
+            "name": "context_count"
+          }
+        },
+        {
+          "name": "conditioning_mode",
+          "type": "COMBO",
+          "shape": 7,
+          "widget": {
+            "name": "conditioning_mode"
+          }
+        },
+        {
+          "name": "reference_scale",
+          "type": "FLOAT",
+          "shape": 7,
+          "widget": {
+            "name": "reference_scale"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "prompt",
+          "default": ""
+        },
+        {
+          "name": "width",
+          "default": 512
+        },
+        {
+          "name": "height",
+          "default": 288
+        },
+        {
+          "name": "length",
+          "default": 107
+        },
+        {
+          "name": "clip_video_fps",
+          "default": 2
+        },
+        {
+          "name": "reference_size",
+          "default": "match"
+        },
+        {
+          "name": "guide_context",
+          "default": true
+        },
+        {
+          "name": "audio_conditioning",
+          "default": false
+        },
+        {
+          "name": "audio_video",
+          "default": ""
+        },
+        {
+          "name": "context_count",
+          "default": 0
+        },
+        {
+          "name": "conditioning_mode",
+          "default": "guide"
+        },
+        {
+          "name": "reference_scale",
+          "default": 1
+        }
+      ]
+    },
+    "HengeH3LatentUpscale": {
+      "inputs": [
+        {
+          "name": "latent",
+          "type": "LATENT"
+        },
+        {
+          "name": "model_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "model_name"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "precision",
+          "type": "COMBO",
+          "widget": {
+            "name": "precision"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "model_name",
+          "default": null
+        },
+        {
+          "name": "width",
+          "default": 1088
+        },
+        {
+          "name": "height",
+          "default": 1920
+        },
+        {
+          "name": "precision",
+          "default": "fp16"
+        }
+      ]
+    },
+    "HengeH3PureWindows": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "window_frames",
+          "type": "INT",
+          "widget": {
+            "name": "window_frames"
+          }
+        },
+        {
+          "name": "overlap_frames",
+          "type": "INT",
+          "widget": {
+            "name": "overlap_frames"
+          }
+        },
+        {
+          "name": "accumulator_device",
+          "type": "COMBO",
+          "widget": {
+            "name": "accumulator_device"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "window_frames",
+          "default": 107
+        },
+        {
+          "name": "overlap_frames",
+          "default": 22
+        },
+        {
+          "name": "accumulator_device",
+          "default": "cpu"
+        }
+      ]
+    },
+    "HengeLatentMask": {
+      "inputs": [
+        {
+          "name": "latent",
+          "type": "LATENT"
+        },
+        {
+          "name": "vae",
+          "type": "VAE"
+        },
+        {
+          "name": "images",
+          "type": "IMAGE"
+        },
+        {
+          "name": "mask",
+          "type": "MASK"
+        },
+        {
+          "name": "grow",
+          "type": "INT",
+          "widget": {
+            "name": "grow"
+          }
+        },
+        {
+          "name": "strength",
+          "type": "FLOAT",
+          "shape": 7,
+          "widget": {
+            "name": "strength"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "grow",
+          "default": 1
+        },
+        {
+          "name": "strength",
+          "default": 1
+        }
+      ]
+    },
+    "HengeLoadShot": {
+      "inputs": [
+        {
+          "name": "video",
+          "type": "STRING",
+          "widget": {
+            "name": "video"
+          }
+        },
+        {
+          "name": "pictures",
+          "type": "STRING",
+          "widget": {
+            "name": "pictures"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        },
+        {
+          "name": "HENGE_REFS",
+          "type": "HENGE_REFS"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "video",
+          "default": ""
+        },
+        {
+          "name": "pictures",
+          "default": "[]"
+        },
+        {
+          "name": "width",
+          "default": 512
+        },
+        {
+          "name": "height",
+          "default": 288
+        },
+        {
+          "name": "length",
+          "default": 107
+        }
+      ]
+    },
+    "HengeLoadVideo": {
+      "inputs": [
+        {
+          "name": "video",
+          "type": "COMBO",
+          "widget": {
+            "name": "video"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          }
+        },
+        {
+          "name": "upload",
+          "type": "IMAGEUPLOAD",
+          "widget": {
+            "name": "upload"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "video",
+          "default": null
+        },
+        {
+          "name": "width",
+          "default": 512
+        },
+        {
+          "name": "height",
+          "default": 288
+        },
+        {
+          "name": "length",
+          "default": 107
+        }
+      ]
+    },
+    "HengeMaskPreview": {
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE"
+        },
+        {
+          "name": "mask",
+          "type": "MASK"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        }
+      ],
+      "widgets": []
+    },
+    "HengeRTXUpscale": {
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE"
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "quality",
+          "type": "COMBO",
+          "widget": {
+            "name": "quality"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "width",
+          "default": 1920
+        },
+        {
+          "name": "height",
+          "default": 1080
+        },
+        {
+          "name": "quality",
+          "default": "ULTRA"
+        }
+      ]
+    },
+    "HengeRegionalAttention": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "regions",
+          "type": "HENGE_REGIONS"
+        },
+        {
+          "name": "strength",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength"
+          }
+        },
+        {
+          "name": "reference_budget",
+          "type": "FLOAT",
+          "widget": {
+            "name": "reference_budget"
+          }
+        },
+        {
+          "name": "layers",
+          "type": "STRING",
+          "widget": {
+            "name": "layers"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "strength",
+          "default": 0.5
+        },
+        {
+          "name": "reference_budget",
+          "default": 0.35
+        },
+        {
+          "name": "layers",
+          "default": "10,25,40"
+        }
+      ]
+    },
+    "HengeSaveVideo": {
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE"
+        },
+        {
+          "name": "filename",
+          "type": "STRING",
+          "widget": {
+            "name": "filename"
+          }
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "widget": {
+            "name": "trim_frames"
+          }
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fps"
+          }
+        },
+        {
+          "name": "skip_frames",
+          "type": "INT",
+          "shape": 7,
+          "widget": {
+            "name": "skip_frames"
+          }
+        }
+      ],
+      "outputs": [],
+      "widgets": [
+        {
+          "name": "filename",
+          "default": ""
+        },
+        {
+          "name": "trim_frames",
+          "default": 107
+        },
+        {
+          "name": "fps",
+          "default": 24
+        },
+        {
+          "name": "skip_frames",
+          "default": 0
+        }
+      ]
+    },
+    "ImageFromBatch": {
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE"
+        },
+        {
+          "name": "batch_index",
+          "type": "INT",
+          "widget": {
+            "name": "batch_index"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "batch_index",
+          "default": 0
+        },
+        {
+          "name": "length",
+          "default": 1
+        }
+      ]
+    },
+    "ImageScale": {
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE"
+        },
+        {
+          "name": "upscale_method",
+          "type": "COMBO",
+          "widget": {
+            "name": "upscale_method"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "crop",
+          "type": "COMBO",
+          "widget": {
+            "name": "crop"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "upscale_method",
+          "default": "nearest-exact"
+        },
+        {
+          "name": "width",
+          "default": 512
+        },
+        {
+          "name": "height",
+          "default": 512
+        },
+        {
+          "name": "crop",
+          "default": "disabled"
+        }
+      ]
+    },
+    "KSamplerSelect": {
+      "inputs": [
+        {
+          "name": "sampler_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler_name"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "sampler_name",
+          "default": "euler"
+        }
+      ]
+    },
+    "LTXVConcatAVLatent": {
+      "inputs": [
+        {
+          "name": "video_latent",
+          "type": "LATENT"
+        },
+        {
+          "name": "audio_latent",
+          "type": "LATENT"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": []
+    },
+    "LTXVSeparateAVLatent": {
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video_latent",
+          "type": "LATENT"
+        },
+        {
+          "name": "audio_latent",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": []
+    },
+    "LatentUpscaleModelLoader": {
+      "inputs": [
+        {
+          "name": "model_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "model_name"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT_UPSCALE_MODEL",
+          "type": "LATENT_UPSCALE_MODEL"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "model_name",
+          "default": null
+        }
+      ]
+    },
+    "LoadAudio": {
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "COMBO",
+          "widget": {
+            "name": "audio"
+          }
+        },
+        {
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          }
+        },
+        {
+          "name": "upload",
+          "type": "AUDIOUPLOAD",
+          "widget": {
+            "name": "upload"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "audio",
+          "default": null
+        }
+      ]
+    },
+    "LoadImage": {
+      "inputs": [
+        {
+          "name": "image",
+          "type": "COMBO",
+          "widget": {
+            "name": "image"
+          }
+        },
+        {
+          "name": "upload",
+          "type": "IMAGEUPLOAD",
+          "widget": {
+            "name": "upload"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        },
+        {
+          "name": "MASK",
+          "type": "MASK"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "image",
+          "default": null
+        }
+      ]
+    },
+    "LoraLoaderModelOnly": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "lora_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "lora_name"
+          }
+        },
+        {
+          "name": "strength_model",
+          "type": "FLOAT",
+          "widget": {
+            "name": "strength_model"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "lora_name",
+          "default": null
+        },
+        {
+          "name": "strength_model",
+          "default": 1
+        }
+      ]
+    },
+    "ManualSigmas": {
+      "inputs": [
+        {
+          "name": "sigmas",
+          "type": "STRING",
+          "widget": {
+            "name": "sigmas"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "sigmas",
+          "default": "1, 0.5"
+        }
+      ]
+    },
+    "MiniMaxH3AddGuide": {
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "latent",
+          "type": "LATENT"
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "shape": 7
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "shape": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "shape": 7
+        },
+        {
+          "name": "frame_idx",
+          "type": "INT",
+          "widget": {
+            "name": "frame_idx"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "frame_idx",
+          "default": 0
+        }
+      ]
+    },
+    "MiniMaxH3LatentUpscaleWithModel": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "LATENT_UPSCALE_MODEL"
+        },
+        {
+          "name": "samples",
+          "type": "LATENT"
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "width",
+          "default": 2560
+        },
+        {
+          "name": "height",
+          "default": 1440
+        }
+      ]
+    },
+    "MiniMaxH3ReferenceToVideo": {
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP"
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "shape": 7
+        },
+        {
+          "name": "ref_images.ref_image_0",
+          "type": "IMAGE",
+          "shape": 7
+        },
+        {
+          "name": "ref_videos.ref_video_0",
+          "type": "IMAGE",
+          "shape": 7
+        },
+        {
+          "name": "ref_video_audios.ref_video_audio_0",
+          "type": "AUDIO",
+          "shape": 7
+        },
+        {
+          "name": "ref_audios.ref_audio_0",
+          "type": "AUDIO",
+          "shape": 7
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          }
+        },
+        {
+          "name": "ref_image_size",
+          "type": "COMBO",
+          "widget": {
+            "name": "ref_image_size"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING"
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "prompt",
+          "default": ""
+        },
+        {
+          "name": "width",
+          "default": 1344
+        },
+        {
+          "name": "height",
+          "default": 768
+        },
+        {
+          "name": "length",
+          "default": 124
+        },
+        {
+          "name": "ref_image_size",
+          "default": "match"
+        }
+      ],
+      "dynamic": {
+        "ref_images": {
+          "prefix": "ref_image_",
+          "type": "IMAGE",
+          "max": 9
+        },
+        "ref_videos": {
+          "prefix": "ref_video_",
+          "type": "IMAGE",
+          "max": 3
+        },
+        "ref_video_audios": {
+          "prefix": "ref_video_audio_",
+          "type": "AUDIO",
+          "max": 3
+        },
+        "ref_audios": {
+          "prefix": "ref_audio_",
+          "type": "AUDIO",
+          "max": 3
+        }
+      }
+    },
+    "MiniMaxH3SigmaShift": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "shift_video",
+          "type": "FLOAT",
+          "widget": {
+            "name": "shift_video"
+          }
+        },
+        {
+          "name": "shift_audio",
+          "type": "FLOAT",
+          "widget": {
+            "name": "shift_audio"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "shift_video",
+          "default": 12
+        },
+        {
+          "name": "shift_audio",
+          "default": 3
+        }
+      ]
+    },
+    "ModelAttentionBackend": {
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        },
+        {
+          "name": "attention",
+          "type": "COMBO",
+          "widget": {
+            "name": "attention"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "attention",
+          "default": "pytorch attention"
+        }
+      ]
+    },
+    "RandomNoise": {
+      "inputs": [
+        {
+          "name": "noise_seed",
+          "type": "INT",
+          "widget": {
+            "name": "noise_seed"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "noise_seed",
+          "default": 0
+        },
+        {
+          "name": "control_after_generate",
+          "default": "fixed"
+        }
+      ]
+    },
+    "SamplerCustomAdvanced": {
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE"
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER"
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER"
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS"
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT"
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": []
+    },
+    "SaveAudio": {
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO"
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          }
+        },
+        {
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "filename_prefix",
+          "default": "audio/ComfyUI"
+        }
+      ]
+    },
+    "UNETLoader": {
+      "inputs": [
+        {
+          "name": "unet_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "unet_name"
+          }
+        },
+        {
+          "name": "weight_dtype",
+          "type": "COMBO",
+          "widget": {
+            "name": "weight_dtype"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "unet_name",
+          "default": null
+        },
+        {
+          "name": "weight_dtype",
+          "default": "default"
+        }
+      ]
+    },
+    "VAEDecode": {
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT"
+        },
+        {
+          "name": "vae",
+          "type": "VAE"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        }
+      ],
+      "widgets": []
+    },
+    "VAEDecodeAudio": {
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT"
+        },
+        {
+          "name": "vae",
+          "type": "VAE"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO"
+        }
+      ],
+      "widgets": []
+    },
+    "VAEDecodeTiled": {
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT"
+        },
+        {
+          "name": "vae",
+          "type": "VAE"
+        },
+        {
+          "name": "tile_size",
+          "type": "INT",
+          "widget": {
+            "name": "tile_size"
+          }
+        },
+        {
+          "name": "overlap",
+          "type": "INT",
+          "widget": {
+            "name": "overlap"
+          }
+        },
+        {
+          "name": "temporal_size",
+          "type": "INT",
+          "widget": {
+            "name": "temporal_size"
+          }
+        },
+        {
+          "name": "temporal_overlap",
+          "type": "INT",
+          "widget": {
+            "name": "temporal_overlap"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "tile_size",
+          "default": 512
+        },
+        {
+          "name": "overlap",
+          "default": 64
+        },
+        {
+          "name": "temporal_size",
+          "default": 64
+        },
+        {
+          "name": "temporal_overlap",
+          "default": 8
+        }
+      ]
+    },
+    "VAEEncodeTiled": {
+      "inputs": [
+        {
+          "name": "pixels",
+          "type": "IMAGE"
+        },
+        {
+          "name": "vae",
+          "type": "VAE"
+        },
+        {
+          "name": "tile_size",
+          "type": "INT",
+          "widget": {
+            "name": "tile_size"
+          }
+        },
+        {
+          "name": "overlap",
+          "type": "INT",
+          "widget": {
+            "name": "overlap"
+          }
+        },
+        {
+          "name": "temporal_size",
+          "type": "INT",
+          "widget": {
+            "name": "temporal_size"
+          }
+        },
+        {
+          "name": "temporal_overlap",
+          "type": "INT",
+          "widget": {
+            "name": "temporal_overlap"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "tile_size",
+          "default": 512
+        },
+        {
+          "name": "overlap",
+          "default": 64
+        },
+        {
+          "name": "temporal_size",
+          "default": 64
+        },
+        {
+          "name": "temporal_overlap",
+          "default": 8
+        }
+      ]
+    },
+    "VAELoader": {
+      "inputs": [
+        {
+          "name": "vae_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "vae_name"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE"
+        }
+      ],
+      "widgets": [
+        {
+          "name": "vae_name",
+          "default": null
+        }
+      ]
+    }
+  }
+}

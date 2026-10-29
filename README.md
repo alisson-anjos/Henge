@@ -1,5 +1,7 @@
 # Henge
 
+[Export and re-run a shot in ComfyUI](docs/workflow-export.md).
+
 **Swap · Motion · Transform.** An open-source video studio on ComfyUI and MiniMax H3: give it one guide video and a
 few pictures, and it swaps characters, transfers motion, swaps heads or sharpens the video — locally, on a RunPod pod
 or on RunPod Serverless.
