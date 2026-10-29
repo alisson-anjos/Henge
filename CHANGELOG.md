@@ -9,6 +9,11 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### README introduction
+
+- Moved the workflow export link into the feature list so the README opens with Henge's introduction and demo.
+- **Validation:** checked the Markdown diff and relative documentation link. Documentation only; no runtime or deployment change.
+
 ### TARA profile in the replacement choice
 
 - The recommended choice is explicitly Motion Transfer TARA for multiple people and objects. Selecting it applies

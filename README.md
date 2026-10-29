@@ -1,7 +1,5 @@
 # Henge
 
-[Export and re-run a shot in ComfyUI](docs/workflow-export.md).
-
 **Swap · Motion · Transform.** An open-source video studio on ComfyUI and MiniMax H3: give it one guide video and a
 few pictures, and it swaps characters, transfers motion, swaps heads or sharpens the video — locally, on a RunPod pod
 or on RunPod Serverless.
@@ -48,7 +46,8 @@ Fight footage: TEKKEN DADDY (YouTube), Tekken 8 © Bandai Namco — used here as
 - **Subject guidance**: mark people (SAM 3.1 tracking) and bind each to its pictures, as 2D color marks, a 3D body or a
   latent mask that keeps the rest of the frame untouched.
 - **A studio assistant** that operates everything (Claude, OpenAI or a local model), or **your own AI client through
-  MCP**; a **first-run wizard** for the backend; every job downloads as the exact ComfyUI graph it ran.
+  MCP**; a **first-run wizard** for the backend; [export a shot with its ComfyUI workflow and inputs](docs/workflow-export.md)
+  to re-run it in ComfyUI.
 
 | Studio | Setup wizard | Assistant |
 |---|---|---|
