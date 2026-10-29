@@ -69,12 +69,12 @@
      ]
     }
    ],
-   "title": "Motion Transfer v1.0",
+   "title": "Motion Transfer TARA v1.0",
    "properties": {
     "Node name for S&R": "LoraLoaderModelOnly"
    },
    "widgets_values": [
-    "minimax_h3_motion_transfer_v1.0_ref2va.safetensors",
+    "minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors",
     1.0
    ],
    "widgets_values_named": {

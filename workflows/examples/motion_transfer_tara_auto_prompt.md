@@ -33,7 +33,7 @@ Output is silent24fps. No generated dialogue/music is inferred from visible mout
 
 ## Models and switching modes
 
-The example loads training adapter V2 and then Motion Transfer v1.0, both at strength 1. Model filenames must be adapted to local inventory. Default prompt VLM is the development environment's generation-capable Qwen3VL4B; it can be replaced with a compatible installed VLM. H3 TE remains its own native encoder.
+The TARA example loads training adapter V2 and then Motion Transfer TARA v1.0, both at strength 1. Model filenames must be adapted to local inventory. Default prompt VLM is the development environment's generation-capable Qwen3VL4B; it can be replaced with a compatible installed VLM. H3 TE remains its own native encoder.
 
 TARA does not load LoRAs or perform conditioning by itself. The wrapper retains native reference video latents; no Add Guide is present. Bypassing the TARA patch gives native-reference inference without temporal alignment, not Guide Latents. For Guide Latents, use the separate guide workflow; do not silently change contracts.
 
@@ -48,3 +48,7 @@ The policy snapshot is `h3_native_prompt_policy.json`, copied from Henge's share
 ### Request/reference mismatch and saved workflows
 
 Version1.115.21 checks requested Picture indices **before** per-image VLM generation, lists the exact attached set in the final writer instruction, and reports available slots in errors. Older saved examples may still contain `and the entire setting with <Picture 2>` in Prepare Native Video → request. With only Picture1 connected, remove that clause (or connect the intended second image), then regenerate. Updating the plugin does not overwrite a saved user request/template. Final instructions also separate source observations from target clothing and setting; source hoodies/pants must not override the assigned reference outfit. These are instruction improvements, not a guarantee of semantic correctness.
+
+## New public workflow set
+
+Use the [four Motion Transfer examples](../README.md) for matching Guide Latents/TARA LoRAs, native/manual and Planner/automatic variants. Reference slots are generic 1..N pictures, not a required character/background pair. See [Kitchen modified-kernel setup](../../docs/motion-transfer.md#comfy-kitchen-works-with-tara--use-the-modified-temporal-kernel).

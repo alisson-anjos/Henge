@@ -1,0 +1,1614 @@
+{
+  "id": "58c2595b-8cf8-5898-b9ea-1a0d70c1e16b",
+  "revision": 0,
+  "last_node_id": 28,
+  "last_link_id": 33,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "title": "MiniMax H3 Ref2VA base",
+      "pos": [
+        0,
+        0
+      ],
+      "size": [
+        340,
+        136
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "default"
+      ],
+      "widgets_values_named": {
+        "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    {
+      "id": 2,
+      "type": "LoraLoaderModelOnly",
+      "title": "Training adapter V2 — strength 1",
+      "pos": [
+        0,
+        160
+      ],
+      "size": [
+        340,
+        136
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoraLoaderModelOnly"
+      },
+      "widgets_values": [
+        "minimax_h3_ref2va_training_adapter_v2.safetensors",
+        1.0
+      ],
+      "widgets_values_named": {
+        "lora_name": "minimax_h3_ref2va_training_adapter_v2.safetensors",
+        "strength_model": 1.0
+      }
+    },
+    {
+      "id": 3,
+      "type": "LoraLoaderModelOnly",
+      "title": "DMD Ref2VA 8-step turbo",
+      "pos": [
+        0,
+        320
+      ],
+      "size": [
+        340,
+        136
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoraLoaderModelOnly"
+      },
+      "widgets_values": [
+        "minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
+        1.0
+      ],
+      "widgets_values_named": {
+        "lora_name": "minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors",
+        "strength_model": 1.0
+      }
+    },
+    {
+      "id": 4,
+      "type": "LoraLoaderModelOnly",
+      "title": "Motion Transfer v1.0 — Guide Latents",
+      "pos": [
+        0,
+        480
+      ],
+      "size": [
+        340,
+        136
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoraLoaderModelOnly"
+      },
+      "widgets_values": [
+        "minimax_h3_motion_transfer_v1.0_ref2va.safetensors",
+        1.0
+      ],
+      "widgets_values_named": {
+        "lora_name": "minimax_h3_motion_transfer_v1.0_ref2va.safetensors",
+        "strength_model": 1.0
+      }
+    },
+    {
+      "id": 5,
+      "type": "ModelAttentionBackend",
+      "title": "Attention — see Kitchen/TARA note",
+      "pos": [
+        0,
+        640
+      ],
+      "size": [
+        340,
+        108
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ModelAttentionBackend"
+      },
+      "widgets_values": [
+        "comfy kitchen attention"
+      ],
+      "widgets_values_named": {
+        "attention": "comfy kitchen attention"
+      }
+    },
+    {
+      "id": 6,
+      "type": "MiniMaxH3SigmaShift",
+      "title": "H3 sampling shift",
+      "pos": [
+        0,
+        800
+      ],
+      "size": [
+        340,
+        136
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            17,
+            20
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SigmaShift"
+      },
+      "widgets_values": [
+        12.0,
+        3.0
+      ],
+      "widgets_values_named": {
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      }
+    },
+    {
+      "id": 7,
+      "type": "CLIPLoader",
+      "title": "H3 text encoder — NOT the prompt VLM",
+      "pos": [
+        400,
+        0
+      ],
+      "size": [
+        340,
+        164
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            7
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        "minimax",
+        "default"
+      ],
+      "widgets_values_named": {
+        "clip_name": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        "type": "minimax",
+        "device": "default"
+      }
+    },
+    {
+      "id": 8,
+      "type": "VAELoader",
+      "title": "H3 video VAE",
+      "pos": [
+        400,
+        160
+      ],
+      "size": [
+        340,
+        108
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            8,
+            15,
+            28
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "minimax_h3_video_vae_fp16.safetensors"
+      ],
+      "widgets_values_named": {
+        "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+      }
+    },
+    {
+      "id": 9,
+      "type": "VHS_LoadVideoFFmpeg",
+      "title": "Upload guide — 24 fps; initial short test (107 frames)",
+      "pos": [
+        820,
+        0
+      ],
+      "size": [
+        360,
+        420
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            6
+          ]
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": []
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            32
+          ]
+        },
+        {
+          "name": "video_info",
+          "type": "VHS_VIDEOINFO",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_LoadVideoFFmpeg"
+      },
+      "widgets_values": {
+        "video": "guide.mp4",
+        "force_rate": 24.0,
+        "custom_width": 0,
+        "custom_height": 0,
+        "frame_load_cap": 107,
+        "start_time": 0,
+        "format": "None"
+      }
+    },
+    {
+      "id": 10,
+      "type": "BFSH3PrepareNativeVideo",
+      "title": "Source-derived geometry / frame grid / trim count",
+      "pos": [
+        820,
+        480
+      ],
+      "size": [
+        360,
+        390
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "reference_video_24fps",
+          "type": "IMAGE",
+          "links": [
+            16
+          ]
+        },
+        {
+          "name": "guide_contact_sheet",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "links": [
+            9
+          ]
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": [
+            10
+          ]
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "links": [
+            11
+          ]
+        },
+        {
+          "name": "metadata",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "guide_analysis_instruction",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "request",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "links": [
+            30
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BFSH3PrepareNativeVideo",
+        "cnr_id": "bfsnodes",
+        "ver": "1.115.34"
+      },
+      "widgets_values": [
+        24.0,
+        1.0,
+        0.4,
+        1.0,
+        107,
+        "pad last frame",
+        8,
+        "motion_transfer: Transfer the performance from the guide to the subject in <Picture 1>. Preserve its identity and outfit. Keep the guide setting and camera unless explicitly requested otherwise."
+      ],
+      "widgets_values_named": {
+        "source_fps": 24.0,
+        "output_scale": 1.0,
+        "max_megapixels": 0.4,
+        "reference_scale": 1.0,
+        "max_frames": 107,
+        "frame_rounding": "pad last frame",
+        "analysis_frames": 8,
+        "request": "motion_transfer: Transfer the performance from the guide to the subject in <Picture 1>. Preserve its identity and outfit. Keep the guide setting and camera unless explicitly requested otherwise."
+      }
+    },
+    {
+      "id": 11,
+      "type": "LoadImage",
+      "title": "Picture 1 — reference; role defined by your prompt",
+      "pos": [
+        1240,
+        0
+      ],
+      "size": [
+        330,
+        330
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            12
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "reference_1.png"
+      ],
+      "widgets_values_named": {
+        "image": "reference_1.png"
+      }
+    },
+    {
+      "id": 12,
+      "type": "LoadImage",
+      "title": "OPTIONAL Picture 2 — any role; connect only if needed",
+      "pos": [
+        1240,
+        390
+      ],
+      "size": [
+        330,
+        330
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "reference_2.png"
+      ],
+      "widgets_values_named": {
+        "image": "reference_2.png"
+      }
+    },
+    {
+      "id": 13,
+      "type": "MiniMaxH3ReferenceToVideo",
+      "title": "Native H3 — assign N picture roles in the prompt",
+      "pos": [
+        1630,
+        0
+      ],
+      "size": [
+        500,
+        680
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 8,
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 9,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 10,
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 11,
+          "widget": {
+            "name": "length"
+          }
+        },
+        {
+          "name": "ref_images.ref_image_1",
+          "type": "IMAGE",
+          "link": 12
+        },
+        {
+          "name": "ref_images.ref_image_2",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            13
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            14,
+            25
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3ReferenceToVideo"
+      },
+      "widgets_values": [
+        "motion_transfer:\nsubject_definitions:\n<Subject 1> is the subject in <Picture 1>; preserve its visible identity, face, hair or fur, body proportions and outfit. Picture roles are defined by this prompt, not by slot number. Additional connected pictures may specify other subjects, outfits, objects, environments or style; edit these sections to assign each actual attached picture explicitly.\nsummary:\n[video generation + reference] Transfer the source performance to <Subject 1>, preserving the action order, timing and camera of the guide.\nretention_analysis:\n<Subject 1>: preserve the reference identity and appearance throughout the clip. Keep the guide setting unless a connected reference is explicitly assigned to replace it.\ndetailed_description:\n[Shot 1] <Subject 1> follows the guide's motion, poses, gestures, head movement and expression in order and at matching times. Keep identity stable during occlusion, turns and back views. Do not turn a back view into a front view. Several reference images may describe one subject; image count does not imply performer count. Do not copy an identity reference's still pose or backdrop as the motion or setting.\noverall_soundscape:\nKeep the source soundtrack when connected; do not invent dialogue.\nnon_diegetic_music:\nNo additional music requested.",
+        864,
+        480,
+        107,
+        "match"
+      ],
+      "widgets_values_named": {
+        "prompt": "motion_transfer:\nsubject_definitions:\n<Subject 1> is the subject in <Picture 1>; preserve its visible identity, face, hair or fur, body proportions and outfit. Picture roles are defined by this prompt, not by slot number. Additional connected pictures may specify other subjects, outfits, objects, environments or style; edit these sections to assign each actual attached picture explicitly.\nsummary:\n[video generation + reference] Transfer the source performance to <Subject 1>, preserving the action order, timing and camera of the guide.\nretention_analysis:\n<Subject 1>: preserve the reference identity and appearance throughout the clip. Keep the guide setting unless a connected reference is explicitly assigned to replace it.\ndetailed_description:\n[Shot 1] <Subject 1> follows the guide's motion, poses, gestures, head movement and expression in order and at matching times. Keep identity stable during occlusion, turns and back views. Do not turn a back view into a front view. Several reference images may describe one subject; image count does not imply performer count. Do not copy an identity reference's still pose or backdrop as the motion or setting.\noverall_soundscape:\nKeep the source soundtrack when connected; do not invent dialogue.\nnon_diegetic_music:\nNo additional music requested.",
+        "width": 864,
+        "height": 480,
+        "length": 107,
+        "ref_image_size": "match"
+      }
+    },
+    {
+      "id": 14,
+      "type": "MiniMaxH3AddGuide",
+      "title": "Aligned video latents — frame 0 (not native ref_video)",
+      "pos": [
+        1630,
+        760
+      ],
+      "size": [
+        340,
+        108
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 13
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 14
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 15,
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 16,
+          "shape": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            18,
+            19
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3AddGuide"
+      },
+      "widgets_values": [
+        0
+      ],
+      "widgets_values_named": {
+        "frame_idx": 0
+      }
+    },
+    {
+      "id": 15,
+      "type": "CFGGuider",
+      "title": "CFG 1 — positive conditioning + the correct MODEL",
+      "pos": [
+        2200,
+        0
+      ],
+      "size": [
+        340,
+        108
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 17
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 18
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 19
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            22
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CFGGuider"
+      },
+      "widgets_values": [
+        1.0
+      ],
+      "widgets_values_named": {
+        "cfg": 1.0
+      }
+    },
+    {
+      "id": 16,
+      "type": "RandomNoise",
+      "title": "Seed — keep fixed for comparisons",
+      "pos": [
+        2200,
+        240
+      ],
+      "size": [
+        340,
+        136
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            21
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        42,
+        "fixed"
+      ],
+      "widgets_values_named": {
+        "noise_seed": 42
+      }
+    },
+    {
+      "id": 17,
+      "type": "KSamplerSelect",
+      "title": "Euler sampler",
+      "pos": [
+        2200,
+        380
+      ],
+      "size": [
+        340,
+        108
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            23
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "euler"
+      ],
+      "widgets_values_named": {
+        "sampler_name": "euler"
+      }
+    },
+    {
+      "id": 18,
+      "type": "BasicScheduler",
+      "title": "8 steps for the selected DMD turbo",
+      "pos": [
+        2200,
+        520
+      ],
+      "size": [
+        340,
+        164
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            24
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "simple",
+        8,
+        1.0
+      ],
+      "widgets_values_named": {
+        "scheduler": "simple",
+        "steps": 8,
+        "denoise": 1.0
+      }
+    },
+    {
+      "id": 19,
+      "type": "SamplerCustomAdvanced",
+      "title": "Sample the prepared short clip",
+      "pos": [
+        2600,
+        0
+      ],
+      "size": [
+        340,
+        100
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 21
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 22
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 23
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 24
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 25
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            26
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SamplerCustomAdvanced"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 20,
+      "type": "LTXVSeparateAVLatent",
+      "title": "Video/audio latent streams",
+      "pos": [
+        2600,
+        250
+      ],
+      "size": [
+        340,
+        100
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "av_latent",
+          "type": "LATENT",
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video_latent",
+          "type": "LATENT",
+          "links": [
+            27
+          ]
+        },
+        {
+          "name": "audio_latent",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LTXVSeparateAVLatent"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 21,
+      "type": "VAEDecodeTiled",
+      "title": "Tiled video decode",
+      "pos": [
+        2600,
+        410
+      ],
+      "size": [
+        340,
+        192
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 27
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 28
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            29
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecodeTiled"
+      },
+      "widgets_values": [
+        512,
+        64,
+        64,
+        8
+      ],
+      "widgets_values_named": {
+        "tile_size": 512,
+        "overlap": 64,
+        "temporal_size": 64,
+        "temporal_overlap": 8
+      }
+    },
+    {
+      "id": 22,
+      "type": "ImageFromBatch",
+      "title": "Trim grid padding to actual source duration",
+      "pos": [
+        3020,
+        0
+      ],
+      "size": [
+        340,
+        136
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 29
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 30,
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            31
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ImageFromBatch"
+      },
+      "widgets_values": [
+        0,
+        107
+      ],
+      "widgets_values_named": {
+        "batch_index": 0,
+        "length": 107
+      }
+    },
+    {
+      "id": 23,
+      "type": "CreateVideo",
+      "title": "24 fps; original source audio",
+      "pos": [
+        3020,
+        220
+      ],
+      "size": [
+        340,
+        192
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 31
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 32,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            33
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        24.0,
+        "auto",
+        "sRGB",
+        "none"
+      ],
+      "widgets_values_named": {
+        "fps": 24.0,
+        "bit_depth": "auto",
+        "color_space": "sRGB",
+        "codec": "none"
+      }
+    },
+    {
+      "id": 24,
+      "type": "SaveVideo",
+      "title": "Save Motion Transfer output",
+      "pos": [
+        3020,
+        450
+      ],
+      "size": [
+        340,
+        192
+      ],
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 33
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "motion_transfer/guide_latents",
+        "auto",
+        "auto",
+        "auto"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "motion_transfer/guide_latents",
+        "format": "auto",
+        "codec": "auto"
+      }
+    },
+    {
+      "id": 25,
+      "type": "MarkdownNote",
+      "title": "Native use / timing / limits",
+      "pos": [
+        820,
+        950
+      ],
+      "size": [
+        700,
+        420
+      ],
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "# Native conditioning, with small public BFS helpers\nUpload the guide and Picture 1. The second image is disconnected and OPTIONAL; connect more native ref_images slots consecutively (up to 9) and assign their roles in the editable H3 prompt. No Planner or prompt VLM is required.\n\nSource aspect ratio sets the output; 0.4 MP cap; 24 fps; initial test limited to 107 decoded frames. To use a longer clip, change BOTH VHS frame_load_cap and Prepare max_frames. Prefer the Planner workflow for long videos and camera cuts. Padding is trimmed to the actual source duration.\n\nAudio output copies the source; no dialogue is inferred or generated. Motion/identity fidelity still needs visual review. Native means native H3 conditioning, not zero custom nodes: BFS handles source geometry (and TARA), VHS loads the video. No Henge private nodes required."
+      ],
+      "color": "#234",
+      "bgcolor": "#345"
+    },
+    {
+      "id": 26,
+      "type": "MarkdownNote",
+      "title": "START HERE — choose the matching Motion Transfer LoRA",
+      "pos": [
+        0,
+        1130
+      ],
+      "size": [
+        700,
+        480
+      ],
+      "flags": {},
+      "order": 25,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "# Motion Transfer v1.0 — Guide Latents / native_nodes\n\nMatching LoRA: minimax_h3_motion_transfer_v1.0_ref2va.safetensors\nTraining adapter V2 → DMD Ref2VA 8-step turbo → task LoRA; strengths 1, CFG 1, Euler/simple, 8 steps. These are inference defaults, not quality guarantees. Do not load another copy of an already merged adapter/turbo.\n\nThe guide enters through Add Guide, not native video-reference latents. Planner additionally shows sampled guide frames to the text encoder.\n\nDependencies: updated ComfyUI native MiniMax H3, ComfyUI-BFSNodes 1.115.34+, VideoHelperSuite for native video loading. Model download links are in docs/motion-transfer.md in the HF repo. Select installed model names if your files are in subfolders.\n\nThese graphs are derived from the native/Planner contracts of the published Character Swap v1.1 workflows, with Motion Transfer-specific prompts and model wiring. No bundled private media; replace guide.mp4/reference_1.png before queueing."
+      ],
+      "color": "#234",
+      "bgcolor": "#345"
+    },
+    {
+      "id": 27,
+      "type": "MarkdownNote",
+      "title": "N reference images — read before assigning roles",
+      "pos": [
+        1580,
+        1130
+      ],
+      "size": [
+        680,
+        520
+      ],
+      "flags": {},
+      "order": 26,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "# References are flexible: 1..N pictures, not a person/background pair\nOnly Picture 1 is connected by default. Picture 2 is OPTIONAL and disconnected. Add consecutive slots 1..N as needed (native H3 supports up to 9); in Planner use the reference list, globally or per shot.\n\nA picture may describe a character, outfit, object, setting or style. Several pictures may describe the SAME character. Two images can be two characters, two views of one identity, or any other explicitly requested combination. A separate background is NOT required. Image count is NOT performer count.\n\nAssign the role of every attached picture in the prompt. The guide supplies motion and timing. Preserve its setting/camera unless you explicitly ask to replace them. Avoid ambiguity for multiple performers: include clothes/identity, time of entry, occlusion and back views. Inspect the generated prompt before relying on it. Prompt instructions improve binding; they do not guarantee perfect identity tracking.\n\nExamples: one identity picture; three distinct character pictures; two views of one identity plus an outfit; or character + object + setting. These are choices, not mandatory slots. No automatic background removal is applied in these examples."
+      ],
+      "color": "#234",
+      "bgcolor": "#345"
+    },
+    {
+      "id": 28,
+      "type": "MarkdownNote",
+      "title": "Kitchen compatibility / MODIFIED TARA kernel",
+      "pos": [
+        2320,
+        1130
+      ],
+      "size": [
+        760,
+        650
+      ],
+      "flags": {},
+      "order": 27,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "# Comfy Kitchen + TARA: supported with the MODIFIED temporal kernel\nGuide Latents can use ordinary Comfy Kitchen attention. TARA's fused one-pass Kitchen path additionally needs the modified temporal extension (library AND Python API); installing stock comfy-kitchen alone does not provide it.\n\nSafe default here: TARA uses PyTorch model attention + Flash partitions (no compile). To try Kitchen, select comfy kitchen attention in Model Attention Backend and comfy kitchen (experimental) in the TARA/conditioning backend control.\n\nUpdate BFSNodes main (1.115.34+), restart ComfyUI, then let BFS install its verified temporal extension on supported Linux/Windows x86_64 NVIDIA GPUs. CUDA-13-capable driver required; PyTorch can use CUDA 12.x. Unsupported/offline setups may keep a slower compatibility path. Flash partitions does not require this extension.\n\nConfirm the fused kernel in the sampling log: Kitchen ONE-PASS dense kernel ACTIVE (or Kitchen ONE-PASS sol kernel ACTIVE when separately using supported Sol attention). A completed render alone does not prove it used the modified kernel. Do not add VSA/SLA to these examples.\n\nSetup and limitations: https://github.com/alisson-anjos/ComfyUI-BFSNodes/blob/main/H3_NATIVE_TEMPORAL.md#kernel-downloads\nManual install: https://github.com/alisson-anjos/comfy-kitchen/blob/feat/h3-native-temporal/MANUAL_TEMPORAL_INSTALL.md\nVerified release/checksums: https://github.com/alisson-anjos/comfy-kitchen/releases/tag/temporal-native-0413d43878606425a84aa400f1e5da50ed9dcdad\nBinaries passed ABI/build checks; not every GPU/OS has full-video validation."
+      ],
+      "color": "#234",
+      "bgcolor": "#345"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      0,
+      "MODEL"
+    ],
+    [
+      3,
+      3,
+      0,
+      4,
+      0,
+      "MODEL"
+    ],
+    [
+      4,
+      4,
+      0,
+      5,
+      0,
+      "MODEL"
+    ],
+    [
+      5,
+      5,
+      0,
+      6,
+      0,
+      "MODEL"
+    ],
+    [
+      6,
+      9,
+      0,
+      10,
+      0,
+      "IMAGE"
+    ],
+    [
+      7,
+      7,
+      0,
+      13,
+      0,
+      "CLIP"
+    ],
+    [
+      8,
+      8,
+      0,
+      13,
+      1,
+      "VAE"
+    ],
+    [
+      9,
+      10,
+      2,
+      13,
+      3,
+      "INT"
+    ],
+    [
+      10,
+      10,
+      3,
+      13,
+      4,
+      "INT"
+    ],
+    [
+      11,
+      10,
+      4,
+      13,
+      5,
+      "INT"
+    ],
+    [
+      12,
+      11,
+      0,
+      13,
+      6,
+      "IMAGE"
+    ],
+    [
+      13,
+      13,
+      0,
+      14,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      14,
+      13,
+      1,
+      14,
+      1,
+      "LATENT"
+    ],
+    [
+      15,
+      8,
+      0,
+      14,
+      2,
+      "VAE"
+    ],
+    [
+      16,
+      10,
+      0,
+      14,
+      4,
+      "IMAGE"
+    ],
+    [
+      17,
+      6,
+      0,
+      15,
+      0,
+      "MODEL"
+    ],
+    [
+      18,
+      14,
+      0,
+      15,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      19,
+      14,
+      0,
+      15,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      20,
+      6,
+      0,
+      18,
+      0,
+      "MODEL"
+    ],
+    [
+      21,
+      16,
+      0,
+      19,
+      0,
+      "NOISE"
+    ],
+    [
+      22,
+      15,
+      0,
+      19,
+      1,
+      "GUIDER"
+    ],
+    [
+      23,
+      17,
+      0,
+      19,
+      2,
+      "SAMPLER"
+    ],
+    [
+      24,
+      18,
+      0,
+      19,
+      3,
+      "SIGMAS"
+    ],
+    [
+      25,
+      13,
+      1,
+      19,
+      4,
+      "LATENT"
+    ],
+    [
+      26,
+      19,
+      0,
+      20,
+      0,
+      "LATENT"
+    ],
+    [
+      27,
+      20,
+      0,
+      21,
+      0,
+      "LATENT"
+    ],
+    [
+      28,
+      8,
+      0,
+      21,
+      1,
+      "VAE"
+    ],
+    [
+      29,
+      21,
+      0,
+      22,
+      0,
+      "IMAGE"
+    ],
+    [
+      30,
+      10,
+      8,
+      22,
+      1,
+      "INT"
+    ],
+    [
+      31,
+      22,
+      0,
+      23,
+      0,
+      "IMAGE"
+    ],
+    [
+      32,
+      9,
+      2,
+      23,
+      1,
+      "AUDIO"
+    ],
+    [
+      33,
+      23,
+      0,
+      24,
+      0,
+      "VIDEO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.55,
+      "offset": [
+        100,
+        180
+      ]
+    },
+    "henge_motion_workflow": {
+      "version": 1,
+      "method": "guide_latents",
+      "planner": false,
+      "reference_policy": "1..N flexible roles; no required background",
+      "base": "Ref2VA",
+      "bfs_min_version": "1.115.34"
+    }
+  },
+  "version": 0.4
+}

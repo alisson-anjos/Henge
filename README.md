@@ -360,3 +360,5 @@ come from scripts shared by **crinklypaper** on the Banodoco Discord. Every mode
 [docs/REFERENCES.md](docs/REFERENCES.md); license texts: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Optional experimental Sharpness mode: [Open-H3 Regenerate rank-16 setup and limits](docs/open-h3-regenerate.md). Requires the updated worker and the `regenerate` model profile.
+
+Motion Transfer ComfyUI examples: [native and Planner workflows for Guide Latents and TARA](workflows/README.md), with [flexible reference roles and modified Kitchen-kernel setup](docs/motion-transfer.md).
