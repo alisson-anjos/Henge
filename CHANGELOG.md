@@ -9,6 +9,15 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### DMAD 4-step is the default turbo
+
+- Character Swap, Motion Transfer/TARA, Head Swap and the Sharpness first pass default to DMAD 4-step (4 steps,
+  CFG 1). While the backend does not list the DMAD file, the studio and the bridge use DMD 8-step. Saved browser
+  settings with the old untouched default (DMD 8-step, 8 steps) move to DMAD once; other saved choices are kept. Jobs
+  that never stored a turbo keep DMD 8-step on Retry. Pika stays optional.
+- **Component:** UI/bridge. **Tests:** Playwright with DMAD installed and missing (new browser, old saved default,
+  manual choice, Sharpness preset). No new render.
+
 ### Assistant: temporal windows, references and Pika
 
 - "Temporal" / "pure temporal window" requests now enable the processing strategy (`temporal_windows`) and keep the

@@ -67,6 +67,9 @@ in [docs/REFERENCES.md](docs/REFERENCES.md).
 | Head Swap | Replace only the head with a face picture | Head Swap v1.0 r32 + turbo; published `head_swap:` template |
 | Sharpness / Upscale | Enhance an upload or an existing Henge result | Little More Sharpness first, then **Open-H3 Refiner + LMS** by default at 1080p/2K; H3 latent upscale, NVIDIA VSR and no upscale are alternatives. 4K requires an alternative method |
 
+**Default turbo.** New generations use **DMAD 4-step** (Kijai; 4 steps, CFG 1) in every mode; DMD 8-step is used while
+the DMAD file is not installed. Other turbos, including Pika H3 Flex, stay selectable in Advanced.
+
 **Choosing a replacement mode.** For multiple people, objects or vehicles, we recommend **Motion Transfer TARA**:
 its LoRA was trained for these edits. Select both the **Motion Transfer TARA LoRA** and the **TARA method**.
 Character Swap may work as an alternative when all subjects being replaced are people; clear prompts and reference
