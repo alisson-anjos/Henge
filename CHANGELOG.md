@@ -9,6 +9,19 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Character Swap prompts: cleaner reference descriptions and the guide's style
+
+- Reference descriptions no longer carry the checklist echoes a VLM returns for attributes that do not apply ("no
+  collars, no sleeves, no buttons, no zippers…"), nor the positive words a comma split made of "no beard, mustache or
+  other facial hair" or "no … such as tattoos, scars…". Real details after a negation ("bare skin") are kept;
+  ordinary descriptions are unchanged.
+- The description instruction starts a creature or animal with what it is instead of "Male/Female" and skips
+  categories that do not apply.
+- The multi-character prompt asks to keep the guide's visual style (game, animation or live action) and render the
+  replacements in it; it used to keep only background, lighting and camera.
+- **Component:** UI/bridge (planner prompts). **Tests:** description cleanup on two real creature answers and an
+  ordinary one. Not yet re-rendered; for creatures Motion Transfer TARA remains the recommended mode.
+
 ### DMAD 4-step is the default turbo
 
 - Character Swap, Motion Transfer/TARA, Head Swap and the Sharpness first pass default to DMAD 4-step (4 steps,

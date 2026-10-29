@@ -76,8 +76,10 @@ CHARACTER_INSTRUCTION=("Analyze the character in this reference image and descri
     "fabric, textures, collars, sleeves, buttons, zippers, pockets, logos, patterns and layers; 5. lower-body clothing with colors, materials, fit and "
     "design details; 6. footwear; 7. all visible accessories; 8. distinctive features such as tattoos, scars, wrinkles or makeup. "
     "Describe only what is visually identifiable; never invent unseen body parts, clothing or accessories; omit what cannot be determined. "
+    "Skip a category that does not apply: write nothing for it, never a \"no ...\" for each missing detail (at most one short phrase such as \"no clothing\"). "
     "Never name or guess real people, celebrities, actors or fictional characters; describe appearance only. "
-    "Do not describe the background, camera, lighting or image composition. Start with the gender (\"Male, ...\" or \"Female, ...\"), "
+    "Do not describe the background, camera, lighting or image composition. Start with the gender (\"Male, ...\" or \"Female, ...\"); for an animal, creature or other non-human "
+    "character start with what it is instead (e.g. \"Small blue lizard-like creature, ...\"), "
     "with no article before it and no full stop after it. Output only the comma-separated list, on one line, nothing else.")
 
 CHARACTER_SWAP_PROMPT=("body_swap: subject_definitions: <Subject 1> is the {details} shown in <Picture 1>, whose identity, face, head, hair or fur, skin, "
@@ -91,6 +93,24 @@ CHARACTER_SWAP_PROMPT=("body_swap: subject_definitions: <Subject 1> is the {deta
     "video are preserved. Prevent identity drift, clothing changes, texture crawling and flicker.")
 
 EMPTY_ITEMS={'none','n/a','na','null','unknown','not visible','-',''}
+# Words of CHARACTER_INSTRUCTION's checklist. A VLM often answers an attribute that does not apply with "no <attribute>"
+# for every item ("no collars, no sleeves, no buttons…"), and a comma split turns "no beard, mustache or other facial
+# hair" into a positive "mustache". Those echoes name things that are not there, so they are dropped.
+CHECKLIST=re.compile(r'\b(garment types?|exact colou?rs?|colou?rs?|fit|fabrics?|textures?|collars?|sleeves?|buttons?|zippers?|pockets?|'
+    r'logos?|patterns?|layers?|materials?|design details?|mustache|facial hair|tattoos?|scars?|makeup)\b',re.I)
+def drop_absent(items):
+    """Keep a category's real description and one short negation ("no upper-body clothing", "no beard"); drop the
+    checklist echoes that follow a negation."""
+    out=[];negated=False
+    for item in items:
+        word=re.sub(r'^and\s+','',item.strip(),flags=re.I);low=word.lower()
+        if low.startswith('no '):
+            parts=[x.strip() for x in re.split(r'\s+(?:and|or)\s+',low)]
+            if all(x.startswith('no ') and CHECKLIST.search(x) and not re.search(r'\b(clothing|footwear|accessor)',x) for x in parts):negated=True;continue
+            negated=True;out.append(re.split(r'\s+such as\s+',word,flags=re.I)[0]);continue
+        if negated and CHECKLIST.search(low):continue
+        out.append(item.strip())
+    return out
 def clean_details(details,limit):
     """A VLM description, made safe for the prompt: one line, without empty list items ('none', 'n/a') and without
     the same item repeated (a small VLM can loop on 'none, none, none...' until its token limit)."""
@@ -102,7 +122,9 @@ def clean_details(details,limit):
             word=item.strip();key=word.lower().rstrip('.;').strip()
             if key in EMPTY_ITEMS or (items and key==items[-1].lower().rstrip('.;').strip()) or seen.count(key)>=2:continue
             items.append(word);seen.append(key)
-        if items:out.append(', '.join(items))
+        ends=sentence.rstrip().endswith(';')
+        items=[x.rstrip(';').strip() for x in drop_absent([x.rstrip(';') for x in items])]
+        if items:out.append(', '.join(items)+(';' if ends else ''))
     return ' '.join(out).rstrip('.,; ')[:limit]
 
 def character_swap_prompt(details):
@@ -199,7 +221,8 @@ def multi_swap_prompt(subjects,representation='2d',labels=False,task='body_swap'
             f"detailed_description: [Shot 1] {', '.join(names[:-1])} and {names[-1]} take the exact places of the marked people and move with the same timing, body pose, gestures, head motion, gaze, speech and facial expressions; "
             f"each one follows its own marked person through position changes, occlusion and cuts. {remove}"
             f"Keep the framing of the guide: do not widen the shot or add people who are not in the guide; no inset, no small full-body figure, no picture-in-picture. "
-            f"{TRACK_IDENTITY_PROMPT} Preserve the background, lighting and camera. Prevent identity drift, clothing changes, texture crawling and flicker.")
+            f"{TRACK_IDENTITY_PROMPT} Preserve the background, lighting, camera and the visual style of the guide (game, animation or live action); render the replacements in that same style. "
+            f"Prevent identity drift, clothing changes, texture crawling and flicker.")
 
 
 def shot_swap_plan(bindings, references, roles, representation, labels=False,task='body_swap'):
