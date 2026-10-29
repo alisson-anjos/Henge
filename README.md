@@ -32,21 +32,22 @@ Fight footage: TEKKEN DADDY (YouTube), Tekken 8 © Bandai Namco — used here as
 
 ### Not just an interface
 
-- **One trained LoRA per mode**, not plain H3 with a prompt: Character Swap v1.1, Motion Transfer v1.0 and TARA v1.0,
+- **Task-specific trained LoRAs**: Character Swap v1.1, Motion Transfer v1.0 and TARA v1.0,
   Head Swap v1.0 and Little More Sharpness v1.0 (+ an H3 latent upscaler). They come from the BFS LoRA collection,
   all trained by Alisson Anjos ([alissonerdx](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI)).
 - **Guide-latent training**, a method inherited from LTX's guide-latent IC-LoRAs and brought to MiniMax H3: the
   guide's VAE latents share the output's frame grid, so frame N is built on frame N of the guide. Pose, camera and
-  timing stay locked, with no desync ([how the guide reaches H3](docs/conditioning.md)).
+  timing are guided directly by the source ([how the guide reaches H3](docs/conditioning.md)).
 - **TARA-H3 (Temporally Aligned Reference Attention)**, our method: keeps the guide as a native video reference, puts it
   on the generated video's temporal clock and biases each output moment to attend to the matching guide moment, with no
   extra trained layers ([technical report](https://github.com/alisson-anjos/ai-toolkit/tree/tara-h3-v0.1.2/research/tara-h3)).
-- **Any length, shot by shot**: long clips are split at camera cuts or at a fixed length, with context frames carried
-  between shots; each shot can be previewed, redone alone and downloaded.
+- **Longer clips, shot by shot**: long clips are split at camera cuts or at a fixed length, with context frames carried
+  between segments within a scene. Camera cuts start clean shots; outputs are joined without crossfade or automatic
+  color matching. Each shot can be previewed, redone alone and downloaded.
 - **Subject guidance**: mark people (SAM 3.1 tracking) and bind each to its pictures, as 2D color marks, a 3D body or a
-  latent mask that keeps the rest of the frame untouched.
-- **A studio assistant** that operates everything (Claude, OpenAI or a local model), or **your own AI client through
-  MCP**; a **first-run wizard** for the backend; [export a shot with its ComfyUI workflow and inputs](docs/workflow-export.md)
+  latent mask for region-restricted edits. Original is the default; masks require subject marks and are opt-in.
+- **A studio assistant** using the built-in planner VLM, Claude or an OpenAI-compatible model (including LM Studio),
+  or **your own AI client through MCP**; a **first-run wizard** for the backend; [export a shot with its ComfyUI workflow and inputs](docs/workflow-export.md)
   to re-run it in ComfyUI.
 
 | Studio | Setup wizard | Assistant |
@@ -62,20 +63,39 @@ in [docs/REFERENCES.md](docs/REFERENCES.md).
 | Mode | What it does | Recipe |
 |---|---|---|
 | Character Swap | Replace the person in a video with a character picture | Character Swap v1.1 LoRA + turbo; v1.1 one-line `body_swap:` prompt; reference background removed (BiRefNet, #808080, 0.5 MP) |
-| Motion transfer | Drive a new character with the guide's performance | Motion Transfer v1.0 or TARA v1.0 LoRA + training adapter V2; Guide Latents or TARA (experimental) |
+| Motion Transfer | Drive people, objects or vehicles with the guide's performance | Two trained LoRAs: Guide Latents and Motion Transfer TARA v1.0, each stacked on training adapter V2; use the matching method |
 | Head Swap | Replace only the head with a face picture | Head Swap v1.0 r32 + turbo; published `head_swap:` template |
-| Sharpness | Sharpen an upload or one of your generations, optionally up to 2K/4K | MiniMax H3 + Little More Sharpness LoRA; for 2K/4K it sharpens at half size and doubles it with the H3 latent upscaler + a short H3 refine (tiled at 4K) or NVIDIA RTX Video Super Resolution; source video only |
+| Sharpness / Upscale | Enhance an upload or an existing Henge result | Little More Sharpness first, then **Open-H3 Refiner + LMS** by default at 1080p/2K; H3 latent upscale, NVIDIA VSR and no upscale are alternatives. 4K requires an alternative method |
 
-Options: turbo LoRA (DMD 8-step, DMAD 4-step, pDMD 4/2-step, lightx2v 8/4-step or none), base model (MiniMax H3
-ref2va or FastH3 OmniRef 8-step), CFG, Comfy Kitchen attention, auto-approve, and shots for long clips (cut at
-camera cuts or at a fixed length, each shot playable before rendering and downloadable when done). **Subject
-guidance**: mark people in the video and bind each to its pictures. *2D* paints each one with its color (solid
-or translucent, with a live preview on the approval screen), *3D* draws a colored body with face, and *Mask*
-regenerates only the area around them so the rest of the video stays pixel-identical. **FLUX Klein** can redraw an
-animal reference as an upright humanoid for a human performer. **Guide for the text encoder**: Latents + CLIP (the
-default) or latents only. **Audio**: keep the original, or keep the soundtrack H3 generates per shot.
-**New background**: a picture that follows the original camera (moving plate). Each job can be downloaded as the exact
-ComfyUI API graph it ran.
+**Choosing a replacement mode.** For multiple people, objects or vehicles, we recommend **Motion Transfer TARA**:
+its LoRA was trained for these edits. Select both the **Motion Transfer TARA LoRA** and the **TARA method**.
+Character Swap may work as an alternative when all subjects being replaced are people; clear prompts and reference
+assignments are especially important. References can have different roles: they do not have to be a person plus a
+background. See [Motion Transfer examples and setup](docs/motion-transfer.md).
+
+**Guide representation.** Original is the default, including for vehicles and objects. For marked subjects, 2D paints
+each one with its color, 3D uses a colored body (people only), and Mask restricts replacement to the marked region.
+Mask is not selected automatically and needs subject marks bound to references. With Original, unchanged background
+pixels are not guaranteed. SAM tracks marks through the frames; assignments still need checking after camera cuts.
+
+**Generation controls.** Model, method, turbo LoRA, steps, CFG, seed, reference preparation and Comfy Kitchen attention
+are configurable. Use a fixed seed to compare changes; the used seed is saved with each generation. Guide Latents can
+send **Latents + CLIP** (UI default), **Latents only**, or use each model's **Auto** setting. Latents only can help when
+source appearance leaks into a replacement. Optional [pure temporal windows](docs/temporal-windows.md) combine
+predictions at each denoising step; they are distinct from shots and carried context frames, and are off by default.
+In Sharpness, **Segments → full-video refiner windows** keeps normal first-pass segments and refines the assembled
+result with windows; long outputs still use bounded refinement chunks for host RAM. Both window strategies require
+updated Henge worker nodes. Comfy Kitchen with TARA needs the [modified kernel](docs/motion-transfer.md), not just the stock package.
+
+**Sharpness defaults.** Entering Sharpness selects 1080p when coming from 480p/720p. Open-H3 Refiner + LMS presets the
+first pass to **DMAD, 4 steps and CFG 1**; the second pass defaults to **2 refiner steps**. These are separate passes,
+and the first-pass settings remain editable. This path uses the existing Ref2VA base, not FL2VA, and supports 1080p
+and 2K, not 4K. It requires the `regenerate` weights and native ComfyUI upscaler nodes. See
+[setup and limits](docs/open-h3-regenerate.md).
+
+**Audio and scene controls.** Keep the source audio, generate audio with H3, or enable guide-audio conditioning.
+An optional **New background** picture follows the guide camera (moving plate). **FLUX Klein** can prepare references
+or edit frames; available editors depend on the installed profiles.
 
 ## How to run Henge
 
@@ -87,15 +107,17 @@ video with ffmpeg) and **ComfyUI** (runs the MiniMax H3 graphs on a GPU). Pick w
 | | A. Local, your ComfyUI | B. RunPod, all in one pod | C. Local UI + RunPod Serverless |
 |---|---|---|---|
 | UI and bridge | your PC | the pod | your PC (no GPU needed) |
-| ComfyUI / GPU | your PC (NVIDIA, 32 GB VRAM, 64 GB RAM) | the pod | RunPod workers, started per job |
+| ComfyUI / GPU | your PC (NVIDIA; memory depends on resolution and method) | the pod | RunPod workers, started per job |
 | You pay | nothing extra | while the pod is on | per second while a job runs (+15 s idle) and the volume's storage |
-| First result | immediate | after the first boot download | cold start of 1–3 min after idle |
+| Startup | existing ComfyUI and models | first boot downloads the selected profiles | worker cold start after idle; timing depends on availability and model loading |
 | Live sampling preview | yes | yes | progress only |
 | Best for | you have an RTX 5090 or similar | long sessions | occasional use, no local GPU |
 
-All three need the models: about 125 GB with every profile (H3 base, text encoder, VAE, planner VLM and the
-task LoRAs). [Models and download links](docs/models-and-downloads.md). The Motion Transfer LoRAs are public in [Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI) (BFS Motion Transfer license), and so are the FFP and Solar merges.
-**No Hugging Face token or RunPod secret is needed** for any default profile. The one exception is the optional `klein3`
+The GPU backend needs the selected model profiles (H3 base, text encoder, VAE, planner VLM and task LoRAs).
+Storage depends on the profiles; the pod examples allocate a 180 GB volume. The UI/bridge-only host does not need
+these weights or a GPU. [Models and download links](docs/models-and-downloads.md). The Motion Transfer LoRAs are public in [Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI) (BFS Motion Transfer license), and so are the FFP and Solar merges.
+**Downloading the default model profiles needs no Hugging Face token.** RunPod Serverless still requires your
+RunPod API key and endpoint ID in the bridge configuration. For model downloads, the exception is the optional `klein3`
 profile (FLUX.3 [image klein]), which is gated by Black Forest Labs: accept its license on
 [Hugging Face](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN`. Without it, the
 default FLUX.2 [klein] 4B (Apache-2.0) edits frames and pictures.
@@ -197,7 +219,8 @@ Docker image*).
    ```
 
 3. Create the endpoint; the script makes the worker template in your account from the public Henge image (RunPod
-   does not allow public serverless templates). RTX 5090 first; RTX PRO 6000 only when no 5090 is free:
+   does not allow public serverless templates). The script defaults to RTX 5090; select a larger GPU if your workload
+   needs it, and choose one available in the volume's datacenter:
 
    ```sh
    VOLUME_ID=<volume id> scripts/runpod_serverless.sh   # prints the endpoint id
@@ -220,18 +243,25 @@ Details, costs and troubleshooting: [docs/SERVERLESS.md](docs/SERVERLESS.md).
 
 ### Updating
 
+Wait until active jobs finish before restarting the UI/bridge or recycling workers. A bridge restart interrupts
+job orchestration. Publishing code, building an image and deploying it are separate steps.
+
 - **A**: `git pull && npm ci && npm run build`, then `scripts/local_stack.sh start` and restart ComfyUI (the
   henge nodes changed).
 - **B**: deploy a new pod from the template (the volume keeps the models).
 - **C**: pull the new `henge-ui` image; for the workers, `ENDPOINT_ID=<id> TEMPLATE_ID=<id>
-  IMAGE=ghcr.io/alisson-anjos/henge:sha-<commit> scripts/runpod_serverless.sh` switches the image and drains
-  the old workers.
+  IMAGE=ghcr.io/alisson-anjos/henge:sha-<commit> scripts/runpod_serverless.sh` switches the image and recycles
+  the old workers. Run it only once no jobs are active. New weights must be added to the shared volume first;
+  Serverless workers do not run the model downloader.
 - **UI hosted elsewhere** (optional): see [Hosting only the UI](docs/HOSTING-UI.md) (Render, a VPS, Fly.io,
-  Railway).
+  Railway). For Render, see [redeploying the image](docs/RENDER.md): changing `latest` in the registry alone
+  does not update an image-based service. Update UI/bridge for interface and assistant changes; update the worker
+  when graphs, nodes or GPU dependencies change.
 
 Images are built by GitHub Actions and published to GitHub Container Registry:
 `ghcr.io/alisson-anjos/henge` (everything; the serverless worker uses it with `HENGE_ROLE=worker`) and
-`ghcr.io/alisson-anjos/henge-ui` (UI and bridge only), tagged `latest` (main), by branch and `sha-<commit>`.
+`ghcr.io/alisson-anjos/henge-ui` (UI and bridge only), tagged `latest` (main), by branch and `sha-<commit>`. Pin a built SHA tag for reproducible worker versions;
+`latest` follows newly published images but does not update already running workers.
 
 ### More guides
 
@@ -243,6 +273,9 @@ Images are built by GitHub Actions and published to GitHub Container Registry:
 - [Docker Compose on your own GPU machine](docker/README.md)
 - [RunPod pod template](docs/RUNPOD.md) · [RunPod Serverless](docs/SERVERLESS.md)
 - [Models and download links](docs/models-and-downloads.md) · [Guide conditioning](docs/conditioning.md)
+- [Motion Transfer workflows](workflows/README.md) · [Flexible references and modified Kitchen kernel](docs/motion-transfer.md)
+- [Open-H3 Refiner + LMS](docs/open-h3-regenerate.md) · [Temporal processing](docs/temporal-windows.md)
+- [Portable ComfyUI workflow exports](docs/workflow-export.md)
 
 ## Login (optional)
 
@@ -276,9 +309,25 @@ Set `HENGE_LIKENESS_FILTER=warn` to have the planner warn when a reference pictu
 or `block` to stop such jobs before they generate. It is `off` by default. Only generate real people with their
 consent.
 
-## Automatic prompts
+## Assistant and automatic prompts
 
-Configure these server-only variables in `.env.local` and restart the server:
+The built-in assistant can use the same **Qwen planner VLM** as generation, on the configured ComfyUI/Serverless
+backend, without an external API key. Settings also supports Claude or an OpenAI-compatible provider such as LM
+Studio. When a replacement request does not specify a mode, the assistant offers an in-chat choice: **Motion Transfer
+TARA** is recommended for multiple subjects; Character Swap is an alternative only when all targets are people.
+Choosing TARA applies its LoRA profile and method together.
+
+The assistant reads current generation settings and worker capabilities before rendering. Optional Molmo tools are
+shown only when configured; without Molmo it inspects guide frames. Molmo is not required for ordinary edits and is
+separate from the planner VLM. See [optional video analysis](docs/molmo-pointing.md).
+
+The [MCP server](docs/MCP.md) lets an external AI client create jobs with generation options and read/change backend
+connection, assistant and Molmo settings. Stored credentials remain redacted. MCP does not edit another browser's
+local draft; the built-in assistant operates the current studio controls.
+
+Prompt generation and enhancement use the backend planner by default. The assistant can also be selected as the
+planner in Settings. For an external vision endpoint (also used by the standalone `/api/prompt` route), configure
+these server-only variables in `.env.local` and restart the relevant services:
 
 ```dotenv
 VLM_CHAT_URL=https://your-provider.example/v1/chat/completions
@@ -286,13 +335,13 @@ VLM_MODEL=your-vision-model
 VLM_API_KEY=your-key-if-required
 ```
 
-The endpoint must support vision chat messages with `image_url` data URLs and return `choices[0].message.content`. References are inspected independently; sampled guide frames are analyzed separately before the final prompt is composed. This is sampled-frame analysis, not full-video understanding or audio analysis. The browser tells you which media will be sent. Credentials stay on the server. The VLM is an optional dependency; choose a locally hosted open model for an entirely open-weights pipeline.
+The endpoint must support vision chat messages with `image_url` data URLs and return `choices[0].message.content`. References are inspected independently; sampled guide frames are analyzed separately before the final prompt is composed. This is sampled-frame analysis, not full-video understanding or audio analysis. The browser tells you which media will be sent. Credentials stay on the server. An external VLM connection is optional; the built-in planner remains available without one.
 
-Automatic prompting in the editor and the backend planner shares `lib/h3-prompt-policy.json`. Enhanced outputs use the H3 six-section reference format, with `motion_transfer:` for motion mode and `body_swap:` for swap mode. References retain their exact indices and separate identity, outfit, object, style and environment roles. Requested scene replacements cover the entire environment while retaining the source performance and specified interaction props. Raw-prompt mode remains verbatim. See [prompt format and examples](docs/prompt-format.md).
+Automatic prompting in the editor and the backend planner share `lib/h3-prompt-policy.json`. The general enhanced format has six H3 reference sections, with `motion_transfer:` for motion mode and `body_swap:` for swap mode; Character Swap also has its v1.1 training-caption paths for single or marked subjects. References retain their exact indices and separate identity, outfit, object, style and environment roles. Requested scene replacements cover the entire environment while retaining the source performance and specified interaction props. Raw-prompt mode remains verbatim. See [prompt format and examples](docs/prompt-format.md).
 
 ## Reference contract
 
-- Guide Latents is the default method. TARA (experimental) uses the native video-reference channel with temporal alignment instead. Both motion LoRAs can select either method. How each path feeds the guide to H3: [docs/conditioning.md](docs/conditioning.md).
+- Guide Latents is the standard method for the guide-trained LoRA. Selecting the Motion Transfer TARA profile automatically selects TARA, which uses the native video-reference channel with temporal alignment. Both motion LoRAs can select either method, but the matching TARA LoRA + TARA method is recommended. How each path feeds the guide to H3: [docs/conditioning.md](docs/conditioning.md).
 - Up to eleven image slots correspond to native `<Picture N>` tokens.
 - The editor uses `@PictureN`; export converts to `<Picture N>` without renumbering.
 - Removing a reference leaves other slots intact. Reusing an empty slot intentionally replaces that slot's identity.
@@ -328,8 +377,9 @@ crinklypaper (Banodoco), see [docs/REFERENCES.md](docs/REFERENCES.md).
 
 ## Long videos and shots
 
-There is no length limit. Clips longer than 15 s are split into shots — at camera cuts, at every cut or at a fixed
-length (default 4.5 s, on H3's 17n+5 frame grid) — with context frames carried into the next shot, then joined in order.
+Longer clips are processed in shots — at camera cuts, at every cut or at a fixed length (default 4.5 s, on H3's
+17n+5 frame grid). Context frames can carry continuity within a scene; camera cuts start fresh. Results are joined
+in order without crossfade or automatic color matching. Length and resolution remain subject to RAM/VRAM limits.
 The approval screen shows every shot before rendering; a finished shot can be redone alone with a new seed. A guide
 upload can be up to 500 MB.
 
@@ -343,6 +393,11 @@ use the whole video. The scissors button reopens it. Only the selected interval 
 **History** lists every generation on this Henge (result, plan, settings, run again). **Export** saves the request and
 settings as JSON (no media) and **Import settings** restores them; reattach your own video and pictures.
 
+Result and history downloads include the result, guide/result comparison, comparison with references and the full
+bundle. On-demand comparison downloads show preparation and transfer status, with retry on failure.
+**ComfyUI workflow** exports a ZIP with a visual workflow, API graphs, exact inputs and instructions; each finished
+shot has its own package. See [portable workflow exports](docs/workflow-export.md).
+
 ## Community (work in progress)
 
 The **Community** tab is a preview: it ships a fixed set of examples (guide video, reference pictures and prompt) that
@@ -351,10 +406,15 @@ not available yet: it needs a unified system (accounts, uploads and moderation) 
 
 ## Development checks
 
+Use an isolated test data folder so checks do not touch your live job history:
+
 ```sh
-python -m unittest discover -s backend/tests -q
+HENGE_DATA_DIR=/tmp/henge-tests CUDA_VISIBLE_DEVICES='' python -m unittest discover -s backend/tests -q
 npm run build
 ```
+
+The optional MCP contract checks need the MCP SDK; without it they are skipped. Builds and CPU contract tests do
+not constitute a GPU generation or a quality/performance benchmark.
 
 ## Credits
 
@@ -362,9 +422,3 @@ All task LoRAs (Character Swap, Motion Transfer, TARA, Head Swap, Little More Sh
 ([alissonerdx](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI)). The moving plate and per-shot generated audio
 come from scripts shared by **crinklypaper** on the Banodoco Discord. Every model, library, idea and media source:
 [docs/REFERENCES.md](docs/REFERENCES.md); license texts: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-Optional experimental Sharpness mode: [Open-H3 Regenerate rank-16 setup and limits](docs/open-h3-regenerate.md). Requires the updated worker and the `regenerate` model profile.
-
-Motion Transfer ComfyUI examples: [native and Planner workflows for Guide Latents and TARA](workflows/README.md), with [flexible reference roles and modified Kitchen-kernel setup](docs/motion-transfer.md).
-
-Optional experimental inference: [pure temporal windows and segments → full-video refinement](docs/temporal-windows.md). Pure windows are available across generation modes; the two-stage strategy is available in Sharpness with Open-H3 Refiner + LMS. Both require an updated worker and are disabled by default.

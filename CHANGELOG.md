@@ -9,6 +9,16 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### README feature and deployment review
+
+- Updated the mode table, multi-subject TARA recommendation, opt-in mask guidance, fixed-seed controls and modified
+  Kitchen setup. Documented the default Open-H3 Refiner + LMS path, separate sampling passes and output limits.
+- Explained the built-in planner/assistant, optional Molmo, in-chat mode selection, MCP settings and portable exports.
+- Clarified hard shot joins, experimental window strategies, memory limits, model placement and separate UI/worker
+  updates. Removed absolute length/alignment promises and obsolete storage/startup estimates.
+- **Validation:** compared behavior with the implementation and feature guides; all 57 local README link/image
+  targets exist and the Markdown diff passes whitespace checks. Documentation only; no services or GPU models started.
+
 ### README introduction
 
 - Moved the workflow export link into the feature list so the README opens with Henge's introduction and demo.
