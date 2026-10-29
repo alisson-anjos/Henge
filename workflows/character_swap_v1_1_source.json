@@ -3548,7 +3548,7 @@
             "format": "video/h264-mp4",
             "frame_rate": 24,
             "workflow": "character_swap_first_pass_result_00011.png",
-            "fullpath": "/home/alissonerdx/tools/ComfyUI/output/character_swap_first_pass_result_00011-audio.mp4"
+            "fullpath": "character_swap_first_pass_result_00011-audio.mp4"
           }
         }
       },
@@ -3573,7 +3573,7 @@
             "format": "video/h264-mp4",
             "frame_rate": 24,
             "workflow": "character_swap_first_pass_result_00011.png",
-            "fullpath": "/home/alissonerdx/tools/ComfyUI/output/character_swap_first_pass_result_00011-audio.mp4"
+            "fullpath": "character_swap_first_pass_result_00011-audio.mp4"
           }
         }
       }
