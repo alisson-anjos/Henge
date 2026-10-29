@@ -7,3 +7,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Project update history
+
+For user-facing features, fixes, workflow changes or deployment changes, update `CHANGELOG.md` with
+its date, affected component, validation and known limitations. Distinguish code pushed to main,
+published Docker images, actual deployment and completed tests. Update pending results when they
+finish. Do not put credentials or private job data in the changelog.
