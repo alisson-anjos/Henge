@@ -9,6 +9,14 @@ Resultados de testes são descritos com seu alcance; testes CPU não substituem 
 
 ## 2026-10-29
 
+### Refazer um shot com o prompt ajustado
+
+- Ao refazer um shot, abre um editor com o prompt que ele usou; dá para ajustar só esse shot antes de gerar
+  de novo (ex.: "a câmera está de ponta-cabeça: o personagem aparece de ponta-cabeça"). Sem mudança no
+  texto, refaz como antes, só com outra seed. Os outros shots não mudam.
+- **Componente:** UI/bridge (`GET /jobs/{id}/shots/{n}/prompt`; `prompt` opcional no redo); não muda o worker.
+- **Testes:** leitura do prompt, validação e o prompt novo no nó de condicionamento do shot refeito.
+
 ### Sharpness: LMS opcional no Open-H3 Refiner
 
 - Novo switch "Somar o LMS ao refiner" (ligado por padrão, como antes) e controle de força do LMS no

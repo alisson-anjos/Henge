@@ -2251,6 +2251,10 @@ def redo_shot(job):
     if not path.is_file():raise ValueError(f'Shot {i+1} has no saved graph to run again')
     graph=json.loads(path.read_text());graph=graph.get('prompt',graph)
     seed=int(job['redo'].get('seed') or int(time.time())%2**31)
+    # A redo can carry its own prompt for this shot (e.g. "the camera is upside down here"); other shots keep theirs.
+    if job['redo'].get('prompt'):
+        for node_ in graph.values():
+            if node_['class_type']=='HengeH3Conditioning':node_['inputs']['prompt']=job['redo']['prompt']
     for key in ('11','35'):
         if key in graph and 'noise_seed' in graph[key]['inputs']:graph[key]['inputs']['noise_seed']=seed+(1000 if key=='35' else 0)
     shots,_=plan_shots(job);shot=shots[i]
@@ -2273,6 +2277,16 @@ def redo_shot(job):
     redone=dict(job.get('redone_shots') or {});redone[str(i+1)]=seed
     save(load(job['id']),redone_shots=redone,redo=None,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}?v={int(time.time())}" for p in pieces])
 
+@app.get('/jobs/{jid}/shots/{n}/prompt')
+def shot_prompt(jid:str,n:int):
+    """The prompt shot n (1-based) was rendered with, to adjust it before redoing the shot."""
+    load(jid);path=job_path(jid)/f'h3_segment_{n-1:03d}.api.json'
+    if not path.is_file():raise HTTPException(404,f'Shot {n} was not rendered')
+    graph=json.loads(path.read_text());graph=graph.get('prompt',graph)
+    prompt=next((node_['inputs'].get('prompt') for node_ in graph.values() if node_['class_type']=='HengeH3Conditioning'),None)
+    if not isinstance(prompt,str):raise HTTPException(404,f'Shot {n} has no editable prompt')
+    return {'shot':n,'prompt':prompt}
+
 @app.post('/jobs/{jid}/shots/{n}/redo')
 async def request_redo(jid:str,n:int,request:Request):
     """Redo shot n (1-based) of a finished job with a new seed (or the given one)."""
@@ -2281,7 +2295,8 @@ async def request_redo(jid:str,n:int,request:Request):
         job=load(jid)
         if job['status'] not in ('completed','failed'):raise HTTPException(409,'A shot can be redone once the job has finished')
         if not (job_path(jid)/f'h3_segment_{n-1:03d}.api.json').is_file():raise HTTPException(404,f'Shot {n} was not rendered')
-        seed=body.get('seed')
+        seed=body.get('seed');prompt=body.get('prompt')
         if seed is not None and (not isinstance(seed,int) or seed<0):raise HTTPException(400,'Invalid seed')
-        save(job,status='queued_redo',stage='queued',redo={'shot':n-1,'seed':seed},message=f'Shot {n} queued to be redone')
+        if prompt is not None and (not isinstance(prompt,str) or not prompt.strip() or len(prompt)>12000):raise HTTPException(400,'The shot prompt must be nonempty text of at most 12000 characters')
+        save(job,status='queued_redo',stage='queued',redo={'shot':n-1,'seed':seed,**({'prompt':prompt.strip()} if prompt else {})},message=f'Shot {n} queued to be redone')
     return public(load(jid))

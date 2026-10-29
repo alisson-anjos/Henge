@@ -236,13 +236,24 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
       setJobs(current => current.map(j => j.id === result.id ? result : j));
     } catch (e) {setError(e instanceof Error ? e.message : 'Unable to update the mask preview');} finally {setSubmitting(false);}
   }
-  async function redoShot(n: number) {
+  // Redo a shot: its prompt is loaded into an editor first, so it can be adjusted for that shot only.
+  const [redoDraft, setRedoDraft] = useState<{n: number; prompt: string; original: string} | null>(null);
+  async function openRedo(n: number) {
+    if (!job) return;
+    setError('');
+    try {
+      const response = await fetch(`/api/backend/jobs/${job.id}/shots/${n}/prompt`); const result = await readJson(response);
+      setRedoDraft({n, prompt: response.ok ? result.prompt : '', original: response.ok ? result.prompt : ''});
+    } catch {setRedoDraft({n, prompt: '', original: ''});}
+  }
+  async function redoShot(n: number, prompt?: string) {
     if (!job) return;
     setSubmitting(true); setError('');
     try {
-      const response = await fetch(`/api/backend/jobs/${job.id}/shots/${n}/redo`, {method: 'POST', headers: {'content-type': 'application/json'}, body: '{}'});
+      const body = prompt && prompt.trim() && prompt !== redoDraft?.original ? {prompt} : {};
+      const response = await fetch(`/api/backend/jobs/${job.id}/shots/${n}/redo`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body)});
       const result = await readJson(response); if (!response.ok) throw Error(result.detail || 'Unable to redo the shot');
-      setJobs(current => current.map(j => j.id === result.id ? result : j));
+      setJobs(current => current.map(j => j.id === result.id ? result : j)); setRedoDraft(null);
     } catch (e) {setError(e instanceof Error ? e.message : 'Unable to redo the shot');} finally {setSubmitting(false);}
   }
   async function action(name: 'approve' | 'cancel' | 'retry') {
@@ -388,7 +399,11 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
       {job.prepared_reference_urls?.length ? <div className="prepared-references job-section-plain"><strong className="job-subhead">{tr('Pictures sent to the model', 'Imagens enviadas ao modelo', 'Imágenes enviadas al modelo')}<small className="muted"> · {tr('background removed, 0.5 MP', 'sem fundo, 0,5 MP', 'sin fondo, 0,5 MP')}</small></strong><div>{job.prepared_reference_urls.map((url, i) => <img key={url} src={url} alt={`Picture ${i + 1} prepared`}/>)}</div></div> : null}
       {job.status === 'awaiting_approval' ? <ShotPlan jobId={job.id} editable lang={lang}/> : ['queued_render', 'running'].includes(job.status) && job.plan ? <details><summary>{tr('Guide shots', 'Trechos do guia', 'Tramos de la guía')}</summary><ShotPlan jobId={job.id} editable={false} lang={lang}/></details> : null}
       {job.shot_urls?.length && (job.total_segments || 0) > 1 ? <div className="shot-strip"><div className="label-row"><small className="muted">{tr('Finished shots', 'Trechos prontos', 'Tramos listos')} · {job.shot_urls.length}/{job.total_segments}</small><a className="quiet-button" href={`/api/backend/jobs/${job.id}/shots.zip`} download>{tr('Download all (zip)', 'Baixar todos (zip)', 'Descargar todos (zip)')}</a></div>
-        <div>{job.shot_urls.map((url, i) => <figure key={url}><ShotClip src={url} label={`${tr('Play shot', 'Tocar trecho', 'Reproducir tramo')} ${i + 1}`}/><figcaption><span className="mono">{tr('shot', 'trecho', 'tramo')} {i + 1}</span><a href={url} download aria-label={`${tr('Download shot', 'Baixar trecho', 'Descargar tramo')} ${i + 1}`}>↓</a>{['completed', 'failed'].includes(job.status) && <button type="button" className="shot-redo" disabled={submitting} title={tr('Render this shot again with a new seed; the other shots are kept', 'Gerar este trecho de novo com outra seed; os outros trechos ficam', 'Generar este tramo de nuevo con otra seed; los demás se mantienen')} aria-label={`${tr('Redo shot', 'Refazer trecho', 'Rehacer tramo')} ${i + 1}`} onClick={() => redoShot(i + 1)}>↻</button>}{job.redone_shots?.[String(i + 1)] !== undefined && <span className="shot-tag quiet" title={`seed ${job.redone_shots[String(i + 1)]}`}>{tr('redone', 'refeito', 'rehecho')}</span>}</figcaption></figure>)}</div></div> : null}
+        <div>{job.shot_urls.map((url, i) => <figure key={url}><ShotClip src={url} label={`${tr('Play shot', 'Tocar trecho', 'Reproducir tramo')} ${i + 1}`}/><figcaption><span className="mono">{tr('shot', 'trecho', 'tramo')} {i + 1}</span><a href={url} download aria-label={`${tr('Download shot', 'Baixar trecho', 'Descargar tramo')} ${i + 1}`}>↓</a>{['completed', 'failed'].includes(job.status) && <button type="button" className="shot-redo" disabled={submitting} title={tr('Render this shot again with a new seed; the other shots are kept', 'Gerar este trecho de novo com outra seed; os outros trechos ficam', 'Generar este tramo de nuevo con otra seed; los demás se mantienen')} aria-label={`${tr('Redo shot', 'Refazer trecho', 'Rehacer tramo')} ${i + 1}`} aria-pressed={redoDraft?.n === i + 1} onClick={() => redoDraft?.n === i + 1 ? setRedoDraft(null) : void openRedo(i + 1)}>↻</button>}{job.redone_shots?.[String(i + 1)] !== undefined && <span className="shot-tag quiet" title={`seed ${job.redone_shots[String(i + 1)]}`}>{tr('redone', 'refeito', 'rehecho')}</span>}</figcaption></figure>)}</div>
+        {redoDraft && <div className="shot-redo-editor"><label>{tr(`Prompt for shot ${redoDraft.n}`, `Prompt do trecho ${redoDraft.n}`, `Prompt del tramo ${redoDraft.n}`)}<textarea rows={6} maxLength={12000} value={redoDraft.prompt} onChange={e => setRedoDraft(d => d ? {...d, prompt: e.target.value} : d)}/></label>
+          <small className="muted">{tr('Only this shot changes; it runs again with a new seed. Say what the guide shows here, e.g. "the camera is upside down: the character appears upside down".', 'Só este trecho muda; ele roda de novo com outra seed. Diga o que o guia mostra aqui, p.ex. "a câmera está de ponta-cabeça: o personagem aparece de ponta-cabeça".', 'Solo cambia este tramo; se genera de nuevo con otra seed. Di lo que muestra la guía, p.ej. "la cámara está boca abajo: el personaje aparece boca abajo".')}</small>
+          <div className="shot-redo-actions"><button type="button" className="primary" disabled={submitting} onClick={() => void redoShot(redoDraft.n, redoDraft.prompt)}>{redoDraft.prompt.trim() && redoDraft.prompt !== redoDraft.original ? tr('Redo with this prompt', 'Refazer com este prompt', 'Rehacer con este prompt') : tr('Redo with a new seed', 'Refazer com outra seed', 'Rehacer con otra seed')}</button><button type="button" className="quiet-button" onClick={() => setRedoDraft(null)}>{tr('Cancel', 'Cancelar', 'Cancelar')}</button></div></div>}
+        </div> : null}
       <div className="generation-actions">{job.status === 'awaiting_approval' && <button className="primary" disabled={submitting} onClick={() => action('approve')}>{tr('Generate video', 'Gerar vídeo', 'Generar vídeo')}</button>}
       {['failed', 'cancelled'].includes(job.status) && <button className="primary" disabled={submitting} onClick={() => action('retry')}>{tr('Retry', 'Tentar de novo', 'Reintentar')}</button>}
       {['failed', 'cancelled'].includes(job.status) && job.total_segments ? <a className="quiet-button" href={`/api/backend/jobs/${job.id}/workflow?stage=${(job.options?.temporal_windows as Record<string, unknown> | undefined)?.enabled && (job.options?.temporal_windows as Record<string, unknown>).scope === 'refiner_full' ? 'render_latest' : 'h3_segment_000'}`} download title={tr('API-format graph that ran in ComfyUI. Drag the file into ComfyUI to open it.', 'Grafo (formato API) que rodou no ComfyUI. Arraste o arquivo para dentro do ComfyUI para abrir.', 'Grafo (formato API) que se ejecutó en ComfyUI. Arrastra el archivo a ComfyUI para abrirlo.')}>{tr('ComfyUI workflow', 'Workflow do ComfyUI', 'Workflow de ComfyUI')}</a> : null}</div>
