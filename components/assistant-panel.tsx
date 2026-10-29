@@ -232,7 +232,8 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
                 const selected = await new Promise<'motion' | 'swap' | null>(resolve => setModeChoice({question: String(call.input.question || tr('Which mode would you like to use?', 'Qual modo você quer usar?', '¿Qué modo quieres usar?')), allPeople: call.input.all_people === true, resolve}));
                 if (!selected) {stop.current = true; return {text: JSON.stringify({cancelled: true, instruction: 'The user cancelled mode selection. Do not generate.'})};}
                 await controllerRef.current.run({id: call.id, name: 'set_mode', input: {mode: selected}});
-                return {text: JSON.stringify({selected_mode: selected, applied: true})};
+                if (selected === 'motion') await controllerRef.current.run({id: call.id, name: 'set_options', input: {options: {profile: 'motion_tara', conditioning_mode: 'tara'}}});
+                return {text: JSON.stringify({selected_mode: selected, ...(selected === 'motion' ? {profile: 'motion_tara', conditioning_mode: 'tara'} : {}), applied: true})};
               })()
               : call.name === 'confirm_cancel_job'
               ? await new Promise<StudioResult>(resolve => setApproval({question: String(call.input.question), approve: String(call.input.approve_label || tr('Yes, cancel', 'Sim, cancelar', 'Sí, cancelar')), decline: String(call.input.decline_label || tr('No, keep running', 'Não, continuar', 'No, continuar')), resolve: approved => resolve({text: JSON.stringify({approved, job_id: String(call.input.job_id)})})}))
@@ -292,8 +293,8 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         {pending.map((p, i) => <div key={'queued' + i} className="assistant-msg user queued">{p.text}<small className="muted">{tr('waiting · read at the next step', 'na fila · lida no próximo passo', 'en cola · se lee en el siguiente paso')}</small></div>)}
         {modeChoice && <div className="assistant-approval assistant-mode-choice" role="group" aria-label={tr('Choose replacement mode', 'Escolher modo de troca', 'Elegir modo de reemplazo')}>
           <p>{modeChoice.question}</p>
-          <small>{tr('Motion Transfer was trained to replace multiple subjects, including people, objects and vehicles.', 'Motion Transfer foi treinado para trocar vários sujeitos, incluindo pessoas, objetos e veículos.', 'Motion Transfer fue entrenado para reemplazar varios sujetos, incluidas personas, objetos y vehículos.')}</small>
-          <button type="button" className="primary" onClick={() => {modeChoice.resolve('motion'); setModeChoice(null);}}>Motion Transfer · {tr('recommended', 'recomendado', 'recomendado')}</button>
+          <small>{tr('Motion Transfer TARA was trained to replace multiple subjects, including people, objects and vehicles.', 'Motion Transfer TARA foi treinado para trocar vários sujeitos, incluindo pessoas, objetos e veículos.', 'Motion Transfer TARA fue entrenado para reemplazar varios sujetos, incluidas personas, objetos y vehículos.')}</small>
+          <button type="button" className="primary" onClick={() => {modeChoice.resolve('motion'); setModeChoice(null);}}>Motion Transfer TARA · {tr('recommended', 'recomendado', 'recomendado')}</button>
           {modeChoice.allPeople && <><button type="button" className="quiet-button" onClick={() => {modeChoice.resolve('swap'); setModeChoice(null);}}>Character Swap</button><small>{tr('An alternative when every subject is a person. It may work, but multiple reference assignments can be less reliable.', 'Alternativa quando todos os sujeitos são pessoas. Pode funcionar, mas a associação de várias referências pode ser menos confiável.', 'Alternativa cuando todos los sujetos son personas. Puede funcionar, pero la asignación de varias referencias puede ser menos fiable.')}</small></>}
           <button type="button" className="quiet-button" onClick={() => {modeChoice.resolve(null); setModeChoice(null);}}>{tr('Cancel', 'Cancelar', 'Cancelar')}</button>
         </div>}

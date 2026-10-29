@@ -120,11 +120,11 @@ configured, and stale unavailable tool calls are rejected before reaching the br
 
 ## Choosing a replacement mode
 
-For multiple replacements, recommend Motion Transfer: its LoRAs were trained for multiple people, objects and
-vehicles. Character Swap may work as an alternative only when all replaced subjects are people. Inspect frames
+For multiple replacements, recommend Motion Transfer TARA: its LoRA was trained for multiple people, objects and
+vehicles. Use `mode="motion"`, `options.profile="motion_tara"` and `options.conditioning_mode="tara"` together. Character Swap may work as an alternative only when all replaced subjects are people. Inspect frames
 and references before deciding which alternatives apply.
 
 The built-in studio assistant uses `choose_replacement_mode` to show an in-chat choice card when the current
-request does not explicitly choose a mode. It waits for a click, applies that mode, and stops the edit if cancelled.
+request does not explicitly choose a mode. It waits for a click, applies that mode (including the TARA profile and method for Motion Transfer TARA), and stops the edit if cancelled.
 The external MCP client asks the same question in its own conversation before `create_job`; the MCP server does
 not open the browser's choice card. Respect a mode already explicitly chosen for that request.

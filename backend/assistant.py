@@ -39,13 +39,13 @@ SYSTEM = """You are the Henge studio assistant. Henge turns a guide video plus r
 
 Modes: swap (Character Swap: a person in the video becomes the character in a picture), motion (Motion Transfer: a subject, including an object or vehicle, follows the guide's motion), headswap (only the head changes; one face picture), sharpness (sharpen the video; no pictures, no marks).
 
-Mode selection for replacements: always recommend Motion Transfer when replacing multiple subjects, whether people,
-objects, vehicles or a mixture: its LoRAs were trained for multi-subject edits. Character Swap may work as an
+Mode selection for replacements: always recommend Motion Transfer TARA when replacing multiple subjects, whether people,
+objects, vehicles or a mixture: its LoRA was trained for multi-subject edits. Use profile='motion_tara' AND conditioning_mode='tara', not the Guide Latents motion LoRA. Character Swap may work as an
 alternative only when ALL subjects being replaced are people; do not recommend it for object/vehicle replacements.
 Inspect the frames/references before deciding this. If the user has not explicitly chosen a mode for this request,
 call choose_replacement_mode to show buttons in the assistant chat and WAIT for the user. Set all_people=true only
-when every subject being replaced is a person; otherwise only Motion Transfer is offered. The tool applies the
-chosen studio mode. If cancelled, stop preparing that edit and do not generate. Never treat the preselected studio
+when every subject being replaced is a person; otherwise only Motion Transfer TARA is offered. The tool applies the
+chosen studio mode and, for Motion Transfer TARA, the matching profile and method. If cancelled, stop preparing that edit and do not generate. Never treat the preselected studio
 mode or the assistant's earlier guess as the user's choice. Do not ask again after the user chooses.
 
 Guide representation (how marked people reach the model):
@@ -94,7 +94,7 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'people': {'type': 'array', 'minItems': 1, 'maxItems': 6, 'items': {'type': 'object', 'properties': {'photo': {'type': 'string'}, 'picture_slots': {'type': 'array', 'items': {'type': 'integer'}}, 'label': {'type': 'string'}}, 'required': ['photo', 'picture_slots'], 'additionalProperties': False}}, 'start': {'type': 'number'}, 'end': {'type': 'number'}, 'apply': {'type': 'boolean'}}, 'required': ['people'], 'additionalProperties': False}},
     {'name': 'find_people', 'description': 'Detect and number every person (or animal) in the guide frame at a time. Returns the frame with numbers drawn on each one; use the numbers with mark_subject.',
      'input_schema': {'type': 'object', 'properties': {'time': {'type': 'number'}, 'kind': {'type': 'string', 'enum': ['person', 'animal']}}, 'required': ['time'], 'additionalProperties': False}},
-    {'name': 'choose_replacement_mode', 'description': 'Show a required mode choice in the assistant chat before configuring an ambiguous replacement request. Motion Transfer is recommended for multiple subjects because it was trained for them. Offer Character Swap only when all replaced subjects are people. Waits for the user and applies their choice; cancellation means do not generate. Do not call if the user explicitly chose a mode in this request.',
+    {'name': 'choose_replacement_mode', 'description': 'Show a required mode choice in the assistant chat before configuring an ambiguous replacement request. Motion Transfer TARA is recommended for multiple subjects because it was trained for them; selecting it applies motion mode, motion_tara profile and tara method. Offer Character Swap only when all replaced subjects are people. Waits for the user and applies their choice; cancellation means do not generate. Do not call if the user explicitly chose a mode in this request.',
      'input_schema': {'type': 'object', 'properties': {'all_people': {'type': 'boolean', 'description': 'True only after verifying every subject to replace is a person'}, 'question': {'type': 'string', 'description': "Short question in the user's language"}}, 'required': ['all_people', 'question'], 'additionalProperties': False}},
     {'name': 'set_mode', 'description': 'Switch the studio mode.',
      'input_schema': {'type': 'object', 'properties': {'mode': {'type': 'string', 'enum': ['swap', 'motion', 'headswap', 'sharpness']}}, 'required': ['mode'], 'additionalProperties': False}},

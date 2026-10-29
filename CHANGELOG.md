@@ -9,6 +9,16 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### TARA profile in the replacement choice
+
+- The recommended choice is explicitly Motion Transfer TARA for multiple people and objects. Selecting it applies
+  both the `motion_tara` LoRA profile and the `tara` conditioning method, rather than only changing the mode.
+- Updated the assistant, MCP instructions and localized guidance consistently; Character Swap remains a people-only
+  alternative. An explicitly requested Guide Latents workflow is not overridden.
+- **Validation:** production build, TypeScript and 11 assistant tests passed. Playwright checked the effective
+  profile/method after selection, people-only eligibility and cancellation. No generation was started.
+- **Deployment:** code on main; hosted UI/bridge deployment is required. No worker change.
+
 ### Replacement mode choice in the assistant
 
 - The assistant recommends Motion Transfer for multiple replacement subjects, including people, objects and vehicles,
