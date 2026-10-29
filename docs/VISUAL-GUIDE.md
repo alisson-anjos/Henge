@@ -3,7 +3,7 @@
 [Versão em português](pt-BR/VISUAL-GUIDE.md)
 
 In the studio, click **Tips** in the top bar. The guide is a static page shipped with Henge in `public/guides/` and
-served by your own instance at `/guides/index.html` (local, pod or Render); it needs no external service. A
+served by your own instance at `/guides/index.html` (local, pod or a hosted UI); it needs no external service. A
 Portuguese version is at `/guides/pt-BR/index.html`, and the studio opens it when the interface is in Portuguese.
 
 It includes real screenshots of the interface, tips on references and prompts, colour marks, TARA, seed,
@@ -61,5 +61,3 @@ Portuguese.
 
 `scripts/docs/check-guide.cjs` checks the studio's Tips link, the assets, internal links, enlarging, copying the
 prompt and the mobile layout. Use the same browser variables as the capture script.
-
-To update the hosted instance, see [Update on Render](RENDER.md).

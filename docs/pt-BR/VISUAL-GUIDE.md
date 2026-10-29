@@ -3,7 +3,7 @@
 [English version](../VISUAL-GUIDE.md)
 
 No estúdio, clique em **Dicas** no topo. O guia é estático, acompanha o Henge em `public/guides/` e é servido pela
-sua própria instância em `/guides/pt-BR/index.html` (local, pod ou Render); não exige um serviço externo.
+sua própria instância em `/guides/pt-BR/index.html` (local, pod ou UI hospedada); não exige um serviço externo.
 
 Inclui capturas reais da interface, dicas de referências e prompts, marcações por cor,
 TARA, seed, shots/vistas de costas, máscaras, revisão do plano, comparação de resultados,
@@ -63,5 +63,3 @@ Não capture configurações com credenciais nem publique exemplos privados sem 
 O roteiro `scripts/docs/check-guide.cjs` confere o link Dicas no estúdio, os 24 assets,
 os links internos, a ampliação, a cópia do prompt e o layout mobile. Use as mesmas
 variáveis de navegador do roteiro de captura.
-
-Para atualizar a instância hospedada, veja [Atualizar no Render](../RENDER.md) (em inglês).

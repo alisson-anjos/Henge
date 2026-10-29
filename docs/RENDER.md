@@ -1,4 +1,7 @@
-# Updating the UI on Render
+# Hosting the UI on Render
+
+Optional: run the Henge UI and bridge (`henge-ui` image) on [Render](https://render.com), with the GPU on RunPod
+Serverless (option C in the README).
 
 Render needs code or an image that has already been published. A commit that only exists locally does not show up
 in the remote service.
@@ -27,10 +30,7 @@ retried.
 2. Check which branch is connected to the service.
 3. Use **Manual Deploy → Deploy latest commit**, or wait for the configured auto-deploy.
 
-## What this update includes
-
-The visual guide with screenshots, the notices about prompts and TARA, the seed control and the bridge fixes are part
-of the UI image. The generation worker is a separate component.
+The generation worker is a separate component: updating `henge-ui` does not update it.
 
 Official references:
 

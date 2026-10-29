@@ -364,8 +364,8 @@ The `regenerate` model profile is optional and is not included in the default pr
 
 **Setting `HENGE_MODEL_PROFILES=regenerate` only on a Serverless worker does not download anything.**
 The download profile belongs on the fill pod; workers only read the populated volume.
-The bridge does not need reinstalling. If the UI is on Render, update `henge-ui` separately;
-see [RENDER.md](RENDER.md).
+The bridge does not need reinstalling. If the UI is hosted separately (e.g. [on Render](RENDER.md)), update its `henge-ui`
+image too.
 
 For required filenames and native nodes, see [Open-H3 setup and limits](open-h3-regenerate.md).
 If the option remains disabled, inspect `regenerate.missing_nodes` and `regenerate.missing_models`
@@ -376,8 +376,8 @@ missing dependencies even after the volume has been updated.
 
 “The bridge restarted during this job” is written when the UI/bridge starts and finds an unfinished
 job. It does not by itself establish a GPU failure: compare the saved RunPod request status with
-Render's service logs/events. A completed worker request followed by a bridge restart can mean the
-failure happened while downloading, joining or exporting its result. Check Render for OOM/SIGKILL
+the logs/events of the host running the UI/bridge. A completed worker request followed by a bridge restart can mean the
+failure happened while downloading, joining or exporting its result. Check that host for OOM/SIGKILL
 and deployment/restart events before assigning a cause.
 
 Shot joining now reads only the overlapping frames as thumbnails (longest side at most 256 pixels)
@@ -387,7 +387,7 @@ keeps the existing frame counts, removes the overlap once, and uses no crossfade
 temporary output files before replacing the original pieces. This avoids keeping entire RGB shots
 and several full-video float copies in the bridge's RAM.
 
-This fix belongs to the **Render UI/bridge image**, not the RunPod GPU worker. Deploy the updated UI
+This fix belongs to the **UI/bridge image**, not the RunPod GPU worker. Deploy the updated UI
 image after active jobs finish. Updating only the RunPod template does not change bridge-side joining.
 A Retry reuses an existing plan but can submit render graphs again; do not assume every completed
 GPU request will be recovered automatically after a bridge restart.

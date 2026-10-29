@@ -4,8 +4,6 @@
 few pictures, and it swaps characters, transfers motion, swaps heads or sharpens the video — locally, on a RunPod pod
 or on RunPod Serverless.
 
-[Update the UI on Render](docs/RENDER.md).
-
 [Changelog by date](CHANGELOG.md) — changes, tests and publish/deploy status.
 
 [![Watch the Henge 2-minute demo — studio interface](docs/images/demo/studio.jpg)](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-demo-under-2min.mp4)
@@ -224,6 +222,7 @@ Details, costs and troubleshooting: [docs/SERVERLESS.md](docs/SERVERLESS.md).
 - **C**: pull the new `henge-ui` image; for the workers, `ENDPOINT_ID=<id> TEMPLATE_ID=<id>
   IMAGE=ghcr.io/alisson-anjos/henge:sha-<commit> scripts/runpod_serverless.sh` switches the image and drains
   the old workers.
+- **UI hosted on Render** (optional): see [Hosting the UI on Render](docs/RENDER.md).
 
 Images are built by GitHub Actions and published to GitHub Container Registry:
 `ghcr.io/alisson-anjos/henge` (everything; the serverless worker uses it with `HENGE_ROLE=worker`) and

@@ -24,7 +24,7 @@ their scope; CPU tests do not replace generation with the real models.
 
 ### Documentation in English; optional Portuguese guide
 
-- All repository documentation is in English: README, changelog, temporal windows, Open-H3, Render, RunPod and the
+- All repository documentation is in English: README, changelog, temporal windows, Open-H3, RunPod and the
   visual guide (`docs/VISUAL-GUIDE.md`, formerly `docs/GUIA-VISUAL.md`).
 - The in-app guide (**Tips**) is in English at `/guides/index.html`; the Portuguese version is kept as an option at
   `/guides/pt-BR/index.html` (and `docs/pt-BR/VISUAL-GUIDE.md`). The studio opens the Portuguese guide when the
@@ -148,7 +148,7 @@ their scope; CPU tests do not replace generation with the real models.
 - Exposed seed controls to compare generations with reproducible settings.
 - Kept the assembly without crossfade after a favourable visual comparison.
 - Added the visual guide, tips with Playwright screenshots and instructions to update the UI on Render.
-- [Visual guide](docs/VISUAL-GUIDE.md) · [Updating on Render](docs/RENDER.md).
+- [Visual guide](docs/VISUAL-GUIDE.md).
 
 ## Keeping this log
 

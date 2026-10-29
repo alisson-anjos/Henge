@@ -24,7 +24,7 @@ of the default `HENGE_MODEL_PROFILES`. On a **regular pod** created before that,
 
 On **Serverless**, that variable on the worker does not download weights: top up the volume with a temporary pod
 and update the workers. See [the steps for an existing endpoint](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint)
-and [the required files/nodes](open-h3-regenerate.md). Updating only Render/the bridge does not enable the method.
+and [the required files/nodes](open-h3-regenerate.md). Updating only the UI/bridge does not enable the method.
 
 ## 1. Image
 
