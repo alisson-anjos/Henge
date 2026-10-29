@@ -30,11 +30,23 @@ def fetch(url):
     return response
 
 
+def latest_published():
+    """The newest main commit whose Docker images finished building: updating to a newer commit is not possible yet."""
+    runs=fetch(API+'/actions/workflows/docker.yml/runs?branch=main&status=success&per_page=1').json().get('workflow_runs') or []
+    sha=runs[0].get('head_sha') if runs else None
+    return sha if isinstance(sha,str) and re.fullmatch(r'[0-9a-f]{40}',sha) else None
+
+
+def docs_only(path):
+    """Changes that ship nothing to a running Henge (the in-app changelog is read from GitHub anyway)."""
+    return path.endswith('.md') or path.startswith('docs/')
+
+
 def snapshot():
     with LOCK:
         if CACHE and time.monotonic()-CACHE['at']<300:return CACHE['data']
         current=current_version()
-        data={'current':current,'latest':None,'update_available':False,'check_ok':False,
+        data={'current':current,'latest':None,'published':None,'update_available':False,'check_ok':False,
               'changelog':(ROOT/'CHANGELOG.md').read_text()[:24000],
               'changelog_url':f'https://github.com/{REPO}/blob/main/CHANGELOG.md',
               'update_url':f'https://github.com/{REPO}#updating','catalog_revision':None,
@@ -47,9 +59,14 @@ def snapshot():
             if not isinstance(manifest.get('models'),list):raise ValueError('Invalid model catalog')
             data.update(latest=latest,catalog_revision=latest,manifest=manifest,
                         changelog=fetch(f'{RAW}/{latest}/CHANGELOG.md').text[:24000],check_ok=True)
-            if current and current!=latest:
-                comparison=fetch(f'{API}/compare/{current}...{latest}').json()
-                data['update_available']=comparison.get('status')=='ahead'
+            # Offer an update only to an image that exists and that changes something besides documentation.
+            try:published=latest_published()
+            except (requests.RequestException,ValueError,KeyError,TypeError):published=None
+            target=published or latest;data['published']=target
+            if current and current!=target:
+                comparison=fetch(f'{API}/compare/{current}...{target}').json()
+                files=[f.get('filename','') for f in comparison.get('files') or []]
+                data['update_available']=comparison.get('status')=='ahead' and (not files or not all(map(docs_only,files)))
         except (requests.RequestException,ValueError,KeyError,TypeError):pass
         revision=data.get('latest') or 'main'
         data['changelog']=re.sub(r'\]\((?!https?://|#)([^)]+)\)',lambda match: f'](https://github.com/{REPO}/blob/{revision}/'+match[1]+')',data['changelog'])

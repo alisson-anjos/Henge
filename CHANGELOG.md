@@ -91,7 +91,9 @@ their scope; CPU tests do not replace generation with the real models.
   the installed files. **Install model** downloads explicitly into the local ComfyUI (`COMFY_ROOT`) or, through the
   existing RunPod Serverless endpoint, straight into its shared volume, with progress, cancel and resumable retry;
   no temporary pod. Installs and generations block each other. Older workers need one image update.
-- The footer shows the running version, **What's new** and a notice when a newer version is published.
+- The footer shows the running version, **What's new** and a notice when a newer version is published. The notice
+  compares with the newest commit whose Docker images finished building (GitHub Actions) and ignores commits that
+  only change documentation; it used to point at main's latest commit, even while its image was still building.
 - Docs: [Install models and check updates](docs/models-and-updates.md); the in-app guide has a Models section.
 - **Components:** UI/bridge and worker image (model-install request). **Tests:** installer, install API and update
   checks; Playwright on desktop and 420 px (Settings gear, Models tab, footer) with downloads blocked. No real

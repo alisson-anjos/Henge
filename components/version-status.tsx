@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 import type {Language} from '../lib/design-copy';
 import Markdown from '../lib/markdown';
 
-type Updates={worker_current?:string|null;current:string|null;latest:string|null;check_ok:boolean;update_available:boolean;changelog:string;changelog_url:string;update_url:string};
+type Updates={worker_current?:string|null;current:string|null;latest:string|null;published?:string|null;check_ok:boolean;update_available:boolean;changelog:string;changelog_url:string;update_url:string};
 export default function VersionStatus({lang}:{lang:Language}){
   const tr=(en:string,pt:string,es:string)=>({en,pt,es})[lang];
   const [data,setData]=useState<Updates|null>(null);
@@ -13,7 +13,7 @@ export default function VersionStatus({lang}:{lang:Language}){
   },[]);
   return <div className="version-status">
     <span className="mono">{tr('Version','Versão','Versión')} {data?.current?data.current.slice(0,7):tr('unknown','desconhecida','desconocida')}</span>
-    {data?.update_available&&<a className="version-update" href={data.update_url} target="_blank" rel="noreferrer">{tr('New version available','Nova versão disponível','Nueva versión disponible')} · {data.latest?.slice(0,7)}</a>}
+    {data?.update_available&&<a className="version-update" href={data.update_url} target="_blank" rel="noreferrer">{tr('New version available','Nova versão disponível','Nueva versión disponible')} · {(data.published||data.latest)?.slice(0,7)}</a>}
     {data&&<details className="version-changelog"><summary>{tr('What’s new','Novidades','Novedades')}</summary><div className="version-changelog-body">
       <p>{tr('Current version','Versão atual','Versión actual')}: <code>{data.current?.slice(0,7)||'?'}</code> · {tr('Latest code','Código mais recente','Código más reciente')}: <code>{data.latest?.slice(0,7)||'?'}</code></p>
       {data.worker_current&&<p>Worker: <code>{data.worker_current.slice(0,7)}</code></p>}
