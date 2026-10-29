@@ -1041,25 +1041,47 @@ def generate(job):
 
 JOIN_OVERLAP=8
 
-def read_frames(path):
+def read_overlap_frames(path,start,count,width,height):
+    """Decode only small overlap samples into Python; never an entire generated shot."""
     import numpy as np
-    m=probe(path);w,h=m['width'],m['height']
-    raw=subprocess.run(['ffmpeg','-v','error','-i',str(path),'-f','rawvideo','-pix_fmt','rgb24','-'],capture_output=True,check=True).stdout
-    return np.frombuffer(raw,np.uint8).reshape(-1,h,w,3)
+    scale=min(1.,256/max(width,height));w=max(1,round(width*scale));h=max(1,round(height*scale))
+    raw=subprocess.run(['ffmpeg','-v','error','-threads','1','-i',str(path),'-vf',f'trim=start_frame={start}:end_frame={start+count},setpts=PTS-STARTPTS,scale={w}:{h}',
+                        '-frames:v',str(count),'-threads','1','-f','rawvideo','-pix_fmt','rgb24','-'],capture_output=True,check=True).stdout
+    frames=np.frombuffer(raw,np.uint8).reshape(-1,h,w,3)
+    if len(frames)!=count:raise ValueError('Could not read the complete shot overlap')
+    return frames
 
-def write_frames(frames,path):
-    h,w=frames.shape[1:3]
-    subprocess.run(['ffmpeg','-v','error','-f','rawvideo','-pix_fmt','rgb24','-s',f'{w}x{h}','-r','24','-i','-','-c:v','libx264','-threads','2','-crf','17',
-                    '-pix_fmt','yuv420p','-movflags','+faststart','-y',str(path)],input=frames.tobytes(),check=True)
 
 def seam_join(previous,piece,dup):
-    """Join overlapping windows at their closest matching frame without a dissolve."""
-    from video_join import join_overlap
-    a=read_frames(previous);b=read_frames(piece)
-    if len(a)<dup or len(b)<=dup or a.shape[1:]!=b.shape[1:]:return
-    a,b=join_overlap(a,b,dup)
-    write_frames(a,previous)
-    write_frames(b,piece)
+    """Hard seam and colour match with bounded RAM, including for long/high-resolution shots.
+
+    Only <=8 thumbnail frames per side enter Python. FFmpeg streams the actual frames,
+    replaces the outgoing tail at the seam, and removes the duplicated incoming overlap.
+    """
+    from video_join import overlap_match
+    previous=Path(previous);piece=Path(piece);a=probe(previous);b=probe(piece);na=frame_count(previous);nb=frame_count(piece)
+    if dup<=0:return
+    if na<dup or nb<=dup or (a['width'],a['height'])!=(b['width'],b['height']):raise ValueError('Invalid shot overlap')
+    if dup>JOIN_OVERLAP:raise ValueError('Shot overlap exceeds the bounded join limit')
+    tail=read_overlap_frames(previous,na-dup,dup,a['width'],a['height']);head=read_overlap_frames(piece,0,dup,b['width'],b['height'])
+    seam,mean_h,gain,mean_t=overlap_match(tail,head)
+    lut=':'.join(f"{channel}='clip(round((val-{float(mean_h[i]):.9g})*{float(gain[i]):.9g}+{float(mean_t[i]):.9g}),0,255)'" for i,channel in enumerate(('r','g','b')))
+    prefix=na-dup+seam
+    filters=f'[1:v]format=rgb24,lutrgb={lut},split=2[head][tail];[head]trim=start_frame={seam}:end_frame={dup},setpts=PTS-STARTPTS[h];[tail]trim=start_frame={dup},setpts=PTS-STARTPTS[incoming]'
+    if prefix:
+        filters+=f';[0:v]trim=end_frame={prefix},setpts=PTS-STARTPTS,format=rgb24[p];[p][h]concat=n=2:v=1:a=0[previous]'
+    else:filters+=';[h]null[previous]'
+    pa=previous.with_name(previous.stem+'.joining.mp4');pb=piece.with_name(piece.stem+'.joining.mp4')
+    args=['ffmpeg','-v','error','-threads','1','-i',str(previous),'-threads','1','-i',str(piece),'-filter_complex_threads','1','-filter_complex',filters]
+    for label,dest in (('previous',pa),('incoming',pb)):
+        args+=['-map',f'[{label}]','-an','-c:v','libx264','-threads','2','-crf','17','-pix_fmt','yuv420p','-movflags','+faststart','-y',str(dest)]
+    try:
+        run(args)
+        if frame_count(pa)!=na or frame_count(pb)!=nb-dup:raise ValueError('Shot join changed the timeline length')
+        pa.replace(previous);pb.replace(piece)
+    finally:
+        pa.unlink(missing_ok=True);pb.unlink(missing_ok=True)
+
 
 def make_plate(job):
     """Moving plate: the selected interval with its background replaced by the uploaded picture, moving with the

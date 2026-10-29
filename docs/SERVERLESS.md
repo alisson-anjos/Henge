@@ -371,3 +371,22 @@ For required filenames and native nodes, see [Open-H3 setup and limits](open-h3-
 If the option remains disabled, inspect `regenerate.missing_nodes` and `regenerate.missing_models`
 in the bridge's `/health` response (through the UI: `/api/backend/health`). An old inventory can report
 missing dependencies even after the volume has been updated.
+
+## Bridge restarts between shots
+
+“The bridge restarted during this job” is written when the UI/bridge starts and finds an unfinished
+job. It does not by itself establish a GPU failure: compare the saved RunPod request status with
+Render's service logs/events. A completed worker request followed by a bridge restart can mean the
+failure happened while downloading, joining or exporting its result. Check Render for OOM/SIGKILL
+and deployment/restart events before assigning a cause.
+
+Shot joining now reads only the overlapping frames as thumbnails (longest side at most 256 pixels)
+to select the hard seam and colour transform. FFmpeg streams the full-resolution frames. The join
+keeps the existing frame counts, removes the overlap once, and uses no crossfade. It verifies both
+temporary output files before replacing the original pieces. This avoids keeping entire RGB shots
+and several full-video float copies in the bridge's RAM.
+
+This fix belongs to the **Render UI/bridge image**, not the RunPod GPU worker. Deploy the updated UI
+image after active jobs finish. Updating only the RunPod template does not change bridge-side joining.
+A Retry reuses an existing plan but can submit render graphs again; do not assume every completed
+GPU request will be recovered automatically after a bridge restart.
