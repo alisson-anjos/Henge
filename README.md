@@ -4,8 +4,6 @@
 few pictures, and it swaps characters, transfers motion, swaps heads or sharpens the video — locally, on a RunPod pod
 or on RunPod Serverless.
 
-[Visual usage guide](docs/VISUAL-GUIDE.md) · In the studio, open **Tips** for screenshots and practical tips.
-
 [Update the UI on Render](docs/RENDER.md).
 
 [Changelog by date](CHANGELOG.md) — changes, tests and publish/deploy status.
