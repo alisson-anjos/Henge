@@ -9,6 +9,17 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Molmo2 on the Serverless worker; assistant keeps the original guide
+
+- Without a local Molmo2, the bridge runs Molmo2 tasks (find people from photos, point at targets, questions about
+  the video, split points) on the generation backend through the `HengeMolmo` node, as hidden jobs. The assistant
+  gets its Molmo video tools whenever either place is available. The first backend request downloads the ~14 GB
+  checkpoint to the volume.
+- The assistant keeps the original guide by default, also with several people: it marks performers to bind them
+  and suggests a color guide only when asked or after identities got mixed up; it never switches to mask by itself.
+- **Component:** UI/bridge; the worker image already has the node (`sha-750cf58`). **Tests:** task file staging,
+  backend routing and availability. Not yet run against the live worker.
+
 ### Character Swap prompts: cleaner reference descriptions and the guide's style
 
 - Reference descriptions no longer carry the checklist echoes a VLM returns for attributes that do not apply ("no

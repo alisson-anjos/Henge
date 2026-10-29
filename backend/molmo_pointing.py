@@ -75,6 +75,36 @@ def configured():
     return python, model
 
 
+# Set by the bridge: run one task on the generation backend (serverless worker or remote ComfyUI, node HengeMolmo)
+# when this machine has no Molmo2 of its own. REMOTE_READY() -> bool; REMOTE_RUNNER(request) -> the result JSON text.
+REMOTE_READY = None
+REMOTE_RUNNER = None
+
+
+def local_configured():
+    try:
+        configured(); return True
+    except ValueError:
+        return False
+
+
+def location():
+    """Where Molmo2 runs: 'local', 'backend' or None (turned off or nowhere to run)."""
+    if (SETTINGS() or {}).get('enabled') is False: return None
+    if local_configured(): return 'local'
+    try:
+        return 'backend' if REMOTE_RUNNER and REMOTE_READY and REMOTE_READY() else None
+    except Exception:
+        return None
+
+
+def run_remote(args):
+    """The same task as the local worker, run on the backend; writes the result where the local worker would."""
+    request = _cli_to_request(args); output = Path(request.pop('output'))
+    request['max_crops'] = 4 if (SETTINGS() or {}).get('image_quality') == 'fast' else 8
+    output.write_text(REMOTE_RUNNER(request))
+
+
 def release():
     """Unload a warm Molmo2 (before ComfyUI uses this GPU, or after its idle time)."""
     with LOCK:
@@ -96,6 +126,8 @@ def _cli_to_request(args):
 
 
 def run_worker(args, request_id=None):
+    if not local_configured() and location() == 'backend':
+        return run_remote(args)
     python, model = configured()
     cfg = SETTINGS() or {}
     crops = 4 if cfg.get('image_quality') == 'fast' else 8
@@ -225,10 +257,7 @@ def ask_video(video, question, start, end, work, fps=2., request_id=None):
 
 
 def available():
-    try:
-        configured(); return True
-    except ValueError:
-        return False
+    return location() is not None
 
 
 def detect_cuts(video, start, end, threshold=.3):

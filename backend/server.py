@@ -1554,7 +1554,7 @@ async def save_connection(request:Request):
 @app.get('/jobs')
 def list_jobs():
     # Newest first by creation: a retried or long-running job keeps its place instead of jumping to the top.
-    jobs=[job for job in (json.loads(p.read_text()) for p in JOBS.glob('*/job.json')) if (job.get('request') or {}).get('mode') not in ('frame_edit','adapt_prepare','find_people','translate','assistant')]
+    jobs=[job for job in (json.loads(p.read_text()) for p in JOBS.glob('*/job.json')) if (job.get('request') or {}).get('mode') not in ('frame_edit','adapt_prepare','find_people','molmo','translate','assistant')]
     return [public(job) for job in sorted(jobs,key=lambda job:job.get('created',0),reverse=True)][:50]
 
 @app.post('/jobs')
@@ -2191,10 +2191,40 @@ async def assistant_models(request:Request):
     except Exception as e:raise HTTPException(400,str(e)[:300])
 
 @app.get('/assistant/pointing')
+def molmo_on_backend():
+    """A serverless worker or a ComfyUI on another machine that has the HengeMolmo node (and the image's Molmo2 env)."""
+    if not (REMOTE or urlsplit(URL).hostname not in ('127.0.0.1','localhost','::1')):return False
+    try:return 'HengeMolmo' in comfy_info()
+    except Exception:return False
+
+def run_molmo_remote(task):
+    """One Molmo2 task on the generation backend, as a hidden job like find_people. Files already staged for a job
+    (the guide video) are sent by their staged path, so the serverless volume keeps them between calls."""
+    jid=uuid.uuid4().hex;inp=INPUT/'henge'/jid;inp.mkdir(parents=True);job_path(jid).mkdir(parents=True)
+    def staged(path):
+        path=Path(path).resolve()
+        if path.is_relative_to((INPUT/'henge').resolve()):return path.relative_to(INPUT.resolve()).as_posix()
+        dest=inp/f'{len(list(inp.iterdir())):02d}_{path.name}';shutil.copyfile(path,dest);return dest.relative_to(INPUT).as_posix()
+    spec={k:v for k,v in task.items() if k not in ('video','refs','keys') and v is not None}
+    if task.get('video'):spec['video']=staged(task['video'])
+    if task.get('refs'):spec['refs']=[staged(r) for r in task['refs']]
+    if task.get('keys'):spec['keys']=[{**k,'path':staged(k['path'])} for k in json.loads(Path(task['keys']).read_text())]
+    job={'id':jid,'created':time.time(),'status':'running','stage':'molmo','progress':0,'request':{'mode':'molmo'},'options':{},'message':'Molmo2 on the backend'};save(job)
+    try:
+        outputs=execute_graph(job,{'1':{'class_type':'HengeMolmo','inputs':{'task':json.dumps(spec)}}},'molmo')
+        text=(outputs.get('1',{}).get('henge_molmo') or [None])[0]
+        if not text:raise RuntimeError('The backend returned no Molmo2 result')
+        save(job,status='completed',stage='complete',progress=1);return text
+    except Exception as e:
+        save(job,status='failed',error=str(e)[:1800]);raise
+
+molmo_pointing.REMOTE_READY=molmo_on_backend
+molmo_pointing.REMOTE_RUNNER=run_molmo_remote
+
 def pointing_status():
     model=Path(molmo_settings().get('model_path') or os.environ.get('HENGE_MOLMO_MODEL',''))
-    python=Path(os.environ.get('HENGE_MOLMO_PYTHON',''))
-    return {'configured':molmo_settings().get('enabled',True) and python.is_file() and (model/'config.json').is_file(),'enabled':molmo_settings().get('enabled',True),
+    location=molmo_pointing.location()
+    return {'configured':location is not None,'location':location,'enabled':molmo_settings().get('enabled',True),
             'model':model.name if (model/'config.json').is_file() else None, 'max_shot_seconds':30,'match_people':{'max_people':molmo_pointing.MAX_PEOPLE,'max_seconds':molmo_pointing.MAX_MATCH_SECONDS}}
 
 @app.post('/assistant/point-video')
@@ -2207,7 +2237,7 @@ async def point_video(request:Request):
             molmo_pointing.validate_request(query,start,end)
         except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
         if not hasattr(video,'read'):raise HTTPException(400,'Send the guide video')
-        if not pointing_status()['configured']:raise HTTPException(409,'Configure HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL; see docs/molmo-pointing.md')
+        if not pointing_status()['configured']:raise HTTPException(409,'Molmo2 is not available: configure it locally (HENGE_MOLMO_PYTHON, HENGE_MOLMO_MODEL) or update the backend worker; see docs/molmo-pointing.md')
         folder=ROOT/'pointing'/uuid.uuid4().hex;folder.mkdir(parents=True)
         source=folder/'source.mp4'
         size=0
@@ -2236,7 +2266,7 @@ async def ask_video(request:Request):
             molmo_pointing.validate_ask(question,start,end)
         except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
         if not hasattr(video,'read'):raise HTTPException(400,'Send the guide video')
-        if not pointing_status()['configured']:raise HTTPException(409,'Configure HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL; see docs/molmo-pointing.md')
+        if not pointing_status()['configured']:raise HTTPException(409,'Molmo2 is not available: configure it locally (HENGE_MOLMO_PYTHON, HENGE_MOLMO_MODEL) or update the backend worker; see docs/molmo-pointing.md')
         folder=ROOT/'pointing'/uuid.uuid4().hex;folder.mkdir(parents=True);source=folder/'source.mp4';size=0
         with source.open('wb') as output:
             while chunk:=await video.read(1024*1024):
@@ -2267,7 +2297,7 @@ async def suggest_cuts(request:Request):
             if not 1<=longest<=15:raise ValueError('max_seconds must be between 1 and 15')
         except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
         if not hasattr(video,'read'):raise HTTPException(400,'Send the guide video')
-        if not pointing_status()['configured']:raise HTTPException(409,'Configure HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL; see docs/molmo-pointing.md')
+        if not pointing_status()['configured']:raise HTTPException(409,'Molmo2 is not available: configure it locally (HENGE_MOLMO_PYTHON, HENGE_MOLMO_MODEL) or update the backend worker; see docs/molmo-pointing.md')
         folder=ROOT/'pointing'/uuid.uuid4().hex;folder.mkdir(parents=True);source=folder/'source.mp4';size=0
         with source.open('wb') as output:
             while chunk:=await video.read(1024*1024):
@@ -2309,7 +2339,7 @@ async def match_people(request:Request):
             molmo_pointing.validate_match(len(photos),start,end)
         except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
         if not hasattr(video,'read'):raise HTTPException(400,'Send the guide video')
-        if not pointing_status()['configured']:raise HTTPException(409,'Configure HENGE_MOLMO_PYTHON and HENGE_MOLMO_MODEL; see docs/molmo-pointing.md')
+        if not pointing_status()['configured']:raise HTTPException(409,'Molmo2 is not available: configure it locally (HENGE_MOLMO_PYTHON, HENGE_MOLMO_MODEL) or update the backend worker; see docs/molmo-pointing.md')
         folder=ROOT/'pointing'/uuid.uuid4().hex;folder.mkdir(parents=True)
         source=folder/'source.mp4';size=0
         with source.open('wb') as output:

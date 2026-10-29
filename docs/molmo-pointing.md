@@ -1,9 +1,17 @@
-# Finding people with Molmo2 (optional, local)
+# Finding people with Molmo2 (optional)
 
-Henge can use [Molmo2](https://huggingface.co/collections/allenai/molmo2) on the bridge machine to find people
-in the guide video and propose the marks that SAM tracks. The studio currently routes these tools to a separate Python environment on the bridge machine.
-By default it unloads after each request; settings can keep it warm. A worker-side `HengeMolmo` node
-is available as groundwork, but routing studio tools to it is not implemented yet.
+Henge can use [Molmo2](https://huggingface.co/collections/allenai/molmo2) to find people in the guide video and
+propose the marks that SAM tracks. It runs where it can:
+
+- **Local:** with `HENGE_MOLMO_PYTHON` and `HENGE_MOLMO_MODEL` set on the bridge machine, a separate Python
+  environment runs it there. By default it unloads after each request; settings can keep it warm.
+- **Backend:** without a local Molmo2, on RunPod Serverless or a ComfyUI on another machine with the Henge image,
+  each request runs on the worker through the `HengeMolmo` node, as a hidden job. The worker unloads ComfyUI's
+  models first. The first request downloads the checkpoint (`tollea1234/Molmo2-8B-FP8`, about 14 GB) to the
+  models volume, so it takes several minutes once; GPU time is billed per request. Keeping it warm and cancelling a
+  running request apply only to the local mode.
+
+Settings → Molmo2 shows where it runs; turning it off there disables both.
 
 Two tools (studio assistant and MCP):
 

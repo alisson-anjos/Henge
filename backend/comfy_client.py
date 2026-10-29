@@ -18,6 +18,9 @@ def referenced_files(graph,staging):
     for node in graph.values():
         for name,value in node['inputs'].items():
             values=json.loads(value) if (node['class_type'],name) in LIST_INPUTS and isinstance(value,str) else [value]
+            if (node['class_type'],name)==('HengeMolmo','task') and isinstance(value,str):
+                # A Molmo2 task names its files inside the JSON: the video, the reference photos and the shot keyframes.
+                task=json.loads(value);values=[task.get('video'),*(task.get('refs') or []),*(k.get('path') for k in task.get('keys') or [])]
             for v in values:
                 if isinstance(v,str) and v.startswith('henge/') and (staging/v).is_file() and v not in found:found.append(v)
     return found
