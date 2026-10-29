@@ -9,6 +9,18 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Assistant: temporal windows, references and Pika
+
+- "Temporal" / "pure temporal window" requests now enable the processing strategy (`temporal_windows`) and keep the
+  mode, pictures, marks and prompt; the assistant had cleared marks and tried to generate without references.
+- The assistant no longer removes pictures or clears marks unless the user asks; on a picture-numbering error it
+  fixes the prompt or asks the user instead of deleting references. Its notes now say Pika is the default turbo and
+  windows are the Sharpness default.
+- Images attached in the assistant chat fill Picture 1, 2, 3… in order; they could land after empty slots expected
+  by a restored prompt, which the bridge then rejected.
+- **Component:** UI/bridge (assistant prompt, studio). **Tests:** Playwright: two chat images load as Picture 1 and 2.
+  Assistant behaviour itself not re-run with a live model.
+
 ### Pika H3 Flex is the default turbo
 
 - Character Swap, Motion Transfer/TARA, Head Swap and the Sharpness first pass default to Pika H3 Flex with its

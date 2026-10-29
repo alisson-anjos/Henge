@@ -550,7 +550,8 @@ export default function Studio() {
   const assistantController: StudioController = {state: studioState, run: runStudioCall, remember: files => files.forEach(file => explained.current.set(file.name, file)), ingest: async files => {
     const images=files.filter(file => file.type.startsWith('image/')), videos=files.filter(file => file.type.startsWith('video/'));
     if (videos.length) addVideo([videos[0]], true);
-    const added = images.length ? addPictures(images) : 0;
+    // Chat images start a new request: fill Picture 1, 2, 3… in attachment order, not the slots a restored prompt expected.
+    const added = images.length ? addPictures(images, true) : 0;
     await settle();
     const kept = images.length ? (added < images.length ? `Only ${added} of ${images.length} image(s) loaded: no free picture slots. ` : `${added} reference image(s) loaded in attachment order${maxPictures ? '' : ' (kept as Pictures; the current Sharpness mode does not use them, switch mode to use them)'}. `) : '';
     return {text: `${videos.length ? `${videos[0].name} loaded as guide. ` : ''}${kept}`};
@@ -578,12 +579,12 @@ export default function Studio() {
     setPrompt(prompt.slice(0, from) + tag + ' ' + prompt.slice(end));
     requestAnimationFrame(() => { area?.focus(); area?.setSelectionRange(from + tag.length + 1, from + tag.length + 1); });
   }
-  function addPictures(files: FileList | File[] | null) {
+  function addPictures(files: FileList | File[] | null, consecutive = false) {
     if (!files) return 0;
     // Sharpness uses no pictures, but keeps them for the other modes (e.g. pictures attached in the assistant chat
     // while Sharpness was open): they become active again when the mode changes.
     const limit = maxPictures || MAX_PICTURES;
-    const slots = [...new Set([...expectedSlots, ...Array.from({length: MAX_PICTURES}, (_, i) => i + 1)])].filter(i => i <= limit);
+    const slots = [...new Set([...(consecutive ? [] : expectedSlots), ...Array.from({length: MAX_PICTURES}, (_, i) => i + 1)])].filter(i => i <= limit);
     const available = slots.filter(i => !pictures.some(p => p.slot === i));
     const valid = Array.from(files).filter(f => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(f.type) && f.size <= 25 * 1024 * 1024);
     const added = Math.min(valid.length, available.length);
