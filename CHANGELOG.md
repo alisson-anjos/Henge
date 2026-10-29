@@ -9,6 +9,13 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Fix: Pika 6-step with TARA or temporal windows
+
+- Jobs combining Pika's 6-step preset with TARA, pure temporal windows or regional attention failed with
+  `ManualSigmas.execute() got an unexpected keyword argument 'model'`: the patched model was also wired into the
+  fixed-sigma node. It now goes to the guider only (and to the scheduler when it is a normal BasicScheduler).
+- **Component:** UI/bridge (graph building). **Tests:** Pika graphs with TARA, windows and both.
+
 ### Pika H3 Flex: Kijai's reduced Ref2VA adapter
 
 - The Pika turbo now downloads Kijai's `pika_h3_flex_ref2va_v1_avg_rank_55_bf16` (dynamic rank, sv_fro 0.99 from

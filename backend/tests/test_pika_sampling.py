@@ -27,6 +27,20 @@ class PikaSamplingTests(unittest.TestCase):
         self.assertEqual(graph['4']['inputs']['shift_video'],12.)
         self.assertEqual(graph['4']['inputs']['shift_audio'],3.)
 
+    def test_six_step_sigmas_take_no_model_when_tara_or_windows_patch_it(self):
+        # A Pika 6-step job with TARA or pure windows failed: "ManualSigmas.execute() got an unexpected keyword
+        # argument 'model'". The patched MODEL goes to the guider only; ManualSigmas keeps its fixed sigmas.
+        windows={'enabled':True,'scope':'all','window_frames':22,'overlap_frames':5}
+        for options in ({'conditioning_mode':'tara'},{'temporal_windows':windows},{'conditioning_mode':'tara','temporal_windows':windows}):
+            with self.subTest(options=options):
+                graph=self.graph(**options)
+                self.assertEqual(graph['13']['class_type'],'ManualSigmas');self.assertNotIn('model',graph['13']['inputs'])
+                patched='80' if 'temporal_windows' in options else '21'
+                self.assertEqual(graph['10']['inputs']['model'],[patched,0])
+        # Other step counts keep a BasicScheduler, which must follow the patched model.
+        graph=self.graph(steps=8,conditioning_mode='tara')
+        self.assertEqual(graph['13']['class_type'],'BasicScheduler');self.assertEqual(graph['13']['inputs']['model'],['21',0])
+
     def test_override_sampler_keeps_published_six_step_sigmas(self):
         graph=self.graph(profile='motion_tara',conditioning_mode='tara',sampler_name='euler')
         self.assertEqual(graph['12']['inputs']['sampler_name'],'euler')

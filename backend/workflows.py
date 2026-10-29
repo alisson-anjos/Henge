@@ -50,6 +50,12 @@ LEGACY_LORAS=json.loads((Path(__file__).with_name('legacy_loras.json')).read_tex
 # under an old short name or in another subfolder (e.g. vae/minimax/…), so nothing is downloaded twice.
 INSTALLED={}
 LOADERS={'LoraLoaderModelOnly':'lora_name','VAELoader':'vae_name','UNETLoader':'unet_name','CLIPLoader':'clip_name','LatentUpscaleModelLoader':'model_name'}
+def sampling_model(g,model):
+    """Point the first-pass guider and its scheduler at a patched MODEL. Pika's 6-step preset replaces the scheduler
+    with ManualSigmas, which takes no model: setting one there fails the whole graph."""
+    g['10']['inputs']['model']=model
+    if g.get('13',{}).get('class_type')!='ManualSigmas':g['13']['inputs']['model']=model
+
 def resolve_model(node,name,installed=None):
     names=INSTALLED.get(node,set()) if installed is None else installed
     if not name or not names or name in names:return name
@@ -157,7 +163,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         g['21']=node('BFSMiniMaxH3NativeTemporal',model=['4',0],motion_video_index=1,strength=2.,window_seconds=.2,falloff_seconds=.25,max_penalty=6.,attention_backend='comfy kitchen (experimental)' if attention=='comfy kitchen attention' else 'flash partitions (no compile)',
                    # SolarRenderer-style structure CFG inside the TARA node: one extra pass without <Video 1> per step
                    structure_guidance=float(structure_cfg),structure_sigma_min=float(structure_sigma_min))
-        g['10']['inputs']['model']=['21',0];g['13']['inputs']['model']=['21',0]
+        sampling_model(g,['21',0])
     elif conditioning_mode!='guide':raise ValueError('Unknown conditioning mode')
     if audio:g['19']=node('VAELoader',vae_name='minimax_h3_audio_vae_fp32.safetensors');g['9']['inputs']['audio_vae']=['19',0]
     if context_video:
@@ -223,7 +229,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         g['60']=node('HengeRegionalAttention',model=g['10']['inputs']['model'],regions=['8',2],
                      strength=float(regional_attention.get('strength',.5)),reference_budget=float(regional_attention.get('reference_budget',.35)),
                      layers=regional_attention.get('layers','10,25,40'))
-        g['10']['inputs']['model']=['60',0];g['13']['inputs']['model']=['60',0]
+        sampling_model(g,['60',0])
     if gen_audio:
         # H3 always samples a joint video+audio latent; keep its soundtrack (32 kHz stereo) instead of dropping it.
         if '19' not in g:g['19']=node('VAELoader',vae_name='minimax_h3_audio_vae_fp32.safetensors')
@@ -241,7 +247,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             raise ValueError('Pure temporal windows cannot be combined with Causal or regional attention')
         window_args={'window_frames':int(temporal_windows.get('window_frames',107)),'overlap_frames':int(temporal_windows.get('overlap_frames',22)),'accumulator_device':'cpu'}
         g['80']=node('HengeH3PureWindows',model=g['10']['inputs']['model'],**window_args)
-        g['10']['inputs']['model']=g['13']['inputs']['model']=['80',0]
+        sampling_model(g,['80',0])
         if upscale and upscale['method']=='regenerate':
             g['81']=node('HengeH3PureWindows',model=g['34']['inputs']['model'],**window_args)
             g['34']['inputs']['model']=['81',0]
