@@ -9,6 +9,14 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Export the ComfyUI workflow from History and per shot
+
+- History cards list **Workflow (ComfyUI)** next to the other downloads; each finished shot has a `{ }` link with
+  that shot's API-format graph; the result menu says its workflow is shot 1. **Everything (.zip)** still carries
+  every graph under `workflows/`.
+- **Component:** UI only. **Tests:** Playwright on the local UI (history card, shot strip at desktop and 420 px, a
+  downloaded shot graph parsed as JSON).
+
 ### Repository: no private details; local settings documented
 
 - Removed hard-coded private hosts from `next.config.ts` (development origins now come from `HENGE_DEV_ORIGINS` in
