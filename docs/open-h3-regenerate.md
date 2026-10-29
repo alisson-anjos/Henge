@@ -13,7 +13,7 @@ shot's original video at the final resolution, starting at frame 0.
 
 The graph adapts `minimax_h3_2stage_testing.json`: native latent upscaler, a text description plus Add Guide of
 the original video in the second pass, and the `er_sde` sampler. Selecting this method in the UI sets the first
-pass to **DMAD 4-step, 4 steps and CFG 1**. Those controls stay editable afterwards. The refiner has its own
+pass to the default turbo, **Pika H3 Flex, 6 steps (LCM) and CFG 1** (DMAD 4-step, 4 steps when Pika is not installed). Those controls stay editable afterwards. The refiner has its own
 steps: the default is two (`0.7, 0.494118, 0`); three are experimental (`0.909375, 0.857143, 0.666667, 0`), from
 the alternative schedule that is not connected in that workflow. The public DMAD used here is avg rank 39,
 unlike the local rank-83 file of that workflow. The Ref2VA base also differs from the workflow's FL2VA. This

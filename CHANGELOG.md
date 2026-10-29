@@ -9,6 +9,17 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Pika H3 Flex is the default turbo
+
+- Character Swap, Motion Transfer/TARA, Head Swap and the Sharpness first pass default to Pika H3 Flex with its
+  published preset: 6 steps, LCM (sampler Auto) with Pika's manual sigmas, CFG 1. The Open-H3 refiner stage keeps
+  its own chain.
+- When the backend does not list the Pika file, the studio and the bridge use the previous default (DMD 8-step;
+  DMAD 4-step for the Refiner + LMS first pass). Saved browser settings with the old untouched default move to Pika
+  once; other saved choices are kept. Jobs that never stored a turbo keep DMD 8-step on Retry.
+- **Component:** UI/bridge. **Tests:** Playwright with Pika installed and missing (new browser, old saved default,
+  manual choice, Sharpness preset). Quality judged by the user's test renders.
+
 ### Fix: Pika 6-step with TARA or temporal windows
 
 - Jobs combining Pika's 6-step preset with TARA, pure temporal windows or regional attention failed with
