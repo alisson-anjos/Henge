@@ -946,3 +946,15 @@ a[aria-busy=true]:has(.comparison-download-status){cursor:progress}
 .comparison-download-spinner{width:11px;height:11px;flex:none;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:comparison-download-spin .8s linear infinite}
 @keyframes comparison-download-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.comparison-download-spinner{animation:none}}
+
+/* Model installation and application updates. */
+.settings-tabs{flex-wrap:wrap}
+.model-settings{display:grid;gap:12px}.model-settings h3,.model-settings p{margin:0}
+.model-settings label{display:grid;gap:6px;min-width:0}.model-settings .select-button{max-width:100%}
+.model-install-actions{display:flex;flex-wrap:wrap;gap:8px}.model-install-progress{display:grid;gap:6px}
+.model-install-progress progress{width:100%;accent-color:var(--accent)}
+.version-status{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;width:100%;font-size:11px}
+.version-update{color:var(--accent);font-weight:600}.version-changelog{position:relative}
+.version-changelog summary{cursor:pointer;text-decoration:underline}.version-changelog-body{position:absolute;bottom:calc(100% + 10px);right:0;width:min(640px,calc(100vw - 32px));max-height:60vh;overflow:auto;padding:18px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--n-101017);color:var(--text);box-shadow:0 12px 40px #0006;z-index:20;overflow-wrap:anywhere}
+@media(max-width:700px){.version-changelog-body{position:fixed;bottom:72px;left:16px;right:16px;width:auto}}
+@media(max-width:700px){.topbar-end .settings-button{display:flex;padding:0 8px;min-height:34px}}

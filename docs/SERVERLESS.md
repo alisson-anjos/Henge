@@ -41,7 +41,7 @@ The default setup is unchanged: one pod running UI, bridge and ComfyUI together
 
 ## 1. Put the models on a network volume (once)
 
-Serverless workers **never download models**: a worker that downloaded ~100 GB on its first request would
+Serverless workers **do not automatically download models during startup or generation**: a worker that downloaded ~100 GB on its first request would
 bill GPU time for it, hit the request timeout, and race other workers writing the same files. The models
 go once onto a RunPod **network volume** (persistent storage); every worker mounts it read-only at
 `/runpod-volume` and reads `/runpod-volume/henge/models`.
@@ -398,3 +398,14 @@ The optional temporal-processing control requires the updated UI/bridge and a wo
 `HengeH3PureWindows`. No extra model downloads or profiles are needed. Update/recycle workers after active
 jobs finish and refresh the bridge inventory as above. `temporal_windows_ready` in `/health` reports node
 availability. See [controls, conditioning and validation limits](temporal-windows.md).
+
+## Install a new model without a fill pod
+
+An updated worker supports explicit downloads from **Settings → Models**. After updating its image, click
+**Refresh worker inventory**, choose the new catalogued model and click **Install model**. The existing worker
+writes directly to the endpoint's shared volume and returns a fresh inventory; the UI/bridge does not relay weights.
+GPU time is billed while downloading. Wait for active generations before starting; no automatic download occurs
+inside a generation. Local ComfyUI uses the same screen with `COMFY_ROOT` configured.
+
+This is an alternative to the fill-pod bulk setup above. See [progress, cancellation, restart recovery and version
+notifications](models-and-updates.md).

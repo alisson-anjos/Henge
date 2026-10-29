@@ -37,7 +37,8 @@ python scripts/download_models.py --models-dir /opt/ComfyUI/models --profiles sh
 
 ### RunPod Serverless
 
-**Serverless workers do not run the downloader.** Adding the profile only to the worker's variables does not
+**Serverless startup/rendering does not run the downloader.** Updated workers also offer an explicit
+**Settings → Models** installation action, without a fill pod; see [on-demand installs](models-and-updates.md). Adding the profile only to the worker's variables does not
 install the weights. Use a temporary pod to top up the volume attached to the endpoint:
 
 ```bash

@@ -137,3 +137,14 @@ At six steps, manual sigmas match the Comfy workflow; a different step count use
 An explicit sampler override changes the sampler without replacing the six-step sigmas. Open-H3 stage-2 sampling
 remains independent. Pika is downloaded by default, but must be installed and reported by the worker to be usable.
 See [Pika integration](pika-h3-flex.md).
+
+## Model installs and version status
+
+- `get_models`: public catalog, installed files and installation progress, without waking a worker.
+- `install_model(model_id)`: explicitly install a catalogued file on local ComfyUI or the existing worker volume.
+- `cancel_model_installation`: stop an install and keep its partial data for retry.
+- `refresh_worker_inventory`: explicitly wake the worker to report capabilities/files; Serverless GPU time is billed.
+- `get_updates`: running version, GitHub changelog and code-update availability, without updating anything.
+
+Installations are blocked during active generation. A newly installed file is not a code or node update.
+See [model and update controls](models-and-updates.md).

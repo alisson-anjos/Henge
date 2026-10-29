@@ -9,6 +9,18 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Settings → Models and version status
+
+- **Settings → Models** lists the GitHub-backed model catalog (cached five minutes, bundled fallback offline) and
+  the installed files. **Install model** downloads explicitly into the local ComfyUI (`COMFY_ROOT`) or, through the
+  existing RunPod Serverless endpoint, straight into its shared volume, with progress, cancel and resumable retry;
+  no temporary pod. Installs and generations block each other. Older workers need one image update.
+- The footer shows the running version, **What's new** and a notice when a newer version is published.
+- Docs: [Install models and check updates](docs/models-and-updates.md); the in-app guide has a Models section.
+- **Components:** UI/bridge and worker image (model-install request). **Tests:** installer, install API and update
+  checks; Playwright on desktop and 420 px (Settings gear, Models tab, footer) with downloads blocked. No real
+  download was run.
+
 ### Pika H3 Flex turbo and H3 sampler controls
 
 - Added the pinned Ref2VA Comfy adapter plus upstream license/notice files to default model downloads. The selected

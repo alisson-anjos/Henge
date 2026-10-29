@@ -148,3 +148,6 @@ revision and license/notice files. It is an optional turbo choice, not a new def
 `models/loras/henge/pika_h3_flex_ref2va_comfy_bf16.safetensors`; `--profiles pika` can top up an existing models
 folder. Serverless needs a volume top-up through a pod, not just a worker environment change.
 See [Pika sampling, step overrides and deployment](pika-h3-flex.md).
+
+New catalog entries can also be installed from **Settings → Models**, locally or through an updated Serverless
+worker. See [model installation and update notifications](models-and-updates.md).

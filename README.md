@@ -255,7 +255,8 @@ job orchestration. Publishing code, building an image and deploying it are separ
 - **C**: pull the new `henge-ui` image; for the workers, `ENDPOINT_ID=<id> TEMPLATE_ID=<id>
   IMAGE=ghcr.io/alisson-anjos/henge:sha-<commit> scripts/runpod_serverless.sh` switches the image and recycles
   the old workers. Run it only once no jobs are active. New weights must be added to the shared volume first;
-  Serverless workers do not run the model downloader.
+  Startup/rendering does not run the downloader. Alternatively, use **Settings → Models** with an updated worker
+  to explicitly install catalogued weights through the existing endpoint, without a fill pod.
 - **UI hosted elsewhere** (optional): see [Hosting only the UI](docs/HOSTING-UI.md) (Render, a VPS, Fly.io,
   Railway). For Render, see [redeploying the image](docs/RENDER.md): changing `latest` in the registry alone
   does not update an image-based service. Update UI/bridge for interface and assistant changes; update the worker
@@ -396,6 +397,17 @@ upload can be up to 500 MB.
 
 Uploading a guide opens an editor with thumbnails, draggable start/end handles and preview playback; confirm a range or
 use the whole video. The scissors button reopens it. Only the selected interval is analyzed, rendered and joined.
+
+## Models and application updates
+
+**Settings → Models** lists the GitHub-backed model catalog and installed files. Explicit installs run on the local
+ComfyUI host (`COMFY_ROOT`) or on the existing RunPod Serverless worker/volume, with progress and cancellation.
+Serverless download time is billed; the UI does not relay weights and no temporary pod is needed. Older workers
+need one update to enable this operation. Rendering never starts an automatic model download.
+
+The footer shows your running version, the latest changelog and **New version available** when the installed code
+is behind GitHub main. Catalog and release notes refresh every five minutes. Updating code, deploying images and
+installing weights remain separate actions. See [model installation and update status](docs/models-and-updates.md).
 
 ## History and sharing
 

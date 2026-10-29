@@ -38,10 +38,13 @@ python scripts/download_models.py --models-dir /path/to/ComfyUI/models --profile
 The adapter is installed as `loras/henge/pika_h3_flex_ref2va_comfy_bf16.safetensors`. Downloads are pinned to revision
 `0ddf55ad7067ca1e76812253bd7b4600df87f759`; its published SHA256 is
 `e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1`. The download manifest records this checksum;
-it does not add a new local checksum-verification step.
+the explicit on-demand installer verifies it. The bootstrap profile downloader records the checksum without adding
+a separate checksum pass.
 
-Serverless workers do not download models. Fill the endpoint's existing volume with a download pod, then refresh
-the bridge's inventory through a normal job using an already available method. Until the worker lists the file,
+Serverless workers do not automatically download models during generation. Updated workers can install them
+explicitly from **Settings → Models**, without a fill pod; see [on-demand model installation](models-and-updates.md).
+The fill-pod bulk setup is still an alternative. With that older path, refresh the bridge inventory through a normal
+job using an already available method. Until the worker lists the file,
 Pika is unavailable in the dropdown. Redeploy the UI/bridge for the new preset and controls. Existing workers with
 native `ManualSigmas` and `KSamplerSelect` can use the graph once the weight is present; a newly published full image
 also includes the updated download manifest. See [Serverless setup](SERVERLESS.md).

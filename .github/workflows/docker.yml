@@ -45,6 +45,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          build-args: HENGE_BUILD_SHA=${{ github.sha }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -65,6 +66,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          build-args: HENGE_BUILD_SHA=${{ github.sha }}
           target: ui
           push: true
           tags: ${{ steps.meta_ui.outputs.tags }}

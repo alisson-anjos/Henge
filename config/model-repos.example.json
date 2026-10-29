@@ -82,7 +82,8 @@
         "common",
         "pika"
       ],
-      "note": "Downloaded by default; optional turbo selection. Ref2VA, strength 1.0; Comfy workflow uses LCM and 6 manual-sigma steps. SHA256 e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1. MiniMax H3 Community License."
+      "note": "Downloaded by default; optional turbo selection. Ref2VA, strength 1.0; Comfy workflow uses LCM and 6 manual-sigma steps. SHA256 e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1. MiniMax H3 Community License.",
+      "sha256": "e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1"
     },
     {
       "id": "pika_license",

@@ -1,5 +1,6 @@
 'use client';
 import Select from './select';
+import ModelSettings from './model-settings';
 import {useEffect, useState, type ReactNode} from 'react';
 import type {Language} from '../lib/design-copy';
 import {AccessForm, useAccessState} from './access-settings';
@@ -13,7 +14,7 @@ const RUNPOD_SIGNUP = 'https://get.runpod.io/z4bz8o1va7a7';
 const RUNPOD_POD = 'https://console.runpod.io/deploy?template=mnxax277c8';
 // Serverless templates can't be public on RunPod: the guide creates the worker template in the user's account.
 const RUNPOD_SERVERLESS = 'https://github.com/alisson-anjos/Henge/blob/main/docs/SERVERLESS.md';
-type Tab = 'connection' | 'assistant' | 'molmo' | 'access';
+type Tab = 'models' | 'connection' | 'assistant' | 'molmo' | 'access';
 type Provider = 'comfyui' | 'comfy_sdk' | 'runpod';
 type Connection = {provider: Provider; comfy_url: string; runpod_endpoint_id: string; sdk_target: 'proxy' | 'url' | 'cloud'; sdk_url: string;
   has_runpod_api_key: boolean; runpod_api_key_hint: string; has_sdk_api_key: boolean; sdk_api_key_hint: string; locked: string[]; active: Provider};
@@ -32,7 +33,7 @@ export default function SettingsCenter({lang, wizard, initialTab = 'connection',
   const finish = () => {try {localStorage.setItem(SETUP_KEY, '1');} catch {/* private mode */} onClose();};
   useEffect(() => {const esc = (e: KeyboardEvent) => {if (e.key === 'Escape') wizard ? finish() : onClose();}; addEventListener('keydown', esc); return () => removeEventListener('keydown', esc);});
 
-  const tabs: [Tab, string][] = [['connection', tr('Connection', 'Conexão', 'Conexión')], ['assistant', tr('Assistant', 'Assistente', 'Asistente')], ['molmo', 'Molmo2'], ['access', tr('Login', 'Login', 'Acceso')]];
+  const tabs: [Tab, string][] = [['connection', tr('Connection', 'Conexão', 'Conexión')], ['models', tr('Models', 'Modelos', 'Modelos')], ['assistant', tr('Assistant', 'Assistente', 'Asistente')], ['molmo', 'Molmo2'], ['access', tr('Login', 'Login', 'Acceso')]];
   const body: Record<string, ReactNode> = {
     welcome: <div className="setup-welcome">
       <span className="brandmark" aria-hidden="true">✳</span>
@@ -40,6 +41,7 @@ export default function SettingsCenter({lang, wizard, initialTab = 'connection',
       <p>{tr('Three quick steps: where videos are generated, the studio assistant, and an optional login. Every step can be skipped and changed later in Settings.', 'Três passos rápidos: onde os vídeos são gerados, o assistente do estúdio e um login opcional. Dá para pular qualquer passo e mudar depois em Configurações.', 'Tres pasos rápidos: dónde se generan los vídeos, el asistente del estudio y un acceso opcional. Puedes saltar cualquier paso y cambiarlo luego en Configuración.')}</p>
     </div>,
     connection: <ConnectionPanel lang={lang}/>,
+    models: <ModelSettings lang={lang}/>,
     assistant: <div className="settings-note">
       <h3>{tr('Studio assistant (optional)', 'Assistente do estúdio (opcional)', 'Asistente del estudio (opcional)')}</h3>
       <p>{tr('A chat that operates the studio for you: it marks people, picks options and starts generations. It uses Claude, OpenAI or a local model (LM Studio, Ollama). The key stays on the bridge.', 'Um chat que opera o estúdio por você: marca pessoas, escolhe opções e inicia gerações. Usa Claude, OpenAI ou um modelo local (LM Studio, Ollama). A chave fica no bridge.', 'Un chat que maneja el estudio por ti: marca personas, elige opciones e inicia generaciones. Usa Claude, OpenAI o un modelo local (LM Studio, Ollama). La clave queda en el bridge.')}</p>

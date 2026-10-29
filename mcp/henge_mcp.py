@@ -106,6 +106,38 @@ def view_frame(video: str, time: float = 0) -> list:
 
 
 @mcp.tool()
+def get_models() -> dict:
+    """Live catalog, installation progress and model availability for local ComfyUI or Serverless. No download starts."""
+    return api('GET','/models').json()
+
+
+@mcp.tool()
+def install_model(model_id: str) -> dict:
+    """Install a catalogued model only when requested by the user. Serverless GPU time is billed during download.
+    Uses the configured local models folder or existing worker/volume; blocked during generations. Poll get_models.
+    """
+    return api('POST','/models/install',json={'model_id':model_id}).json()
+
+
+@mcp.tool()
+def cancel_model_installation() -> dict:
+    """Cancel a download when requested; keeps partial data for retry. Does not cancel a generation."""
+    return api('POST','/models/cancel',json={}).json()
+
+
+@mcp.tool()
+def refresh_worker_inventory() -> dict:
+    """Explicitly wake the configured worker to refresh capabilities and models. GPU time is billed. Poll get_models."""
+    return api('POST','/models/refresh',json={}).json()
+
+
+@mcp.tool()
+def get_updates() -> dict:
+    """Running version, upstream changelog and update notice; never installs code or restarts services."""
+    return api('GET','/updates').json()
+
+
+@mcp.tool()
 def list_jobs(limit: int = 10) -> list:
     """The latest jobs, newest first."""
     return [summary(j) for j in api('GET', '/jobs').json()[:max(1, min(50, limit))]]

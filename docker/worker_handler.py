@@ -14,9 +14,11 @@ Progress:       runpod progress_update with {"node", "class_type", "value", "max
 ComfyUI runs next to this handler on 127.0.0.1:8189 (started by docker/entrypoint.py with HENGE_ROLE=worker);
 models come from the network volume at /runpod-volume/henge/models.
 """
-import asyncio,base64,json,os,shutil,time,uuid
+import asyncio,base64,json,os,shutil,time,uuid,sys
 from pathlib import Path
 import aiohttp,requests,runpod
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'backend'))
+import model_installer
 
 URL=os.environ.get('COMFY_BASE_URL','http://127.0.0.1:8189').rstrip('/')
 COMFY=Path(os.environ.get('COMFY_ROOT','/opt/ComfyUI'))
@@ -48,7 +50,7 @@ def inventory():
             spec=info.get(node,{}).get('input',{}).get('required',{}).get(name,[[]])
             if spec and isinstance(spec[0],list):return spec[0]
             return spec[1].get('options',[]) if len(spec)>1 and isinstance(spec[1],dict) else []
-        INVENTORY={'nodes':sorted(info),'choices':{f'{node}.{name}':choices(node,name) for node,name in CHOICES}}
+        INVENTORY={'version':os.environ.get('HENGE_BUILD_SHA'),'capabilities':{'model_install':1},'nodes':sorted(info),'choices':{f'{node}.{name}':choices(node,name) for node,name in CHOICES}}
     return INVENTORY
 
 
@@ -126,6 +128,14 @@ async def handler(job):
     request=job['input']
     op=request.get('op')
     if op=='inventory':return {'inventory':inventory()}
+    if op=='install_models':
+        # No generation is started: write the selected catalog file into the shared models mount.
+        manifest=await asyncio.to_thread(model_installer.catalog,request.get('catalog_revision'))
+        def progress(value):runpod.serverless.progress_update(job,value)
+        result=await asyncio.to_thread(model_installer.install,COMFY/'models',manifest,str(request.get('model_id','')),progress)
+        global INVENTORY,INVENTORY_AT
+        INVENTORY=None;INVENTORY_AT=0.
+        return {'installation':result,'inventory':inventory()}
     if op in ('put','get','stat'):return {'put':put,'get':get,'stat':stat}[op](request)
     graph=request['graph'];inputs=COMFY/'input';outputs_dir=COMFY/'output'
     for relative,data in (request.get('files') or {}).items():

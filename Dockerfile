@@ -10,6 +10,8 @@ RUN npm run build
 # UI-only image (ghcr.io/<owner>/henge-ui): bridge + web UI without GPU, torch or ComfyUI. The bridge drives a
 # remote ComfyUI (COMFY_BASE_URL) or a RunPod Serverless endpoint (HENGE_BACKEND=runpod).
 FROM python:3.12-slim-bookworm AS ui
+ARG HENGE_BUILD_SHA=unknown
+ENV HENGE_BUILD_SHA=${HENGE_BUILD_SHA}
 ENV PYTHONUNBUFFERED=1 NODE_ENV=production HENGE_ROLE=ui HENGE_BACKEND_URL=http://127.0.0.1:8766 HENGE_DATA_DIR=/state/jobs \
     PIP_ROOT_USER_ACTION=ignore
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
@@ -23,6 +25,8 @@ ENTRYPOINT ["python", "/app/docker/entrypoint.py"]
 
 # Full image (default target): one pod with ComfyUI + bridge + UI, or a serverless worker with HENGE_ROLE=worker.
 FROM ${PYTORCH_IMAGE} AS runtime
+ARG HENGE_BUILD_SHA=unknown
+ENV HENGE_BUILD_SHA=${HENGE_BUILD_SHA}
 ARG COMFY_REF=35060f0156181ae78a86b10f098f67ce8e83697f
 ARG BFS_REF=6df4276ae9666e70a54be28c605338390010ce8a
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \

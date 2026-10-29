@@ -81,7 +81,11 @@ class RunPodBackend:
         """One request to the endpoint; returns its output. on_status may be None for transfer requests."""
         body=json.dumps({'input':payload})
         job=self.request('POST','/run',data=body,headers={'Content-Type':'application/json'},timeout=120)
-        rid=job['id'];errors=0
+        return self.wait(job['id'],on_status,cancelled)
+
+    def wait(self,rid,on_status,cancelled):
+        """Resume polling an existing request, including an installation after a bridge restart."""
+        errors=0
         if on_status:on_status(rid,None)
         while True:
             if cancelled():
@@ -97,7 +101,9 @@ class RunPodBackend:
             state=status.get('status')
             if state=='COMPLETED':
                 output=status.get('output') or {}
-                if output.get('inventory'):self.inventory_file.write_text(json.dumps(output['inventory']))
+                if output.get('inventory'):
+                    temporary=self.inventory_file.with_name(self.inventory_file.name+'.'+str(threading.get_ident())+'.tmp')
+                    temporary.write_text(json.dumps(output['inventory']));temporary.replace(self.inventory_file)
                 return output
             if state in ('FAILED','CANCELLED','TIMED_OUT'):
                 raise RuntimeError(f"Serverless job {state.lower()}: {str(status.get('error') or status.get('output'))[:1800]}")
