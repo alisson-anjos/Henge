@@ -42,6 +42,8 @@ their scope; CPU tests do not replace generation with the real models.
 - Redoing a shot opens an editor with the prompt it used, so that shot alone can be adjusted before generating
   again (e.g. "the camera is upside down: the character appears upside down"). Without a text change it redoes as
   before, only with a new seed. The other shots do not change.
+- After a redo, the result, the comparison and the comparison with references are rebuilt and served fresh: the
+  cached reference comparison is re-encoded when older than the result, and the download links carry a version.
 - **Component:** UI/bridge (`GET /jobs/{id}/shots/{n}/prompt`; optional `prompt` in the redo); no worker change.
 - **Tests:** reading the prompt, validation, and the new prompt in the redone shot's conditioning node.
 

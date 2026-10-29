@@ -1209,7 +1209,9 @@ def finalize(job,pieces,guide_pieces,W,H):
         run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(guide_full),'-i',str(output),'-filter_complex',f'[0:v]{fit}[a];[1:v]{fit}[g];[a][g][2:v]hstack=inputs=3:shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
     else:
         run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(output),'-filter_complex',f'[0:v]{fit}[a];[a][1:v]hstack=shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
-    save(job,status='completed',stage='complete',progress=1,eta_seconds=None,seconds_per_step=None,result_url=f"/api/backend/jobs/{job['id']}/files/result.mp4",comparison_url=f"/api/backend/jobs/{job['id']}/files/comparison.mp4",message='Generation complete',prompt_id=None)
+    # Versioned URLs so a redone shot is not served from the browser cache.
+    version=int(time.time())
+    save(job,status='completed',stage='complete',progress=1,eta_seconds=None,seconds_per_step=None,result_url=f"/api/backend/jobs/{job['id']}/files/result.mp4?v={version}",comparison_url=f"/api/backend/jobs/{job['id']}/files/comparison.mp4?v={version}",message='Generation complete',prompt_id=None)
 
 def worker():
     while not STOP.wait(2):

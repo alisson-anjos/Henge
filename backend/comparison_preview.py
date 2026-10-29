@@ -46,7 +46,8 @@ def reference_header(references,width,settings='',prompt=''):
 
 def create_comparison_with_refs(comparison,result,references,destination,settings='',prompt=''):
     comparison,result,destination=map(Path,(comparison,result,destination))
-    if destination.is_file():return destination
+    # Reuse the cached video only while it is newer than its sources (a redone shot rebuilds comparison/result).
+    if destination.is_file() and destination.stat().st_mtime>=max(comparison.stat().st_mtime,result.stat().st_mtime):return destination
     meta=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(comparison)]))
     video=next(s for s in meta['streams'] if s['codec_type']=='video')
     width=min(1600,int(video['width']));width-=width%4

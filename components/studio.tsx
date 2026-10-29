@@ -10,7 +10,7 @@ import VideoTrimModal, {type ClipRange} from './video-trim-modal';
 import {COMMUNITY, type CommunityPreset} from '../lib/community';
 import FirstFrameModal, {coverFit} from './first-frame-modal';
 const FIRST_FRAME_KEY = 'henge-first-frame';
-import GenerationPanel, {type GenerationJob, type PanelControls} from './generation-panel';
+import GenerationPanel, {type GenerationJob, type PanelControls, versionQuery} from './generation-panel';
 import AssistantPanel, {type StudioCall, type StudioController, type StudioResult} from './assistant-panel';
 import {annotated, captureFrame, drawGrid, drawPoint, thumbnail} from '../lib/frame-capture';
 import {readableError} from '../lib/job-error';
@@ -907,7 +907,7 @@ export default function Studio() {
                     <summary className="quiet-button">{tr('More', 'Mais', 'Más')}<span aria-hidden="true" className="result-caret">▾</span></summary>
                     <div className="result-menu" role="menu" onClick={e => {(e.currentTarget.parentElement as HTMLDetailsElement).open = false;}}>
                       {generationJob.comparison_url && <a role="menuitem" href={generationJob.comparison_url} download="henge-comparison.mp4"><Icon name="film" size={14}/><span>{tr('Comparison', 'Comparação', 'Comparación')}<small>{tr('Guide and result side by side', 'Guia e resultado lado a lado', 'Guía y resultado lado a lado')}</small></span></a>}
-                      {generationJob.comparison_url && <a role="menuitem" href={`/api/backend/jobs/${generationJob.id}/comparison-with-refs`} download="henge-guide-result-references.mp4"><Icon name="pictures" size={14}/><span>{tr('Comparison + references', 'Comparação + referências', 'Comparación + referencias')}<small>{tr('Adds the reference pictures', 'Inclui as imagens de referência', 'Incluye las imágenes de referencia')}</small></span></a>}
+                      {generationJob.comparison_url && <a role="menuitem" href={`/api/backend/jobs/${generationJob.id}/comparison-with-refs${versionQuery(generationJob.comparison_url)}`} download="henge-guide-result-references.mp4"><Icon name="pictures" size={14}/><span>{tr('Comparison + references', 'Comparação + referências', 'Comparación + referencias')}<small>{tr('Adds the reference pictures', 'Inclui as imagens de referência', 'Incluye las imágenes de referencia')}</small></span></a>}
                       <a role="menuitem" href={`/api/backend/jobs/${generationJob.id}/bundle.zip`} download={`henge-${generationJob.id.slice(0, 8)}.zip`}><Icon name="download" size={14}/><span>{tr('Everything (.zip)', 'Tudo (.zip)', 'Todo (.zip)')}<small>{tr('Every asset of this generation in one file', 'Todos os arquivos desta geração em um só', 'Todos los archivos de esta generación en uno')}</small></span></a>
                       <a role="menuitem" href={`/api/backend/jobs/${generationJob.id}/workflow?stage=h3_segment_000`} download><Icon name="code" size={14}/><span>{tr('ComfyUI workflow', 'Workflow do ComfyUI', 'Workflow de ComfyUI')}<small>{tr('Drag the file into ComfyUI to open it', 'Arraste o arquivo para o ComfyUI', 'Arrastra el archivo a ComfyUI')}</small></span></a>
                     </div>
@@ -968,7 +968,7 @@ export default function Studio() {
         const downloads = [
           j.result_url && {href: j.result_url, file: `${name}.mp4`, label: tr('Video', 'Vídeo', 'Vídeo')},
           j.comparison_url && {href: j.comparison_url, file: `${name}-comparison.mp4`, label: tr('Comparison', 'Comparação', 'Comparación')},
-          j.comparison_url && {href: `/api/backend/jobs/${j.id}/comparison-with-refs`, file: `${name}-comparison-references.mp4`, label: tr('+ references', '+ referências', '+ referencias')},
+          j.comparison_url && {href: `/api/backend/jobs/${j.id}/comparison-with-refs${versionQuery(j.comparison_url)}`, file: `${name}-comparison-references.mp4`, label: tr('+ references', '+ referências', '+ referencias')},
           j.status === 'completed' && j.guide_preview_url && {href: j.guide_preview_url, file: `${name}-guide.mp4`, label: tr('Guide', 'Guia', 'Guía')},
           j.status === 'completed' && {href: `/api/backend/jobs/${j.id}/bundle.zip`, file: `${name}.zip`, label: tr('Everything (.zip)', 'Tudo (.zip)', 'Todo (.zip)'), all: true},
         ].filter(Boolean) as {href: string; file: string; label: string; all?: boolean}[];
