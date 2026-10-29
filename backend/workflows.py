@@ -182,7 +182,9 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             g['71']=node('ModelAttentionBackend',model=['70',0],attention=attention)
             g['72']=node('LoraLoaderModelOnly',model=['71',0],lora_name=REGENERATE['turbo'],strength_model=1.)
             g['73']=node('LoraLoaderModelOnly',model=['72',0],lora_name=REGENERATE['refiner'],strength_model=1.)
-            g['74']=node('LoraLoaderModelOnly',model=['73',0],lora_name=REGENERATE['lms'],strength_model=1.)
+            # LMS on top of the refiner is optional, at the chosen strength (0 = refiner and turbo only).
+            lms=float(upscale.get('lms_strength',1.))
+            if lms>0:g['74']=node('LoraLoaderModelOnly',model=['73',0],lora_name=REGENERATE['lms'],strength_model=lms)
             g['30']=node('LatentUpscaleModelLoader',model_name=upscale.get('model',REGENERATE['upscaler']))
             # Native node resizes video while preserving the AV latent's audio stream.
             g['31']=node('MiniMaxH3LatentUpscaleWithModel',model=['30',0],samples=['14',0],width=W,height=H)
@@ -191,7 +193,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             # LMS follows the source through Add Guide, at the final canvas size.
             g['75']=node('HengeLoadShot',video=video,pictures='[]',width=W,height=H,length=length)
             g['76']=node('MiniMaxH3AddGuide',positive=['32',0],latent=['31',0],vae=['6',0],image=['75',0],frame_idx=0)
-            g['34']=node('BasicGuider',model=['74',0],conditioning=['76',0])
+            g['34']=node('BasicGuider',model=['74' if lms>0 else '73',0],conditioning=['76',0])
             g['35']=node('KSamplerSelect',sampler_name='er_sde')
             g['36']=node('RandomNoise',noise_seed=seed)
             g['37']=node('SamplerCustomAdvanced',noise=['36',0],guider=['34',0],sampler=['35',0],sigmas=['33',0],latent_image=['31',0])
@@ -234,7 +236,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             g['36']['inputs']['model']=g['34']['inputs']['model']=['81',0]
     return g
 
-def full_refiner_graph(video,guide,prompt,width,height,output_width,output_height,length,trim_frames,seed,steps=2,attention="comfy kitchen attention",temporal_windows=None):
+def full_refiner_graph(video,guide,prompt,width,height,output_width,output_height,length,trim_frames,seed,steps=2,attention="comfy kitchen attention",temporal_windows=None,lms_strength=1.):
     """Refine the assembled first pass once, using a separate Ref2VA stack and global sampler.
 
     Persisted first-pass frames are re-encoded (not concatenated latent caches). The original
@@ -242,14 +244,14 @@ def full_refiner_graph(video,guide,prompt,width,height,output_width,output_heigh
     """
     windows={**(temporal_windows or {}),'enabled':True}
     g=h3_graph(guide,[],prompt,width,height,length,trim_frames,'sharpness',seed,4,'original',[],'human',0,
-               attention=attention,upscale={'method':'regenerate','width':output_width,'height':output_height,'steps':steps,'prompt':prompt})
+               attention=attention,upscale={'method':'regenerate','width':output_width,'height':output_height,'steps':steps,'prompt':prompt,'lms_strength':lms_strength})
     g['90']=node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length)
     g['91']=node('VAEEncodeTiled',pixels=['90',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
     g['92']=node('EmptyMiniMaxH3LatentAV',width=width,height=height,length=length)
     g['93']=node('LTXVSeparateAVLatent',av_latent=['92',0])
     g['94']=node('LTXVConcatAVLatent',video_latent=['91',0],audio_latent=['93',1])
     g['31']['inputs']['samples']=['94',0]
-    g['81']=node('HengeH3PureWindows',model=['74',0],window_frames=int(windows.get('window_frames',107)),overlap_frames=int(windows.get('overlap_frames',22)),accumulator_device='cpu')
+    g['81']=node('HengeH3PureWindows',model=g['34']['inputs']['model'],window_frames=int(windows.get('window_frames',107)),overlap_frames=int(windows.get('overlap_frames',22)),accumulator_device='cpu')
     g['34']['inputs']['model']=['81',0]
     g['17']['inputs']['filename']=video.replace('.mp4','_refined.mp4')
     # Keep only ancestors of the saved output, so stage one cannot run again accidentally.

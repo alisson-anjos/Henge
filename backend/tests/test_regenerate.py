@@ -36,6 +36,19 @@ class RegenerateTests(unittest.TestCase):
         self.assertEqual(g['32']['inputs']['text'],'A person walks.')
         self.assertNotEqual(g['3']['inputs']['lora_name'],REGENERATE['refiner'])
 
+    def test_lms_on_the_refiner_is_optional_with_a_strength(self):
+        def graph(strength):
+            return h3_graph('clip.mp4',[],'LMS instruction',1344,768,22,22,'sharpness',42,8,'original',[],'human',0,
+                            upscale={'method':'regenerate','width':2560,'height':1440,'steps':2,'prompt':'A person walks.','lms_strength':strength})
+        g=graph(.6);self.assertEqual(g['74']['inputs']['strength_model'],.6);self.assertEqual(g['34']['inputs']['model'],['74',0])
+        g=graph(0.);self.assertNotIn('74',g);self.assertEqual(g['34']['inputs']['model'],['73',0])
+        self.assertEqual(server.refiner_lms_strength({}),1.)
+        self.assertEqual(server.refiner_lms_strength({'refiner_lms':True,'refiner_lms_strength':.7}),.7)
+        self.assertEqual(server.refiner_lms_strength({'refiner_lms':False,'refiner_lms_strength':.7}),0.)
+        from workflows import full_refiner_graph
+        g=full_refiner_graph('henge/t/first.mp4','henge/t/source.mp4','scene',1376,768,2560,1440,362,360,42,lms_strength=0.)
+        self.assertNotIn('74',g);self.assertEqual(g['81']['inputs']['model'],['73',0])
+
     def test_joint_latent_and_audio_survive_native_upscale(self):
         g=self.graph()
         self.assertEqual(g['31']['class_type'],'MiniMaxH3LatentUpscaleWithModel')

@@ -9,6 +9,16 @@ Resultados de testes são descritos com seu alcance; testes CPU não substituem 
 
 ## 2026-10-29
 
+### Sharpness: LMS opcional no Open-H3 Refiner
+
+- Novo switch "Somar o LMS ao refiner" (ligado por padrão, como antes) e controle de força do LMS no
+  refiner (0,1–1,5; padrão 1,0). Desligado, a segunda etapa usa só o refiner e o turbo. Vale para o refiner
+  por segmento e para o refiner do vídeo completo com context windows. A força do LMS da primeira etapa
+  continua no controle de força do LoRA.
+- **Componente:** UI/bridge (monta os grafos); não exige mudar o worker.
+- **Testes:** grafos com e sem LMS e força aplicada nos dois caminhos do refiner; 80 testes passaram.
+  Ainda sem comparação visual com o LMS desligado ou em força reduzida.
+
 ### Context windows — publicado e validado no Serverless
 
 - Processamento temporal opcional para Character Swap, Motion Transfer, TARA, Head Swap e Sharpness.

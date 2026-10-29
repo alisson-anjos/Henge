@@ -177,6 +177,8 @@ def validate_request(r,options,slots):
         if r['mode']!='sharpness':raise ValueError('Open-H3 Regenerate is a Sharpness option')
         if r['quality'] not in ('1080p','1440p'):raise ValueError('Open-H3 Regenerate currently supports 1080p or 2K output')
         if options.get('regenerate_steps',2) not in (2,3):raise ValueError('Regenerate needs 2 or 3 refine steps')
+        if not isinstance(options.get('refiner_lms',True),bool):raise ValueError('refiner_lms must be true or false')
+        clamp_float(options.get('refiner_lms_strength',1.),.1,1.5,'refiner LMS strength')
         if not isinstance(options.get('regenerate_prompt',''),str) or len(options.get('regenerate_prompt',''))>4000:raise ValueError('Refiner scene description must be at most 4000 characters')
 
     if clamp_float(options.get('structure_cfg',1.),1,3,'structure guidance')>1 and options.get('conditioning_mode','guide')!='tara':raise ValueError('Structure guidance is a TARA option')
@@ -807,6 +809,10 @@ def regenerate_scene_prompt(job):
     return text[:4000]
 
 
+def refiner_lms_strength(options):
+    """The LMS LoRA's strength on top of the Open-H3 refiner; 0 when the user turned it off."""
+    return float(options.get('refiner_lms_strength',1.)) if options.get('refiner_lms',True) else 0.
+
 def upscale_method(options):
     """Sharpness above 720p: h3 | regenerate | nvidia | none (older jobs only carry latent_upscale)."""
     return options.get('upscale_method') or ('h3' if options.get('latent_upscale',True) else 'none')
@@ -954,7 +960,7 @@ def generate(job):
             # Native resize targets the final canvas explicitly, not an assumed 2x ratio.
             w,h=size(768)
             W,H=size(short)
-            upscale={'method':method,'width':W,'height':H,'model':REGENERATE['upscaler'],'steps':options.get('regenerate_steps',2),'prompt':plan.get('regenerate_prompt') or options.get('regenerate_prompt','')}
+            upscale={'method':method,'width':W,'height':H,'model':REGENERATE['upscaler'],'steps':options.get('regenerate_steps',2),'prompt':plan.get('regenerate_prompt') or options.get('regenerate_prompt',''),'lms_strength':refiner_lms_strength(options)}
         elif method=='h3':
             choices=comfy_choices(comfy_info(),'HengeH3LatentUpscale','model_name')
             upscale['model']=next((m for m in H3_UPSCALERS if m in choices),None)
@@ -1153,7 +1159,7 @@ def refine_full_video(job,joined,W,H):
     guide=inp/f'refine_source_full_{W}x{H}.mp4'
     start,end=r['video']['start_seconds'],r['video']['end_seconds']
     run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/job['assets']['video']),'-t',str(end-start),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-an','-c:v','libx264','-threads','2','-crf','17','-y',str(guide)])
-    graph=workflows.full_refiner_graph(staged.relative_to(INPUT).as_posix(),guide.relative_to(INPUT).as_posix(),job['plan'].get('regenerate_prompt') or options.get('regenerate_prompt') or job['plan']['prompt'],size['width'],size['height'],W,H,length,frames,int(options.get('seed',42)),steps=options.get('regenerate_steps',2),attention=options.get('attention','comfy kitchen attention'),temporal_windows=options.get('temporal_windows'))
+    graph=workflows.full_refiner_graph(staged.relative_to(INPUT).as_posix(),guide.relative_to(INPUT).as_posix(),job['plan'].get('regenerate_prompt') or options.get('regenerate_prompt') or job['plan']['prompt'],size['width'],size['height'],W,H,length,frames,int(options.get('seed',42)),steps=options.get('regenerate_steps',2),attention=options.get('attention','comfy kitchen attention'),temporal_windows=options.get('temporal_windows'),lms_strength=refiner_lms_strength(options))
     save(job,message='Stage 2: refining the assembled video with temporal windows',progress=.9)
     outputs=execute_graph(job,graph,'h3_refine_full')
     results=output_files(outputs,'17','videos')
