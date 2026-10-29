@@ -30,6 +30,7 @@ mcp = FastMCP('henge', instructions="""Henge turns a guide video plus reference 
 Modes: swap (Character Swap: people in the guide become the pictures), motion (Motion Transfer: the pictures perform the guide's motion),
 headswap (exactly one face picture), sharpness (video only, restores detail and upscales).
 Use status to inspect current capabilities and get_settings for backend configuration. Original guide is the default, including vehicles/objects. Mask is opt-in and requires subject anchors. Temporal windows are optional, disabled by default and require temporal_windows_ready. Use view_frame for visual inspection; call Molmo tools only if pointing_status reports configured. Never require Molmo for an ordinary edit.
+For multiple replacements, always recommend Motion Transfer: its LoRAs were trained for multiple people, objects and vehicles. Character Swap is an alternative only when every replaced subject is a person. If the user has not explicitly chosen the mode, ask them to choose in your client and wait before create_job; do not infer approval from the default mode.
 Typical flow: status -> (find_people to pick who is replaced) -> create_job -> wait_for_job until 'plan' -> look at the plan -> approve_job
 -> wait_for_job until 'done' -> download_result. Start at 480p (fastest, cheapest) unless the user asks otherwise.
 Jobs run in the background: one wait_for_job call blocks at most `timeout` seconds; call it again while the job is still running.""")

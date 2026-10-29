@@ -117,3 +117,14 @@ When updating Henge features, update both the assistant tool instructions and MC
 `get_options` reads current UI generation values and capabilities; nested option patches preserve other values
 and unknown top-level keys are rejected. Optional Molmo tools are exposed to the built-in assistant only when
 configured, and stale unavailable tool calls are rejected before reaching the browser.
+
+## Choosing a replacement mode
+
+For multiple replacements, recommend Motion Transfer: its LoRAs were trained for multiple people, objects and
+vehicles. Character Swap may work as an alternative only when all replaced subjects are people. Inspect frames
+and references before deciding which alternatives apply.
+
+The built-in studio assistant uses `choose_replacement_mode` to show an in-chat choice card when the current
+request does not explicitly choose a mode. It waits for a click, applies that mode, and stops the edit if cancelled.
+The external MCP client asks the same question in its own conversation before `create_job`; the MCP server does
+not open the browser's choice card. Respect a mode already explicitly chosen for that request.

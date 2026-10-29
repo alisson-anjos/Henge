@@ -19,6 +19,7 @@ type JobMention = {id: string; project?: string; mode?: string; status: string; 
 // An image is a generation reference (loaded as a Picture) or only explains something to the assistant (a marked
 // screenshot, a sketch): those stay in the chat and never reach the studio.
 type PendingAttachment = {id: string; name: string; kind: 'image' | 'video'; images: string[]; detail: string; file: File; role: 'reference' | 'explain'};
+type PendingModeChoice = {question: string; allPeople: boolean; resolve: (mode: 'motion' | 'swap' | null) => void};
 type PendingApproval = {question: string; approve: string; decline: string; resolve: (approved: boolean) => void};
 
 const PRESETS: Record<string, {provider: Config['provider']; model: string; base_url: string}> = {
@@ -66,6 +67,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   const [recentJobs, setRecentJobs] = useState<JobMention[]>([]);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [modeChoice, setModeChoice] = useState<PendingModeChoice | null>(null);
   const [approval, setApproval] = useState<PendingApproval | null>(null);
   const attachmentInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState('');
@@ -225,7 +227,14 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
             ? tr('Finding the people with Molmo2 on this computer (about a minute per shot)…', 'Procurando as pessoas com o Molmo2 neste computador (cerca de 1 minuto por shot)…', 'Buscando a las personas con Molmo2 en este equipo (cerca de 1 minuto por plano)…')
             : label(call.name, call.input));
           try {
-            const result = call.name === 'confirm_cancel_job'
+            const result = call.name === 'choose_replacement_mode'
+              ? await (async () => {
+                const selected = await new Promise<'motion' | 'swap' | null>(resolve => setModeChoice({question: String(call.input.question || tr('Which mode would you like to use?', 'Qual modo você quer usar?', '¿Qué modo quieres usar?')), allPeople: call.input.all_people === true, resolve}));
+                if (!selected) {stop.current = true; return {text: JSON.stringify({cancelled: true, instruction: 'The user cancelled mode selection. Do not generate.'})};}
+                await controllerRef.current.run({id: call.id, name: 'set_mode', input: {mode: selected}});
+                return {text: JSON.stringify({selected_mode: selected, applied: true})};
+              })()
+              : call.name === 'confirm_cancel_job'
               ? await new Promise<StudioResult>(resolve => setApproval({question: String(call.input.question), approve: String(call.input.approve_label || tr('Yes, cancel', 'Sim, cancelar', 'Sí, cancelar')), decline: String(call.input.decline_label || tr('No, keep running', 'Não, continuar', 'No, continuar')), resolve: approved => resolve({text: JSON.stringify({approved, job_id: String(call.input.job_id)})})}))
               : await controller.run(call); results.push({id: call.id, name: call.name, ...result});
             const started = call.name === 'generate' && result.text.match(/[a-f0-9]{32}/)?.[0];
@@ -281,6 +290,13 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
           : m.role === 'assistant' ? <div key={i} className="assistant-msg">{m.text && <Markdown text={m.text}/>}{m.tool_calls?.map(c => <small key={c.id} className="assistant-tool mono">⚙ {label(c.name, c.input)}</small>)}</div>
           : <div key={i} className="assistant-results">{m.results.map(r => <div key={r.id}>{r.is_error && <small className="validation">{r.text}</small>}{r.images?.map((src, j) => <img key={j} src={src} alt={r.name}/>)}</div>)}</div>)}
         {pending.map((p, i) => <div key={'queued' + i} className="assistant-msg user queued">{p.text}<small className="muted">{tr('waiting · read at the next step', 'na fila · lida no próximo passo', 'en cola · se lee en el siguiente paso')}</small></div>)}
+        {modeChoice && <div className="assistant-approval assistant-mode-choice" role="group" aria-label={tr('Choose replacement mode', 'Escolher modo de troca', 'Elegir modo de reemplazo')}>
+          <p>{modeChoice.question}</p>
+          <small>{tr('Motion Transfer was trained to replace multiple subjects, including people, objects and vehicles.', 'Motion Transfer foi treinado para trocar vários sujeitos, incluindo pessoas, objetos e veículos.', 'Motion Transfer fue entrenado para reemplazar varios sujetos, incluidas personas, objetos y vehículos.')}</small>
+          <button type="button" className="primary" onClick={() => {modeChoice.resolve('motion'); setModeChoice(null);}}>Motion Transfer · {tr('recommended', 'recomendado', 'recomendado')}</button>
+          {modeChoice.allPeople && <><button type="button" className="quiet-button" onClick={() => {modeChoice.resolve('swap'); setModeChoice(null);}}>Character Swap</button><small>{tr('An alternative when every subject is a person. It may work, but multiple reference assignments can be less reliable.', 'Alternativa quando todos os sujeitos são pessoas. Pode funcionar, mas a associação de várias referências pode ser menos confiável.', 'Alternativa cuando todos los sujetos son personas. Puede funcionar, pero la asignación de varias referencias puede ser menos fiable.')}</small></>}
+          <button type="button" className="quiet-button" onClick={() => {modeChoice.resolve(null); setModeChoice(null);}}>{tr('Cancel', 'Cancelar', 'Cancelar')}</button>
+        </div>}
         {approval && <div className="assistant-approval"><p>{approval.question}</p><div><button type="button" className="quiet-button" onClick={() => {approval.resolve(false); setApproval(null);}}>{approval.decline}</button><button type="button" className="primary" onClick={() => {approval.resolve(true); setApproval(null);}}>{approval.approve}</button></div></div>}
         {busy && <small className="assistant-busy mono"><span className="spinner" aria-hidden="true"/>{busy}</small>}
         {error && <p className="validation" role="alert">{error}</p>}
@@ -291,7 +307,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         <input ref={attachmentInput} type="file" hidden multiple accept="image/*,video/*" onChange={e => {if (e.target.files) void addAttachments(e.target.files);}}/>
         <button type="button" className="assistant-attach quiet-button" aria-label={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} title={tr('Attach images or videos', 'Anexar imagens ou vídeos', 'Adjuntar imágenes o vídeos')} disabled={!!busy || attachments.length >= 6} onClick={() => attachmentInput.current?.click()}>＋</button>
         <textarea value={input} rows={2} placeholder={tr('What do you want to make?', 'O que você quer fazer?', '¿Qué quieres hacer?')} onChange={e => setInput(e.target.value)} onKeyDown={e => {if (e.key === 'Escape' && mention) {e.preventDefault(); setInput(input.slice(0, mention.index));} else if (e.key === 'Enter' && !e.shiftKey) {e.preventDefault(); if (mentionJobs[0]) insertJob(mentionJobs[0].id); else void send();}}}/>
-        {busy && <button type="button" className="quiet-button" onClick={() => {stop.current = true; if (approval) {approval.resolve(false); setApproval(null);}}}>{tr('Stop', 'Parar', 'Detener')}</button>}<button type="submit" className="primary" disabled={!input.trim() && !attachments.length}>{busy ? tr('Queue', 'Enfileirar', 'Encolar') : tr('Send', 'Enviar', 'Enviar')}</button>
+        {busy && <button type="button" className="quiet-button" onClick={() => {stop.current = true; if (modeChoice) {modeChoice.resolve(null); setModeChoice(null);} if (approval) {approval.resolve(false); setApproval(null);}}}>{tr('Stop', 'Parar', 'Detener')}</button>}<button type="submit" className="primary" disabled={!input.trim() && !attachments.length}>{busy ? tr('Queue', 'Enfileirar', 'Encolar') : tr('Send', 'Enviar', 'Enviar')}</button>
       </form>
     </aside>}
   </>;

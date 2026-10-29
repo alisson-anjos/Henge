@@ -9,6 +9,17 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Replacement mode choice in the assistant
+
+- The assistant recommends Motion Transfer for multiple replacement subjects, including people, objects and vehicles,
+  because its LoRAs were trained for that task. Character Swap is offered only as an alternative for people.
+- Ambiguous replacement requests use an in-chat choice card: wait for the user, apply their selected mode, or stop
+  on cancellation. An explicit mode choice in the current request does not need another question.
+- Updated MCP instructions and localized color-guide recommendations with the same subject restrictions.
+- **Validation:** TypeScript and production build passed; 11 assistant tests passed. Playwright with simulated model
+  replies verified waiting, both mode choices, people-only eligibility and cancellation without generation.
+- **Deployment:** code on main; hosted UI/bridge needs deployment. Worker images and running jobs are unchanged.
+
 ### Live assistant configuration and MCP controls
 
 - Updated assistant guidance: Original is the default for ordinary edits, including vehicles; masks are opt-in
