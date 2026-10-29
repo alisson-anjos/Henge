@@ -1,7 +1,7 @@
 'use client';
 import {frameEditorName} from '../lib/frame-editor';
 import {colorGuideRecommendation, multiCharacterPromptNotice} from '../lib/color-guide';
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import type {DirectionRequest} from '../lib/history';
 import type {Picture} from '../lib/media';
@@ -185,6 +185,16 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   useEffect(() => {
     if (restored && mode === 'sharpness' && upscaleMethod === 'regenerate') {setTurbo('dmad4'); setSteps(4); setCfg(1);}
   }, [mode, upscaleMethod, restored]);
+  // Sharpness defaults to pure temporal windows when the worker supports them. Leaving Sharpness undoes only that
+  // automatic choice; a manual change of the processing strategy is kept.
+  const autoWindows = useRef(false);
+  const manualWindows = useRef(false);
+  useEffect(() => {
+    if (!restored) return;
+    if (mode === 'sharpness' && !manualWindows.current && !temporalWindows.enabled && health?.temporal_windows_ready === true) {autoWindows.current = true; setTemporalWindows(v => ({...v, enabled: true, scope: 'all'}));}
+    else if (mode !== 'sharpness' && autoWindows.current) {autoWindows.current = false; setTemporalWindows(v => ({...v, enabled: false}));}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, restored, health?.temporal_windows_ready]);
   useEffect(() => {setShowReferenceComparison(false); if (selected) try {localStorage.setItem(SELECTED_KEY, selected);} catch {/* private mode */}}, [selected]);
   useEffect(() => {
     let disposed = false, first = true, timer: ReturnType<typeof setTimeout>;
@@ -335,7 +345,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
     {mode === 'swap' && activeConditioning === 'guide' && ['2d', '3d'].includes(request?.subject_guidance?.representation || '') && <label className="prompt-assist-row"><input type="checkbox" checked={regionalAttention} onChange={e => setRegionalAttention(e.target.checked)}/><span>{tr('Focus each reference on its marked person (experimental)', 'Concentrar cada referência na pessoa marcada (experimental)', 'Concentrar cada referencia en la persona marcada (experimental)')}<small>{tr('Guides attention without locking pixels. May increase render time.', 'Orienta a atenção sem travar pixels. Pode aumentar o tempo de geração.', 'Orienta la atención sin bloquear píxeles. Puede aumentar el tiempo de generación.')}</small></span></label>}
     <div className="seed-control"><label htmlFor="generation-seed">Seed<input id="generation-seed" type="number" min="0" max="4294967295" value={seed} onChange={e => setSeed(Math.min(4294967295, Math.max(0, Math.round(Number(e.target.value) || 0))))}/></label><button type="button" className="quiet-button" onClick={() => setSeed(crypto.getRandomValues(new Uint32Array(1))[0])}>{tr('Randomize seed', 'Sortear nova seed', 'Sortear nueva seed')}</button><small>{tr('Keep the same seed to compare changes. The seed used is saved with each generation.', 'Mantenha a mesma seed para comparar ajustes. A seed usada fica salva em cada geração.', 'Mantén la misma seed para comparar ajustes. La seed utilizada se guarda en cada generación.')}</small></div>
     <fieldset className="temporal-window-settings"><legend>{tr('Temporal processing', 'Processamento temporal', 'Procesamiento temporal')}</legend>
-      <label>{tr('Processing strategy', 'Estratégia de processamento', 'Estrategia de procesamiento')}<Select aria-label={tr('Temporal processing mode', 'Modo de processamento temporal', 'Modo de procesamiento temporal')} value={temporalWindows.enabled ? (temporalWindows.scope === 'refiner_full' ? 'refiner_full' : 'pure') : 'off'} onChange={e => setTemporalWindows(v => ({...v, enabled: e.target.value !== 'off', scope:e.target.value === 'refiner_full' ? 'refiner_full' : 'all'}))}>
+      <label>{tr('Processing strategy', 'Estratégia de processamento', 'Estrategia de procesamiento')}<Select aria-label={tr('Temporal processing mode', 'Modo de processamento temporal', 'Modo de procesamiento temporal')} value={temporalWindows.enabled ? (temporalWindows.scope === 'refiner_full' ? 'refiner_full' : 'pure') : 'off'} onChange={e => {autoWindows.current = false; manualWindows.current = true; setTemporalWindows(v => ({...v, enabled: e.target.value !== 'off', scope:e.target.value === 'refiner_full' ? 'refiner_full' : 'all'}));}}>
         <option value="off">{tr('Standard processing', 'Processamento padrão', 'Procesamiento estándar')}</option>
         <option value="pure" disabled={health?.temporal_windows_ready !== true}>{tr('Pure temporal windows · experimental', 'Janelas temporais puras · experimental', 'Ventanas temporales puras · experimental')}{health?.temporal_windows_ready !== true ? tr(' · update worker', ' · atualizar worker', ' · actualizar worker') : ''}</option>
         {mode === 'sharpness' && <option value="refiner_full" disabled={health?.temporal_windows_ready !== true || !fullRefinerAvailable}>{tr('Segments → full-video refiner windows · experimental', 'Segmentos → refiner completo com janelas · experimental', 'Segmentos → refiner completo con ventanas · experimental')}</option>}

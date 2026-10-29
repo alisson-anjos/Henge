@@ -115,7 +115,8 @@ class PureWindowGraphTests(unittest.TestCase):
  def test_pure_windows_allow_single_long_refiner_shot(self):
   import server
   job={'request':{'mode':'sharpness','video':{'start_seconds':0,'end_seconds':13.458333},'processing':{'mode':'single','requested_seconds_per_shot':15,'context_frames':22,'cut_mode':'off'}},'options':{'upscale_method':'regenerate','temporal_windows':{'enabled':True}}}
-  shots,_=server.plan_shots(job);self.assertEqual(len(shots),1);self.assertEqual(shots[0]['length'],328)
+  # 13.5 s in one 328-frame shot is what a 56 GB worker could not hold at 2K: shots stay within FULL_REFINE_CHUNK.
+  shots,_=server.plan_shots(job);self.assertEqual(len(shots),2);self.assertTrue(all(s['length']<=server.FULL_REFINE_CHUNK for s in shots))
 
  def test_pure_windows_respect_each_detected_camera_cut(self):
   import server

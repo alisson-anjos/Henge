@@ -2,7 +2,9 @@
 
 In **Settings → Temporal processing → Processing strategy**, choose:
 
-- **Standard processing**: keeps the previous path. This is the default.
+- **Standard processing**: keeps the previous path. This is the default for Character Swap, Motion Transfer and
+  Head Swap. **Sharpness defaults to pure temporal windows** (107/22) when the worker supports them; a manual
+  choice is kept, and jobs sent through the assistant, MCP or API without this option get the same default.
 - **Pure temporal windows · experimental**: every denoise evaluation uses overlapping windows whose
   predictions are combined before the sampler updates the global latent. There is no sequential warmup.
 
@@ -151,6 +153,10 @@ shapes preserved. That does not validate the production LoRAs or the Flash/Kitch
 Real generations on RunPod Serverless (2026-10-29, see the [changelog](../CHANGELOG.md)) showed no seam between
 windows in Sharpness, Character Swap results, Motion Transfer and TARA on short clips; longer clips with several
 windows and camera cuts are still to be compared before promoting the mode to default.
+
+With Open-H3 Refiner + LMS and pure windows, a Sharpness shot holds at most 243 frames (~10 s), also in Single
+mode: windows bound model memory, but the first pass, the output-size guide and the decoded output of the whole
+shot stay in RAM (a 328-frame 2K shot did not fit a 56 GB worker).
 
 To repeat the reduced-H3 CPU test (no weight download), with ComfyUI's Python:
 

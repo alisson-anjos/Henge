@@ -9,6 +9,16 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Sharpness defaults to pure temporal windows
+
+- Entering Sharpness selects **Pure temporal windows** (107/22) when the worker supports them; leaving Sharpness
+  restores Standard unless the strategy was chosen by hand. The bridge applies the same default to Sharpness jobs
+  that omit the option (assistant, MCP, API). Other modes keep Standard until they are compared with windows.
+- With Open-H3 Refiner + LMS and pure windows, Sharpness shots are capped at 243 frames (~10 s), also in Single
+  mode, because the frames held in RAM still grow with the shot.
+- **Component:** UI/bridge. **Tests:** shot planning, Playwright on the mode switch (default, restore, manual
+  choice kept). No new render.
+
 ### Settings → Models and version status
 
 - **Settings → Models** lists the GitHub-backed model catalog (cached five minutes, bundled fallback offline) and

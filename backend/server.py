@@ -872,6 +872,11 @@ def plan_shots(job):
     regenerate=r['mode']=='sharpness' and upscale_method(job.get('options',{}))=='regenerate'
     # Refinement also encodes an output-resolution guide. Bound both passes even for Single mode.
     if regenerate and (full_refiner_enabled(job.get('options',{})) or not (job.get('options',{}).get('temporal_windows') or {}).get('enabled')):per=min(per,107)
+    elif regenerate:
+        # Pure windows bound model memory, not the frames held in RAM: the first pass, the output-size guide and the
+        # decoded output of a whole 22 s clip at 2K killed a 56 GB worker. Same ~10 s bound as full-video refinement.
+        if processing.get('mode')=='single':per=max(22,grid_frames(total))
+        per=min(per,FULL_REFINE_CHUNK)
     elif processing.get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
     context=min(processing.get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17))
     # A single or causal render follows the guide straight through its cuts.
@@ -1162,6 +1167,7 @@ def shot_audio(job,outputs,i,shot,piece):
 # 1952x1088 is ~34 GB of frames and killed a 56 GB worker. Longer videos are refined in chunks of at most this many
 # frames (~10 s, H3 17n+5 grid), with context windows inside each chunk.
 FULL_REFINE_CHUNK=243
+SHARPNESS_WINDOWS={'enabled':True,'scope':'all','window_frames':107,'overlap_frames':22}
 FULL_REFINE_CONTEXT=22
 
 def refine_chunks(total,boundaries,limit=None,context=None):
@@ -1559,6 +1565,12 @@ async def create_job(request:Request):
         r=json.loads(str(form.get('direction','{}')));options=json.loads(str(form.get('options','{}')))
         pictures={int(k.split('_')[1]):v for k,v in form.items() if re.fullmatch(r'picture_\d+',k)}
         if len(pictures)>11:raise ValueError('Attach up to 11 reference images')
+        # Sharpness defaults to pure temporal windows when the caller (assistant, MCP, API) does not choose and the
+        # worker supports them; an explicit setting, including off, is kept.
+        if r.get('mode')=='sharpness' and 'temporal_windows' not in options:
+            try:supported='HengeH3PureWindows' in comfy_info()
+            except Exception:supported=False
+            if supported:options['temporal_windows']=dict(SHARPNESS_WINDOWS)
         validate_request(r,options,list(pictures))
         if (options.get('temporal_windows') or {}).get('enabled') and 'HengeH3PureWindows' not in comfy_info():raise HTTPException(409,'Pure temporal windows need the updated Henge worker (HengeH3PureWindows node)')
         if upscale_method(options)=='regenerate':
