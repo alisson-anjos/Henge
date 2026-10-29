@@ -966,8 +966,7 @@ def generate(job):
         save(job,segment=i+1,total_segments=len(shots),progress=i/len(shots),message=f'Rendering segment {i+1}/{len(shots)}')
         # The next shot's context is read from the end of this one, so the worker may drop the overlap only when
         # enough frames remain after it.
-        # Continuing shots keep JOIN_OVERLAP overlap frames: they are joined with the previous shot's tail (seam selection and
-        # colour match), then dropped.
+        # Continuing shots keep JOIN_OVERLAP overlap frames: they are joined with the previous shot's tail (hard seam), then dropped.
         skip=max(0,shot['overlap']-JOIN_OVERLAP) if shot['frames']-shot['overlap']>=context else 0
         shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
                         **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
@@ -1053,7 +1052,7 @@ def read_overlap_frames(path,start,count,width,height):
 
 
 def seam_join(previous,piece,dup):
-    """Hard seam and colour match with bounded RAM, including for long/high-resolution shots.
+    """Hard seam with original colours and bounded RAM, including for long/high-resolution shots.
 
     Only <=8 thumbnail frames per side enter Python. FFmpeg streams the actual frames,
     replaces the outgoing tail at the seam, and removes the duplicated incoming overlap.
@@ -1064,12 +1063,11 @@ def seam_join(previous,piece,dup):
     if na<dup or nb<=dup or (a['width'],a['height'])!=(b['width'],b['height']):raise ValueError('Invalid shot overlap')
     if dup>JOIN_OVERLAP:raise ValueError('Shot overlap exceeds the bounded join limit')
     tail=read_overlap_frames(previous,na-dup,dup,a['width'],a['height']);head=read_overlap_frames(piece,0,dup,b['width'],b['height'])
-    seam,mean_h,gain,mean_t=overlap_match(tail,head)
-    lut=':'.join(f"{channel}='clip(round((val-{float(mean_h[i]):.9g})*{float(gain[i]):.9g}+{float(mean_t[i]):.9g}),0,255)'" for i,channel in enumerate(('r','g','b')))
+    seam=overlap_match(tail,head)
     prefix=na-dup+seam
-    filters=f'[1:v]format=rgb24,lutrgb={lut},split=2[head][tail];[head]trim=start_frame={seam}:end_frame={dup},setpts=PTS-STARTPTS[h];[tail]trim=start_frame={dup},setpts=PTS-STARTPTS[incoming]'
+    filters=f'[1:v]split=2[head][tail];[head]trim=start_frame={seam}:end_frame={dup},setpts=PTS-STARTPTS[h];[tail]trim=start_frame={dup},setpts=PTS-STARTPTS[incoming]'
     if prefix:
-        filters+=f';[0:v]trim=end_frame={prefix},setpts=PTS-STARTPTS,format=rgb24[p];[p][h]concat=n=2:v=1:a=0[previous]'
+        filters+=f';[0:v]trim=end_frame={prefix},setpts=PTS-STARTPTS[p];[p][h]concat=n=2:v=1:a=0[previous]'
     else:filters+=';[h]null[previous]'
     pa=previous.with_name(previous.stem+'.joining.mp4');pb=piece.with_name(piece.stem+'.joining.mp4')
     args=['ffmpeg','-v','error','-threads','1','-i',str(previous),'-threads','1','-i',str(piece),'-filter_complex_threads','1','-filter_complex',filters]

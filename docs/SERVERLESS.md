@@ -381,7 +381,8 @@ failure happened while downloading, joining or exporting its result. Check Rende
 and deployment/restart events before assigning a cause.
 
 Shot joining now reads only the overlapping frames as thumbnails (longest side at most 256 pixels)
-to select the hard seam and colour transform. FFmpeg streams the full-resolution frames. The join
+to select the hard seam. Colours are preserved; no colour matching is applied. FFmpeg streams the
+full-resolution frames. The join
 keeps the existing frame counts, removes the overlap once, and uses no crossfade. It verifies both
 temporary output files before replacing the original pieces. This avoids keeping entire RGB shots
 and several full-video float copies in the bridge's RAM.

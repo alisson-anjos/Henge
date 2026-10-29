@@ -18,10 +18,9 @@ class StreamingJoinTests(unittest.TestCase):
    self.assertEqual([c.args[1:3] for c in read.call_args_list],[(16,8),(0,8)])
    self.assertFalse(list(Path(folder).glob('*.joining.mp4')))
  def test_empty_prefix_at_seam_zero_preserves_timeline(self):
-  import numpy as np
   with tempfile.TemporaryDirectory() as folder:
    a=Path(folder)/'a.mp4';b=Path(folder)/'b.mp4';self.clip(a,8);self.clip(b,20,'blue')
-   with patch('video_join.overlap_match',return_value=(0,np.zeros(3),np.ones(3),np.zeros(3))):server.seam_join(a,b,8)
+   with patch('video_join.overlap_match',return_value=0):server.seam_join(a,b,8)
    self.assertEqual((server.frame_count(a),server.frame_count(b)),(8,12))
  def test_failed_encode_leaves_both_inputs_untouched(self):
   with tempfile.TemporaryDirectory() as folder:
@@ -34,3 +33,12 @@ class StreamingJoinTests(unittest.TestCase):
    samples=server.read_overlap_frames(a,92,8,96,64)
    self.assertEqual(samples.shape,(8,64,96,3))
    self.assertLessEqual(samples.nbytes,8*256*256*3)
+
+ def test_incoming_shot_keeps_its_colour(self):
+  import numpy as np
+  with tempfile.TemporaryDirectory() as folder:
+   a=Path(folder)/'a.mp4';b=Path(folder)/'b.mp4';self.clip(a,24,'red');self.clip(b,20,'blue')
+   before=server.read_overlap_frames(b,8,1,96,64).mean((0,1,2))
+   server.seam_join(a,b,8)
+   after=server.read_overlap_frames(b,0,1,96,64).mean((0,1,2))
+   np.testing.assert_allclose(after,before,atol=3)

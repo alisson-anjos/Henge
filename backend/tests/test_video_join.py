@@ -22,3 +22,10 @@ class JoinTest(unittest.TestCase):
     def test_invalid_overlap_rejected(self):
         with self.assertRaises(ValueError):
             join_overlap(np.zeros((2, 8, 8, 3)), np.zeros((2, 8, 8, 3)), 3)
+
+    def test_colour_difference_is_preserved(self):
+        a=np.full((10,8,8,3),[220,40,10],dtype=np.uint8)
+        b=np.full((12,8,8,3),[10,60,230],dtype=np.uint8)
+        previous,incoming=join_overlap(a,b,4)
+        np.testing.assert_array_equal(incoming,b[4:])
+        self.assertTrue(all(tuple(pixel) in ((220,40,10),(10,60,230)) for pixel in previous.reshape(-1,3)))
