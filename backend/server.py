@@ -1565,12 +1565,6 @@ async def create_job(request:Request):
         r=json.loads(str(form.get('direction','{}')));options=json.loads(str(form.get('options','{}')))
         pictures={int(k.split('_')[1]):v for k,v in form.items() if re.fullmatch(r'picture_\d+',k)}
         if len(pictures)>11:raise ValueError('Attach up to 11 reference images')
-        # New jobs without a turbo get the default one, stored with the job (a distilled base such as OmniRef keeps none).
-        if 'turbo' not in options and options.get('base','h3')=='h3':
-            # Only when the backend lists its file; otherwise the previous default, so a job does not fail on a model
-            # that was never installed.
-            known_loras();installed=workflows.INSTALLED.get('LoraLoaderModelOnly')
-            options['turbo']=workflows.DEFAULT_TURBO if installed and workflows.lora_installed(TURBOS[workflows.DEFAULT_TURBO]['lora'],installed) else 'dmd8'
         # Sharpness defaults to pure temporal windows when the caller (assistant, MCP, API) does not choose and the
         # worker supports them; an explicit setting, including off, is kept.
         if r.get('mode')=='sharpness' and 'temporal_windows' not in options:

@@ -55,7 +55,7 @@ function normalizeSettings(o: Record<string, unknown>) {
     guideClip: (['auto', 'off'].includes(o.guide_clip as string) ? o.guide_clip : 'on') as 'auto' | 'on' | 'off',
     referenceScale: num(o.reference_scale, .25, 1, 1),
     seed: num(o.seed, 0, 4294967295, 42, true),
-    steps: num(o.steps, 1, 60, (typeof o.turbo === 'string' ? o.turbo : SAMPLING.pika.turbo) === SAMPLING.pika.turbo ? SAMPLING.pika.steps : 8, true),
+    steps: num(o.steps, 1, 60, 8, true),
     clipFps: typeof o.clip_fps === 'number' && [1, 2, 4, 8].includes(o.clip_fps) ? o.clip_fps : 2,
     enhancePrompt: o.enhance_prompt !== false,
     autoApprove: o.auto_approve === true,
@@ -74,7 +74,7 @@ function normalizeSettings(o: Record<string, unknown>) {
     refinerLmsStrength: num(o.refiner_lms_strength, .1, 1.5, 1),
     regeneratePrompt: typeof o.regenerate_prompt === 'string' ? o.regenerate_prompt : '',
     samplerName: SAMPLING.samplers.includes(String(o.sampler_name)) ? String(o.sampler_name) : 'auto',
-    turbo: typeof o.turbo === 'string' ? o.turbo : SAMPLING.pika.turbo,
+    turbo: typeof o.turbo === 'string' ? o.turbo : 'dmd8',
     prepareReferences: o.prepare_references !== false,
     attention: o.attention === 'pytorch attention' ? 'pytorch attention' : 'comfy kitchen attention',
     sourceBlur: SOURCE_BLUR.includes(o.source_blur as string) ? o.source_blur as string : 'off',
@@ -175,13 +175,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   const [restored, setRestored] = useState(false);
   useEffect(() => {
     if (!Object.keys(initialSettings).length) {
-      try {
-        const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
-        // Settings saved before Pika became the default still carry the old untouched default (DMD 8-step, 8 steps):
-        // move those to the new default once; any other saved choice is kept.
-        if (stored && typeof stored === 'object' && !stored.defaults_v2 && stored.turbo === 'dmd8' && stored.steps === 8 && (stored.base || 'h3') === 'h3') Object.assign(stored, {turbo: SAMPLING.pika.turbo, steps: SAMPLING.pika.steps, sampler_name: 'auto'});
-        if (stored && typeof stored === 'object') applySettings(stored);
-      } catch {/* private mode */}
+      try {const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); if (stored && typeof stored === 'object') applySettings(stored);} catch {/* private mode */}
     }
     setRestored(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,18 +183,8 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   // Choosing this two-stage recipe also applies its first-pass sampling defaults.
   // Keep these editable afterwards; changing steps/turbo alone does not reapply the preset.
   useEffect(() => {
-    if (restored && mode === 'sharpness' && upscaleMethod === 'regenerate') {setTurbo(SAMPLING.pika.turbo); setSteps(SAMPLING.pika.steps); setCfg(1); setSamplerName('auto'); setBase('h3');}
+    if (restored && mode === 'sharpness' && upscaleMethod === 'regenerate') {setTurbo('dmad4'); setSteps(4); setCfg(1);}
   }, [mode, upscaleMethod, restored]);
-  // The default turbo (Pika) falls back to the previous default (DMD 8-step; DMAD 4-step for the Refiner + LMS first
-  // pass) while the backend does not list its file; a turbo picked by hand
-  // is kept and shown as not installed.
-  const manualTurbo = useRef(false);
-  useEffect(() => {
-    const [fallback, fallbackSteps] = mode === 'sharpness' && upscaleMethod === 'regenerate' ? ['dmad4', 4] : ['dmd8', 8];
-    if (!restored || manualTurbo.current || turbo !== SAMPLING.pika.turbo || health?.turbos?.[turbo]?.available !== false || !health?.turbos?.[fallback]?.available) return;
-    setTurbo(fallback); setSteps(fallbackSteps); setCfg(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restored, turbo, health?.turbos, mode, upscaleMethod]);
   // Sharpness defaults to pure temporal windows when the worker supports them. Leaving Sharpness undoes only that
   // automatic choice; a manual change of the processing strategy is kept.
   const autoWindows = useRef(false);
@@ -392,7 +376,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
       {mode !== 'sharpness' && <label>{tr('Blur the original person', 'Desfocar a pessoa original', 'Desenfocar a la persona original')}<Select value={sourceBlur} onChange={e => setSourceBlur(e.target.value)}>{SOURCE_BLUR.map(v => <option key={v} value={v}>{v === 'off' ? tr('Off', 'Desligado', 'Apagado') : v}</option>)}</Select><small>{tr("What the model sees of the guide: the face (or head + hands, or the whole person) is blurred, so it reads the pose and motion but has no face to copy. 'keep mouth' keeps lip sync; masked area = only the marked people. The output is never blurred.", "O que o modelo vê do guia: o rosto (ou cabeça + mãos, ou a pessoa inteira) fica desfocado, então ele lê pose e movimento mas não tem rosto para copiar. 'keep mouth' mantém a boca para o lip sync; masked area = só as pessoas marcadas. O resultado nunca é desfocado.", "Lo que el modelo ve de la guía: la cara (o cabeza + manos, o la persona entera) se desenfoca, así lee la pose y el movimiento pero no tiene cara que copiar. 'keep mouth' conserva la boca; masked area = solo las personas marcadas. El resultado nunca se desenfoca.")}</small></label>}
       {mode !== 'sharpness' && sourceBlur !== 'off' && <label>{tr('Blur effect', 'Efeito', 'Efecto')}<Select value={sourceBlurEffect} onChange={e => setSourceBlurEffect(e.target.value)}><option value="blur">{tr('Blur', 'Desfoque', 'Desenfoque')}</option><option value="invert colours">{tr('Invert colours (keeps shapes and expression)', 'Inverter cores (mantém formas e expressão)', 'Invertir colores (mantiene formas y expresión)')}</option></Select></label>}
       {mode !== 'sharpness' && <label>{tr('Base model', 'Modelo base', 'Modelo base')}<Select value={base} onChange={e => {setBase(e.target.value); if (e.target.value === 'omniref') setTurbo('none');}}>{Object.entries(health?.bases || {h3: {label: 'MiniMax H3 ref2va', available: true}}).map(([id, item]) => <option key={id} value={id} disabled={!item.available}>{item.label}{item.available ? '' : tr(' · not installed', ' · não instalado', ' · no instalado')}</option>)}</Select></label>}
-      {<label>Turbo LoRA<Select value={turbo} onChange={e => {const next = e.target.value; manualTurbo.current = true; setTurbo(next); if (next === SAMPLING.pika.turbo) {setSamplerName('auto'); setBase('h3');} if (next === 'none' && base === 'h3') {setSteps(30); setCfg(4);} else {const recommended = health?.turbos?.[next]?.steps; if (recommended) setSteps(recommended); setCfg(1);}}}>{Object.entries(health?.turbos || {[SAMPLING.pika.turbo]: {label: 'Pika H3 Flex · 6-step', steps: SAMPLING.pika.steps, available: true}}).map(([id, item]) => <option key={id} value={id} disabled={!item.available}>{item.label}{item.available ? '' : tr(' · not installed', ' · não instalado', ' · no instalado')}</option>)}</Select></label>}
+      {<label>Turbo LoRA<Select value={turbo} onChange={e => {const next = e.target.value; setTurbo(next); if (next === SAMPLING.pika.turbo) {setSamplerName('auto'); setBase('h3');} if (next === 'none' && base === 'h3') {setSteps(30); setCfg(4);} else {const recommended = health?.turbos?.[next]?.steps; if (recommended) setSteps(recommended); setCfg(1);}}}>{Object.entries(health?.turbos || {dmd8: {label: 'DMD 8-step (drbaph)', steps: 8, available: true}}).map(([id, item]) => <option key={id} value={id} disabled={!item.available}>{item.label}{item.available ? '' : tr(' · not installed', ' · não instalado', ' · no instalado')}</option>)}</Select></label>}
       <label>{tr('H3 sampler', 'Sampler H3', 'Sampler H3')}<Select aria-label={tr('H3 sampler', 'Sampler H3', 'Sampler H3')} value={samplerName} onChange={e => setSamplerName(e.target.value)}>{SAMPLING.samplers.map(name => <option key={name} value={name}>{name === 'auto' ? tr('Auto · LCM for Pika, Euler otherwise', 'Auto · LCM para Pika, Euler nos demais', 'Auto · LCM para Pika, Euler en los demás') : name}</option>)}</Select></label>
       {turbo === SAMPLING.pika.turbo && <p className="muted" role="note">{steps === SAMPLING.pika.steps
         ? tr('Pika uses the published 6-step manual sigmas. Auto selects LCM; a sampler override keeps these sigmas. Open-H3 refinement keeps its separate sampler and schedule.', 'Pika usa os sigmas manuais publicados de 6 steps. Auto seleciona LCM; outro sampler mantém esses sigmas. O refino Open-H3 mantém seu sampler e schedule separados.', 'Pika usa los sigmas manuales publicados de 6 pasos. Auto selecciona LCM; otro sampler conserva estos sigmas. El refino Open-H3 mantiene su sampler y schedule separados.')
@@ -415,7 +399,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
     </div>{onImportSettings && <button className="quiet-button import-settings-button" onClick={onImportSettings}>{tr('Import settings', 'Importar configuração', 'Importar configuración')}</button>}</details>
   </div>;
   const shareOptions = {temporal_windows: temporalWindows, regional_attention: {enabled: regionalAttention && mode === 'swap' && activeConditioning === 'guide' && ['2d', '3d'].includes(request?.subject_guidance?.representation || ''), strength: .5, reference_budget: .35, layers: '10,25,40'}, profile, adapt, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, guide_clip: guideClip, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, sampler_name: samplerName, attention, source_blur: sourceBlur, source_blur_effect: sourceBlurEffect, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise, regenerate_steps: regenerateSteps, refiner_lms: refinerLms, refiner_lms_strength: refinerLmsStrength, refiner_upscaler: refinerUpscaler, regenerate_prompt: regeneratePrompt};
-  const storedOptions = JSON.stringify({...shareOptions, defaults_v2: true});
+  const storedOptions = JSON.stringify(shareOptions);
   useEffect(() => {if (restored) try {localStorage.setItem(SETTINGS_KEY, storedOptions);} catch {/* private mode */}}, [restored, storedOptions]);
   const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button>{job && !['completed', 'failed', 'cancelled'].includes(job.status) && <button className="quiet-button" disabled={submitting} onClick={() => action('cancel')}>{tr('Cancel job', 'Cancelar pedido', 'Cancelar pedido')}</button>}{job?.status === 'awaiting_approval'
     // The plan waits for approval: the main button approves it instead of starting a second request.

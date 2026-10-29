@@ -91,7 +91,7 @@ result with windows; long outputs still use bounded refinement chunks for host R
 updated Henge worker nodes. Comfy Kitchen with TARA needs the [modified kernel](docs/motion-transfer.md), not just the stock package.
 
 **Sharpness defaults.** Entering Sharpness selects 1080p when coming from 480p/720p. Open-H3 Refiner + LMS presets the
-first pass to **Pika H3 Flex, 6 steps and CFG 1** (DMAD 4-step without Pika); the second pass defaults to **2 refiner steps**. These are separate passes,
+first pass to **DMAD, 4 steps and CFG 1**; the second pass defaults to **2 refiner steps**. These are separate passes,
 and the first-pass settings remain editable. This path uses the existing Ref2VA base, not FL2VA, and supports 1080p
 and 2K, not 4K. It requires the `regenerate` weights and native ComfyUI upscaler nodes. See
 [setup and limits](docs/open-h3-regenerate.md).

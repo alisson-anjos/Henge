@@ -1,11 +1,7 @@
 # Pika H3 Flex turbo in Henge
 
-Pika is the **default Turbo LoRA** for Character Swap, Motion Transfer/TARA, Head Swap and the first pass of
-Sharpness, with its published preset (6 steps, LCM through **H3 sampler → Auto**, CFG 1). It is downloaded by default
-and does not replace Henge's task LoRAs. While the backend does not list its file, the studio and the bridge fall back
-to the previous default (DMD 8-step; DMAD 4-step for the Refiner + LMS first pass). Browser settings still holding the
-old untouched default (DMD 8-step, 8 steps) move to Pika once; any other saved choice is kept. Jobs created earlier
-without a turbo keep DMD 8-step on Retry. Henge uses the Comfy-format **Ref2VA** adapter at strength 1.0 with its existing
+Pika is an optional **Turbo LoRA** selection, downloaded by default. It does not replace Henge's task LoRAs or
+change the existing default turbo. Henge uses the Comfy-format **Ref2VA** adapter at strength 1.0 with its existing
 H3 Ref2VA base; FL2VA and FastH3 OmniRef are not used for this option.
 
 ## Sampling
