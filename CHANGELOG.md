@@ -9,6 +9,15 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Native H3 context-window comparison
+
+- Compared Henge with ComfyUI PR #17425 at its reviewed commit, using source inspection and focused CPU probes.
+- Confirmed matching video windows and pyramid weights at equal settings; documented different defaults,
+  accumulation, guide handling and TARA integration requirements.
+- Recorded the still-image/long-audio guide case that needs improvement in Henge.
+- **Component:** documentation and analysis only. No runtime defaults, worker image or deployment were changed.
+- [Findings and validation scope](docs/context-windows-native-comparison.md).
+
 ### Portable ComfyUI workflow packages
 
 - Workflow downloads now include an editable visual workflow, portable and original API graphs, the input files,

@@ -157,3 +157,10 @@ To repeat the reduced-H3 CPU test (no weight download), with ComfyUI's Python:
 ```bash
 python scripts/check_h3_pure_windows_cpu.py --comfy-root /path/to/ComfyUI --bfs-root /path/to/ComfyUI-BFSNodes
 ```
+
+
+## Native ComfyUI H3 context windows
+
+See the [comparison with PR #17425](context-windows-native-comparison.md) for matching settings, memory behavior,
+TARA integration requirements and a guide-audio limitation found during CPU probes. No backend migration is enabled
+by that analysis.
