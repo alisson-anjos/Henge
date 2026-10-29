@@ -82,3 +82,16 @@ class RegenerateTests(unittest.TestCase):
         selected=[m for m in manifest['models'] if set(m['profiles']) & {'common','regenerate'}]
         self.assertFalse(any('fl2va' in m['destination'].lower() for m in selected))
         self.assertIn('diffusion_models/'+BASES['h3']['unet'],[m['destination'] for m in selected])
+
+    def test_long_single_refinement_is_bounded_without_losing_duration(self):
+        job={'request':{'mode':'sharpness','video':{'start_seconds':0,'end_seconds':13.458333},'processing':{'mode':'single','requested_seconds_per_shot':15,'context_frames':22,'cut_mode':'off'}},'options':{'upscale_method':'regenerate'}}
+        shots,context=server.plan_shots(job)
+        self.assertGreater(len(shots),1)
+        self.assertTrue(all(s['length']<=107 for s in shots))
+        self.assertEqual(sum(s['frames']-s['overlap'] for s in shots),323)
+        self.assertEqual(context,22)
+        self.assertTrue(all(s['length']%17==5 for s in shots))
+        job['options']['upscale_method']='h3'
+        old,_=server.plan_shots(job)
+        self.assertEqual(len(old),1)
+        self.assertEqual(old[0]['length'],328)

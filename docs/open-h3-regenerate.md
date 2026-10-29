@@ -66,3 +66,15 @@ Informe uma descrição fiel da cena ou deixe vazio para o VLM configurado descr
 Os testes automatizados verificam montagem do grafo, schedules, áudio, resolução e bloqueio de dependências ausentes. Ainda é necessário testar qualidade, tempo e VRAM no worker atualizado; não há estimativa de capacidade nem resultado visual validado deste modo.
 
 Fontes: [workflow/modelos Kijai](https://huggingface.co/Kijai/MiniMax-H3-experimental), [node nativo ComfyUI](https://github.com/Comfy-Org/ComfyUI/commit/35060f0156181ae78a86b10f098f67ce8e83697f), [modelo NVIDIA](https://huggingface.co/Efficient-Large-Model/Open-H3-Regenerate-2K).
+
+### Limite de memória por bloco
+
+O refiner processa blocos de no máximo **107 frames (~4,46 s a 24 fps)**, inclusive quando
+a UI pede um único trecho longo. Os blocos compartilham o contexto de continuidade configurado;
+a junção remove a sobreposição e mantém a duração completa, sem introduzir crossfade.
+Esse limite reduz a carga dos dois passes e do Add Guide na resolução final; não é uma garantia
+de VRAM/RAM suficiente para qualquer resolução ou hardware.
+
+Um grafo de falha recuperado em 29/10/2026 tentou 328 frames, primeira passagem 1376×768 e
+refino com guia 1952×1088. O worker fechou a conexão; o log antigo não estava disponível para
+confirmar OOM. A mensagem de WebSocket fechado não deve ser tratada como diagnóstico definitivo.

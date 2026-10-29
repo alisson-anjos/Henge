@@ -833,7 +833,10 @@ def plan_shots(job):
     r=job['request'];processing=r['processing']
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24))
     per=max(22,min(362,5+17*math.floor((round(processing['requested_seconds_per_shot']*24)-5)/17)))
-    if processing.get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
+    regenerate=r['mode']=='sharpness' and upscale_method(job.get('options',{}))=='regenerate'
+    # Refinement also encodes an output-resolution guide. Bound both passes even for Single mode.
+    if regenerate:per=min(per,107)
+    elif processing.get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
     context=min(processing.get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17))
     # A single or causal render follows the guide straight through its cuts.
     if processing.get('mode')=='causal':return [{'start':0,'frames':total,'overlap':0,'length':grid_frames(total),'reset_context':True}],context
