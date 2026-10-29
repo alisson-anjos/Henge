@@ -34,3 +34,13 @@ fazem parte da imagem de UI. O worker de geração é um componente separado.
 Referências oficiais:
 - [Deploy de imagem Docker no Render](https://render.com/docs/deploying-an-image)
 - [Deploys manuais e automáticos](https://render.com/docs/deploys)
+
+## Refiner visível, mas desabilitado
+
+Atualizar `henge-ui` no Render atualiza a interface e o bridge; não atualiza o ComfyUI nem
+instala pesos no RunPod. O Refiner + LMS exige a nova imagem do worker, os pesos do perfil
+`regenerate` no volume e um inventário atualizado no bridge. Em Serverless, use um pod temporário
+para completar o volume; definir o perfil apenas no worker não faz downloads.
+
+Siga os [passos de atualização do endpoint](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint).
+Depois execute um job curto com outro método pelo Henge para atualizar o cache e recarregue a página.

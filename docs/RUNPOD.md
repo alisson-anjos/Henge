@@ -16,6 +16,16 @@ profile is `common` or listed in `HENGE_MODEL_PROFILES`. Files already on the
 volume are skipped, so only the first boot downloads. To change a link, edit
 that file (and rebuild) or override it at runtime (see below).
 
+## Refiner + LMS no Sharpness
+
+O método padrão do Sharpness exige a imagem atualizada e os pesos opcionais do perfil
+`regenerate`. Em um **pod normal**, acrescente `regenerate` a `HENGE_MODEL_PROFILES`
+e reinicie com a imagem nova para baixar os arquivos no volume existente.
+
+Em **Serverless**, essa variável no worker não baixa pesos: complete o volume por um pod
+temporário e atualize os workers. Veja [os passos para um endpoint existente](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint)
+e [arquivos/nodes exigidos](open-h3-regenerate.md). Atualizar apenas o Render/bridge não habilita o método.
+
 ## 1. Image
 
 The GitHub Actions workflow `.github/workflows/docker.yml` builds and pushes:

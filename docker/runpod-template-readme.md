@@ -24,7 +24,7 @@ volume*; later pods on that volume start straight away. Pick a GPU with more tha
 | Character Swap v1.1 | H3 ref2va + Character Swap v1.1 LoRA + DMD 8-step |
 | Motion Transfer v1.0 / TARA v1.0 / Combined / FFP | H3 ref2va + training adapter V2 + the Motion Transfer LoRAs (`motion` profile) |
 | Head Swap v1.0 | H3 ref2va + Head Swap r32 + turbo LoRA; face picture + source video |
-| Sharpness | MiniMax H3 + Little More Sharpness LoRA; 2K/4K via the H3 upscaler (learned latent upscale + short tiled refine) or NVIDIA RTX Video Super Resolution; source video only |
+| Sharpness | Ref2VA + LMS, then Refiner + LMS + Add Guide by default (1080p/2K; requires optional `regenerate` weights and updated worker). H3 and NVIDIA upscale remain available, including 4K. Source video only. |
 
 Turbo LoRA (Character, Head Swap): DMD 8-step (default), DMAD 4-step,
 lightx2v 8-step v1.1 or lightx2v 4-step v1.0, chosen in the advanced settings.
@@ -67,3 +67,8 @@ Add `omniref` to `HENGE_MODEL_PROFILES` to download
 (`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; with the default profiles use a 180 GB volume). Pick it in
 **Advanced → Base model**; it is already distilled to 8 steps, so Turbo LoRA switches to
 **None**. The task LoRAs (Character Swap, Head Swap, Motion) still load on top.
+
+### Enable Refiner + LMS
+
+For a normal pod, add `regenerate` to `HENGE_MODEL_PROFILES` and use the updated image.
+Serverless workers do not download weights: first top up the attached network volume with a temporary fill pod, then update/recycle the workers and refresh the bridge inventory through a short Henge job. See [Serverless upgrade steps](../docs/SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint) and [required files/nodes](../docs/open-h3-regenerate.md).

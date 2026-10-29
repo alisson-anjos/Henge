@@ -62,13 +62,14 @@ Choose the model profiles (comma list), as on a normal pod:
 | `ffp` | Motion Transfer FFP: propagate an edited first frame (VFX Edit FFP + SolarRenderer 0.5; dyn99 and the lighter dyn95). Part of `motion` | 0.3 GB |
 | `headswap` | Head Swap | |
 | `sharpness` | Sharpness (H3 + Little More Sharpness LoRA; 2K/4K with the H3 or NVIDIA RTX upscaler) | ~1 GB (LoRA + H3 latent upscaler) |
+| `regenerate` | Sharpness default: Ref2VA + DMAD + rank-16 refiner + LMS + native upscale | Optional install; top up the volume and update the worker; no FL2VA |
 | `audio` | Generated audio and audio conditioning (H3 audio VAE) | ~0.3 GB |
 | `omniref` | OmniRef base | +22 GB |
 | `klein` | First-frame edits with FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0): replace, remove or add, optionally only in a painted area; also used for reference preparation | ~12 GB |
 | `klein3` | Optional: FLUX.3 [image klein], used instead of FLUX.2 [klein] when installed. **Gated**: accept the FLUX Kommunity License at [black-forest-labs/flux-3-image-klein-comfy](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN` | ~5 GB |
 | `sam2d`, `sam3d` | Subject marks: SAM 3.1 tracking (2D colors, Mask, the assistant's find people) and SAM 3D Body + MoGe (3D) | ~4 GB |
 
-The default, every profile above, needs roughly 125–135 GB: create the volume with 180 GB (`VOLUME_GB=180`).
+The default profiles (excluding optional additions such as `regenerate` and `klein3`) need roughly 125–135 GB: create the volume with 180 GB (`VOLUME_GB=180`).
 
 ### Option A: script
 
@@ -285,6 +286,7 @@ runpodctl network-volume delete <volume id>
 | Job waits a long time in "Waiting for a serverless worker" | Cold start, or no GPU of that type free in the datacenter. Check `runpodctl serverless get <id>`; recreate the endpoint with another `GPU`. |
 | `Serverless job failed: ... out of memory` | GPU too small, or `HENGE_COMFY_ARGS` set to `--highvram`/`--gpu-only` on the template. Leave it unset. |
 | Worker log: `no models at /runpod-volume/henge/models` | The volume is empty or not attached: run `scripts/runpod_volume.sh` and check the endpoint's network volume. |
+| Refiner + LMS is visible but disabled | Update the worker image, top up the volume with `PROFILES=regenerate`, then run a short Henge job with another method to refresh the bridge inventory. See the upgrade steps below. |
 | A mode shows "not installed" | The worker's model list does not have it: top up the volume with `VOLUME_ID=<id> scripts/runpod_volume.sh`. |
 
 Worker logs: RunPod console → *Serverless* → your endpoint → *Workers* → *Logs*.
@@ -320,3 +322,52 @@ HENGE_BACKEND=runpod RUNPOD_ENDPOINT_ID=local RUNPOD_API_BASE=http://127.0.0.1:8
 
 Code: `docker/worker_handler.py` (worker), `backend/runpod_backend.py` (bridge side),
 `docker/entrypoint.py` (roles), `scripts/runpod_volume.sh` and `scripts/runpod_serverless.sh`.
+
+## Enable Refiner + LMS on an existing endpoint
+
+The Sharpness dropdown selects **Open-H3 Refiner + LMS** by default, but disables execution until
+its native nodes and all five weights appear in the worker inventory. Updating the UI alone is not enough.
+The `regenerate` model profile is optional and is not included in the default profile list.
+
+1. Wait for the GitHub **Docker image** workflow to publish the updated full `henge` image.
+2. Top up the **same network volume attached to the endpoint**, using a temporary fill pod:
+
+   ```sh
+   VOLUME_ID=<existing-volume-id> DATACENTER=<volume-datacenter> \
+     PROFILES=regenerate IMAGE=ghcr.io/alisson-anjos/henge:latest \
+     scripts/runpod_volume.sh
+   ```
+
+   Existing files are reused; other profiles already on the volume are kept. This downloads the common
+   dependencies plus DMAD, LMS, the rank-16 refiner and the native latent upscaler. It reuses Ref2VA;
+   **FL2VA is not required**. The temporary fill pod consumes GPU time and is deleted on success.
+   Alternatively, use the console fill-pod procedure above with the existing volume and
+   `HENGE_MODEL_PROFILES=regenerate`, then terminate that temporary pod after downloads complete.
+3. After active jobs finish, update the endpoint's worker template to the newly published
+   `ghcr.io/alisson-anjos/henge:latest` (or its `sha-<commit>` tag). Preserve the attached volume,
+   `HENGE_ROLE=worker` and existing ComfyUI settings. Recycle old workers to load the new image.
+   To use the repository's update script with its standard settings:
+
+   ```sh
+   ENDPOINT_ID=<endpoint-id> TEMPLATE_ID=<worker-template-id> \
+     IMAGE=ghcr.io/alisson-anjos/henge:latest scripts/runpod_serverless.sh
+   ```
+
+   The script drains workers by scaling to zero and then restores its worker limit. Do not run it
+   during an active generation. It sets the standard worker environment rather than preserving
+   custom template environment overrides.
+4. Run a short job through Henge using an already available method, such as Sharpness with **H3**.
+   The worker response refreshes the **bridge's cached inventory**. Reload the Studio page afterwards.
+   Routine health checks and **Test connection** do not wake a worker to refresh that inventory.
+5. Select **Open-H3 Refiner + LMS**, choose **1080p or 2K**, and review the optional refiner prompt
+   in the main creation panel. An empty prompt requests an automatic scene description.
+
+**Setting `HENGE_MODEL_PROFILES=regenerate` only on a Serverless worker does not download anything.**
+The download profile belongs on the fill pod; workers only read the populated volume.
+The bridge does not need reinstalling. If the UI is on Render, update `henge-ui` separately;
+see [RENDER.md](RENDER.md).
+
+For required filenames and native nodes, see [Open-H3 setup and limits](open-h3-regenerate.md).
+If the option remains disabled, inspect `regenerate.missing_nodes` and `regenerate.missing_models`
+in the bridge's `/health` response (through the UI: `/api/backend/health`). An old inventory can report
+missing dependencies even after the volume has been updated.
