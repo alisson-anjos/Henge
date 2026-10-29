@@ -1,7 +1,7 @@
 """CPU numerical tests for pure H3 windows: no model, weights, API or GPU required."""
 import importlib.util,sys,unittest,types
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY,patch
 import torch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 path=Path(__file__).resolve().parents[1]/'comfy_nodes/henge/temporal_windows.py'
@@ -160,15 +160,47 @@ class FullRefinerTests(unittest.TestCase):
    job={'id':'test','options':{'temporal_windows':{'enabled':True,'scope':'refiner_full'}},'request':{'video':{'start_seconds':2,'end_seconds':17}},'assets':{'video':'source.mp4'},'plan':{'prompt':'scene'}}
    stack.enter_context(patch.object(server,'INPUT',inp));stack.enter_context(patch.object(server,'job_path',return_value=work));stack.enter_context(patch.object(server,'probe',return_value={'width':1376,'height':768}));stack.enter_context(patch.object(server,'run'));stack.enter_context(patch.object(server,'save'))
    execute=stack.enter_context(patch.object(server,'execute_graph',return_value={'17':{'videos':[{'filename':'result.mp4'}]}}));stack.enter_context(patch.object(server.FILES,'download',return_value=work/'refined_full.mp4'))
-   stack.enter_context(patch.object(server,'frame_count',side_effect=[360,360]))
+   stack.enter_context(patch.object(server,'frame_count',side_effect=[200,200]))
    result=server.refine_full_video(job,joined,2560,1440)
    self.assertEqual(result,work/'refined_full.mp4');self.assertEqual(execute.call_args.args[2],'h3_refine_full')
    first_path=execute.call_args.args[1]['90']['inputs']['video']
    joined.write_bytes(b'changed first pass after redo')
-   with patch.object(server,'frame_count',side_effect=[360,360]):server.refine_full_video(job,joined,2560,1440)
+   with patch.object(server,'frame_count',side_effect=[200,200]):server.refine_full_video(job,joined,2560,1440)
    self.assertNotEqual(first_path,execute.call_args.args[1]['90']['inputs']['video'])
-   with patch.object(server,'frame_count',side_effect=[360,359]),self.assertRaisesRegex(ValueError,'frame count'):server.refine_full_video(job,joined,2560,1440)
+   with patch.object(server,'frame_count',side_effect=[200,199]),self.assertRaisesRegex(ValueError,'frame count'):server.refine_full_video(job,joined,2560,1440)
 
+ def test_long_full_refine_is_split_at_segment_joins(self):
+  import server
+  # The 22 s Character Swap that killed a 56 GB worker: 530 frames in five first-pass segments.
+  chunks=server.refine_chunks(530,[144,214,317,418])
+  self.assertEqual(chunks,[(0,0,214),(214,214,418),(418,418,530)])
+  self.assertTrue(all(e-a<=server.FULL_REFINE_CHUNK for a,_,e in chunks))
+  # One segment longer than a chunk: split inside it, re-reading context frames that are dropped afterwards.
+  self.assertEqual(server.refine_chunks(500,[]),[(0,0,243),(221,243,464),(442,464,500)])
+ def test_chunked_full_refine_keeps_every_frame_in_order(self):
+  import server,tempfile,subprocess,shutil
+  from contextlib import ExitStack
+  with tempfile.TemporaryDirectory() as tmp,ExitStack() as stack:
+   root=Path(tmp);inp=root/'input';work=root/'work';work.mkdir();(inp/'henge'/'test').mkdir(parents=True)
+   source=inp/'source.mp4';joined=work/'joined.mp4'
+   subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=128x72:rate=24:duration=3','-c:v','libx264','-crf','10','-pix_fmt','yuv420p','-y',str(source)],check=True);shutil.copyfile(source,joined)
+   job={'id':'test','options':{'temporal_windows':{'enabled':True,'scope':'refiner_full'}},'request':{'video':{'start_seconds':0,'end_seconds':3}},'assets':{'video':'source.mp4'},'plan':{'prompt':'scene'}}
+   staged=[]
+   def execute(job,graph,stage):staged.append((stage,graph['90']['inputs']['video'],graph['90']['inputs']['length']));return {'17':{'videos':[{'filename':graph['90']['inputs']['video']}]}}
+   def download(item,dest):shutil.copyfile(inp/item['filename'],dest);return dest  # identity "refinement"
+   for name,value in [('INPUT',inp),('FULL_REFINE_CHUNK',30),('FULL_REFINE_CONTEXT',5)]:stack.enter_context(patch.object(server,name,value))
+   stack.enter_context(patch.object(server,'job_path',return_value=work));stack.enter_context(patch.object(server,'save'))
+   stack.enter_context(patch.object(server,'execute_graph',side_effect=execute));stack.enter_context(patch.object(server.FILES,'download',side_effect=download))
+   pieces=[]
+   for i,(a,b) in enumerate([(0,20),(20,72)]):pieces.append(server.trim_frames(source,work/f'piece_{i:03d}.mp4',a,b))
+   refined=server.refine_full_video(job,joined,128,72,pieces)
+   self.assertEqual(server.frame_count(refined),72)
+   self.assertEqual([x[0] for x in staged],['h3_refine_full_01','h3_refine_full_02','h3_refine_full_03'])
+   self.assertEqual([x[2] for x in staged],[server.grid_frames(n) for n in (20,30,27)])
+   psnr=subprocess.run(['ffmpeg','-i',str(refined),'-i',str(joined),'-lavfi','psnr','-f','null','-'],capture_output=True,text=True).stderr
+   self.assertGreater(float(psnr.split('average:')[1].split()[0]),35)
+   # Retry resumes: refined chunks are reused, nothing runs again.
+   staged.clear();server.refine_full_video(job,joined,128,72,pieces);self.assertEqual(staged,[])
  def test_api_accepts_full_scope_and_rejects_incompatible_modes_and_duration(self):
   import server,copy
   base={'mode':'sharpness','prompt':'','quality':'1440p','video':{'start_seconds':0,'end_seconds':15}}
@@ -203,7 +235,7 @@ class FullRefinerTests(unittest.TestCase):
     stack.enter_context(patch.object(server,'job_path',return_value=work));stack.enter_context(patch.object(server,'save'));run=stack.enter_context(patch.object(server,'run'));refine=stack.enter_context(patch.object(server,'refine_full_video',return_value=work/'refined_full.mp4'))
     server.finalize(job,[piece],[guide],2560,1440)
     self.assertEqual(refine.call_count,int(enabled))
-    if enabled:refine.assert_called_once_with(job,work/'joined.mp4',2560,1440)
+    if enabled:refine.assert_called_once_with(job,work/'joined.mp4',2560,1440,ANY)
     mux=next(c.args[0] for c in run.call_args_list if str(work/'result.mp4')==c.args[0][-1])
     self.assertEqual(mux[mux.index('-i')+1],str(work/('refined_full.mp4' if enabled else 'joined.mp4')))
     self.assertIn(str(work/'soundtrack.wav'),mux);self.assertEqual((work/'audio_concat.txt').read_text(),"file 'audio_000.wav'\n")

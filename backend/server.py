@@ -1149,30 +1149,72 @@ def shot_audio(job,outputs,i,shot,piece):
     raw=FILES.download(sound[0],INPUT/'henge'/job['id']/f'audio_{i:03d}_raw.flac')
     run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(raw),'-t',str(frame_count(piece)/24),'-af','apad','-ar','48000','-ac','2','-y',str(job_path(job['id'])/f'audio_{i:03d}.wav')])
 
-def refine_full_video(job,joined,W,H):
+# Stage 2 holds the first pass, the source guide at the output size and the decoded output in RAM at once: 530 frames at
+# 1952x1088 is ~34 GB of frames and killed a 56 GB worker. Longer videos are refined in chunks of at most this many
+# frames (~10 s, H3 17n+5 grid), with context windows inside each chunk.
+FULL_REFINE_CHUNK=243
+FULL_REFINE_CONTEXT=22
+
+def refine_chunks(total,boundaries,limit=None,context=None):
+    """Split [0,total) into (input_start, output_start, end) chunks of at most `limit` input frames. Cuts go at the
+    first-pass segment joins (already hard joins) when one is in reach; a chunk that has to start inside a segment
+    re-reads `context` earlier frames, which are dropped from its output."""
+    limit=limit or FULL_REFINE_CHUNK;context=FULL_REFINE_CONTEXT if context is None else context
+    joins=sorted(b for b in set(boundaries) if 0<b<total);chunks=[];a=0
+    while a<total:
+        ctx=0 if a==0 or a in joins else min(context,a);room=limit-ctx
+        if total-a<=room:chunks.append((a-ctx,a,total));break
+        reach=[b for b in joins if a<b<=a+room];b=reach[-1] if reach else a+room
+        chunks.append((a-ctx,a,b));a=b
+    return chunks
+
+def trim_frames(src,dest,start,end):
+    run(['ffmpeg','-v','error','-i',str(src),'-vf',f'trim=start_frame={start}:end_frame={end},setpts=PTS-STARTPTS','-an','-c:v','libx264','-threads','2','-crf','17','-movflags','+faststart','-y',str(dest)])
+    return dest
+
+def refine_full_video(job,joined,W,H,pieces=()):
     """Stage 2 after assembling all normal segments. Also used after redoing one segment."""
     options=job['options'];r=job['request'];work=job_path(job['id']);inp=INPUT/'henge'/job['id']
     frames=frame_count(joined)
     if frames<1:raise ValueError('The assembled first pass contains no readable frames')
-    length=grid_frames(frames)
-    if length>3600:raise ValueError('Full-video refinement exceeds the 3600-frame loader limit')
+    if grid_frames(frames)>3600:raise ValueError('Full-video refinement exceeds the 3600-frame loader limit')
     # Comfy caches node inputs by path. Content-address the assembly so a Redo cannot reuse stale frames.
     digest=hashlib.sha256()
     with joined.open('rb') as source:
         for chunk in iter(lambda:source.read(1<<20),b''):digest.update(chunk)
-    size=probe(joined);staged=inp/f'first_pass_full_{digest.hexdigest()[:16]}.mp4';shutil.copyfile(joined,staged)
+    key=digest.hexdigest()[:16];size=probe(joined);staged=inp/f'first_pass_full_{key}.mp4';shutil.copyfile(joined,staged)
     guide=inp/f'refine_source_full_{W}x{H}.mp4'
     start,end=r['video']['start_seconds'],r['video']['end_seconds']
     run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/job['assets']['video']),'-t',str(end-start),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-an','-c:v','libx264','-threads','2','-crf','17','-y',str(guide)])
-    graph=workflows.full_refiner_graph(staged.relative_to(INPUT).as_posix(),guide.relative_to(INPUT).as_posix(),job['plan'].get('regenerate_prompt') or options.get('regenerate_prompt') or job['plan']['prompt'],size['width'],size['height'],W,H,length,frames,int(options.get('seed',42)),steps=options.get('regenerate_steps',2),attention=options.get('attention','comfy kitchen attention'),temporal_windows=options.get('temporal_windows'),lms_strength=refiner_lms_strength(options),upscaler_model=refiner_upscaler(options))
-    save(job,message='Stage 2: refining the assembled video with temporal windows',progress=.9)
-    outputs=execute_graph(job,graph,'h3_refine_full')
-    results=output_files(outputs,'17','videos')
-    if not results:raise ValueError('ComfyUI finished without the full-video refinement')
-    refined=FILES.download(results[0],work/'refined_full.mp4')
+    def refine(video,guide_video,count,stage,dest):
+        graph=workflows.full_refiner_graph(video.relative_to(INPUT).as_posix(),guide_video.relative_to(INPUT).as_posix(),job['plan'].get('regenerate_prompt') or options.get('regenerate_prompt') or job['plan']['prompt'],size['width'],size['height'],W,H,grid_frames(count),count,int(options.get('seed',42)),steps=options.get('regenerate_steps',2),attention=options.get('attention','comfy kitchen attention'),temporal_windows=options.get('temporal_windows'),lms_strength=refiner_lms_strength(options),upscaler_model=refiner_upscaler(options))
+        outputs=execute_graph(job,graph,stage)
+        results=output_files(outputs,'17','videos')
+        if not results:raise ValueError('ComfyUI finished without the full-video refinement')
+        out=FILES.download(results[0],dest)
+        if frame_count(out)!=count:raise ValueError('Full-video refinement changed the frame count')
+        return out
+    if frames<=FULL_REFINE_CHUNK:
+        save(job,message='Stage 2: refining the assembled video with temporal windows',progress=.9)
+        return refine(staged,guide,frames,'h3_refine_full',work/'refined_full.mp4')
+    joins=[];total=0
+    for piece in pieces[:-1]:total+=frame_count(piece);joins.append(total)
+    chunks=refine_chunks(frames,joins);parts=[]
+    for k,(a,b,e) in enumerate(chunks):
+        dest=work/f'refined_{key}_{k:02d}.mp4'
+        # Retry resumes: a chunk already refined from this same first pass is kept.
+        if not (dest.is_file() and frame_count(dest)==e-a):
+            save(job,message=f'Stage 2: refining part {k+1}/{len(chunks)} with temporal windows',progress=.9+.08*k/len(chunks))
+            video=trim_frames(staged,inp/f'first_pass_{key}_{k:02d}.mp4',a,e);part_guide=trim_frames(guide,inp/f'refine_source_{W}x{H}_{key}_{k:02d}.mp4',a,e)
+            refine(video,part_guide,e-a,f'h3_refine_full_{k+1:02d}',dest)
+        parts.append((dest,b-a))
+    # Drop each chunk's re-read context and lay the chunks end to end (no crossfade, like the segment joins).
+    refined=work/'refined_full.mp4';args=['ffmpeg','-v','error']
+    for dest,_ in parts:args+=['-i',str(dest)]
+    chain=''.join(f'[{i}:v]trim=start_frame={skip},setpts=PTS-STARTPTS[v{i}];' for i,(_,skip) in enumerate(parts))
+    run(args+['-filter_complex',chain+''.join(f'[v{i}]' for i in range(len(parts)))+f'concat=n={len(parts)}:v=1:a=0[v]','-map','[v]','-an','-c:v','libx264','-threads','2','-crf','17','-movflags','+faststart','-y',str(refined)])
     if frame_count(refined)!=frames:raise ValueError('Full-video refinement changed the frame count')
     return refined
-
 
 def finalize(job,pieces,guide_pieces,W,H):
     """Join the shot pieces into result.mp4 (with the source audio when kept), the guide video and the comparison.
@@ -1180,7 +1222,7 @@ def finalize(job,pieces,guide_pieces,W,H):
     r=job['request'];assets=job['assets'];meta=job['video_info'];plan=job['plan'];work=job_path(job['id'])
     start,end=r['video']['start_seconds'],r['video']['end_seconds']
     concat=work/'concat.txt';concat.write_text(''.join(f"file '{p.name}'\n" for p in pieces));joined=work/'joined.mp4';run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(concat),'-c','copy','-y',str(joined)])
-    if full_refiner_enabled(job.get('options',{})):joined=refine_full_video(job,joined,W,H)
+    if full_refiner_enabled(job.get('options',{})):joined=refine_full_video(job,joined,W,H,pieces)
     output=work/'result.mp4';args=['ffmpeg','-v','error','-i',str(joined)]
     sounds=[work/f"audio_{p.stem.split('_')[-1]}.wav" for p in pieces]
     if r.get('output_audio',{}).get('generate') and sounds and all(x.is_file() for x in sounds):

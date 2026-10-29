@@ -33,9 +33,15 @@ control, but this does not guarantee perfect transitions. Compare those regions 
 they blend. The automatic `fit→every` split described below applies only to windows in every pass, not to this
 strategy.
 
-The loader limits the full interval to **3600 frames after padding** (about 150 s at 24 fps). Even within that
-limit, the VAE, the guide and the global latent can use a lot of RAM/VRAM. The memory bound on model
-evaluations does not remove the cost of holding and encoding the full video.
+Stage 2 holds the first pass, the source guide at the output size and the decoded output in RAM at the same
+time. At 1952×1088, 530 frames (22 s) is about 34 GB of frames and killed a 56 GB RTX 5090 worker before the
+first refiner step. Videos longer than **243 frames (~10 s)** are therefore refined in chunks of at most 243
+frames, with context windows inside each chunk. Chunk cuts go at the joins between first-pass segments when one
+is in reach (they are already hard joins); a chunk that must start inside a segment re-reads 22 earlier frames,
+which are dropped from its output. Chunks are laid end to end without crossfade. Retry keeps the chunks already
+refined from the same first pass. A cut inside a long continuous segment can show a small seam; compare it.
+
+The interval is still limited to **3600 frames after padding** (about 150 s at 24 fps).
 Redoing a segment runs stage 2 again on the updated assembly.
 
 In the API, use `temporal_windows.enabled=true` and `scope="refiner_full"`. `scope="all"` (or leaving it out)

@@ -9,6 +9,19 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Full-video refiner: long videos are refined in chunks
+
+- A 22 s Sharpness run (530 frames, 2K) with the segments → full-video refiner strategy killed the RTX 5090
+  worker (`ComfyUI progress connection closed`) at the start of stage 2, after all seven first-pass segments had
+  finished. Stage 2 held the first pass, the source guide at 1952×1088 and the decoded output in RAM at once,
+  about 34 GB of frames on a 56 GB worker; the earlier validation used 124 frames.
+- Videos longer than 243 frames (~10 s) now run stage 2 in chunks of at most 243 frames, cut at the joins between
+  first-pass segments when possible, with context windows inside each chunk and no crossfade. Retry reuses the
+  chunks already refined.
+- **Component:** UI/bridge; no worker change.
+- **Tests:** chunk planning (including the 22 s case), and a real-FFmpeg test that the chunked trim and join keep
+  every frame in order and that Retry resumes. Not yet re-run on RunPod.
+
 ### Documentation in English; optional Portuguese guide
 
 - All repository documentation is in English: README, changelog, temporal windows, Open-H3, Render, RunPod and the
