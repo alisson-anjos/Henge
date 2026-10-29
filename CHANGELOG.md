@@ -96,6 +96,10 @@ their scope; CPU tests do not replace generation with the real models.
 - **Components:** UI/bridge and worker image (model-install request). **Tests:** installer, install API and update
   checks; Playwright on desktop and 420 px (Settings gear, Models tab, footer) with downloads blocked. No real
   download was run.
+- After an inventory refresh answered by a worker without model installs, the tab says so instead of only
+  "Worker inventory updated".
+- **Publishing:** Serverless worker template updated to `henge:sha-750cf58` (same env, 0–2 workers, 15 s idle).
+  After one inventory refresh the hosted bridge reported install support and the Install button became available.
 
 ### Pika H3 Flex turbo and H3 sampler controls
 
@@ -266,6 +270,8 @@ their scope; CPU tests do not replace generation with the real models.
   cached reference comparison is re-encoded when older than the result, and the download links carry a version.
 - **Component:** UI/bridge (`GET /jobs/{id}/shots/{n}/prompt`; optional `prompt` in the redo); no worker change.
 - **Tests:** reading the prompt, validation, and the new prompt in the redone shot's conditioning node.
+- Fixed the editor layout: opening it no longer breaks the finished-shots grid (the grid rule targeted the strip's
+  last child), and the prompt box follows the dark theme. Checked with Playwright on desktop, 420 px and dark mode.
 
 ### Sharpness: optional LMS in the Open-H3 refiner
 
