@@ -35,7 +35,7 @@ Review the prompt and rendered frames; reference binding is not guaranteed solel
 
 ## Dependencies and models
 
-Use current ComfyUI with native MiniMax H3 nodes, **ComfyUI-BFSNodes main 1.115.34+**, and
+Use current ComfyUI with native MiniMax H3 nodes, **ComfyUI-BFSNodes main 1.115.33+**, and
 VideoHelperSuite for the native workflow's video loader. Restart ComfyUI after updating custom nodes.
 "Native" means native H3 conditioning, not zero custom nodes: a small BFS helper derives geometry and
 frame counts; TARA uses the BFS model patch. The native examples do not require a prompt VLM or Planner.

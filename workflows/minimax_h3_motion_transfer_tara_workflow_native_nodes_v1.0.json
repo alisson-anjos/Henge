@@ -479,7 +479,7 @@
       "properties": {
         "Node name for S&R": "BFSH3PrepareNativeVideo",
         "cnr_id": "bfsnodes",
-        "ver": "1.115.34"
+        "ver": "1.115.33"
       },
       "widgets_values": [
         24.0,
@@ -724,7 +724,7 @@
       "properties": {
         "Node name for S&R": "BFSMiniMaxH3NativeTemporal",
         "cnr_id": "bfsnodes",
-        "ver": "1.115.34"
+        "ver": "1.115.33"
       },
       "widgets_values": [
         1,
@@ -1261,7 +1261,7 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "# Motion Transfer v1.0 — TARA / native_nodes\n\nMatching LoRA: minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors\nTraining adapter V2 → DMD Ref2VA 8-step turbo → task LoRA; strengths 1, CFG 1, Euler/simple, 8 steps. These are inference defaults, not quality guarantees. Do not load another copy of an already merged adapter/turbo.\n\nTARA keeps the guide in native ref_video_1 and patches model attention. No full-video Add Guide is used in the first-pass contract.\n\nDependencies: updated ComfyUI native MiniMax H3, ComfyUI-BFSNodes 1.115.34+, VideoHelperSuite for native video loading. Model download links are in docs/motion-transfer.md in the HF repo. Select installed model names if your files are in subfolders.\n\nThese graphs are derived from the native/Planner contracts of the published Character Swap v1.1 workflows, with Motion Transfer-specific prompts and model wiring. No bundled private media; replace guide.mp4/reference_1.png before queueing."
+        "# Motion Transfer v1.0 — TARA / native_nodes\n\nMatching LoRA: minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors\nTraining adapter V2 → DMD Ref2VA 8-step turbo → task LoRA; strengths 1, CFG 1, Euler/simple, 8 steps. These are inference defaults, not quality guarantees. Do not load another copy of an already merged adapter/turbo.\n\nTARA keeps the guide in native ref_video_1 and patches model attention. No full-video Add Guide is used in the first-pass contract.\n\nDependencies: updated ComfyUI native MiniMax H3, ComfyUI-BFSNodes 1.115.33+, VideoHelperSuite for native video loading. Model download links are in docs/motion-transfer.md in the HF repo. Select installed model names if your files are in subfolders.\n\nThese graphs are derived from the native/Planner contracts of the published Character Swap v1.1 workflows, with Motion Transfer-specific prompts and model wiring. No bundled private media; replace guide.mp4/reference_1.png before queueing."
       ],
       "color": "#234",
       "bgcolor": "#345"
@@ -1309,7 +1309,7 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "# Comfy Kitchen + TARA: supported with the MODIFIED temporal kernel\nGuide Latents can use ordinary Comfy Kitchen attention. TARA's fused one-pass Kitchen path additionally needs the modified temporal extension (library AND Python API); installing stock comfy-kitchen alone does not provide it.\n\nSafe default here: TARA uses PyTorch model attention + Flash partitions (no compile). To try Kitchen, select comfy kitchen attention in Model Attention Backend and comfy kitchen (experimental) in the TARA/conditioning backend control.\n\nUpdate BFSNodes main (1.115.34+), restart ComfyUI, then let BFS install its verified temporal extension on supported Linux/Windows x86_64 NVIDIA GPUs. CUDA-13-capable driver required; PyTorch can use CUDA 12.x. Unsupported/offline setups may keep a slower compatibility path. Flash partitions does not require this extension.\n\nConfirm the fused kernel in the sampling log: Kitchen ONE-PASS dense kernel ACTIVE (or Kitchen ONE-PASS sol kernel ACTIVE when separately using supported Sol attention). A completed render alone does not prove it used the modified kernel. Do not add VSA/SLA to these examples.\n\nSetup and limitations: https://github.com/alisson-anjos/ComfyUI-BFSNodes/blob/main/H3_NATIVE_TEMPORAL.md#kernel-downloads\nManual install: https://github.com/alisson-anjos/comfy-kitchen/blob/feat/h3-native-temporal/MANUAL_TEMPORAL_INSTALL.md\nVerified release/checksums: https://github.com/alisson-anjos/comfy-kitchen/releases/tag/temporal-native-0413d43878606425a84aa400f1e5da50ed9dcdad\nBinaries passed ABI/build checks; not every GPU/OS has full-video validation."
+        "# Comfy Kitchen + TARA: supported with the MODIFIED temporal kernel\nGuide Latents can use ordinary Comfy Kitchen attention. TARA's fused one-pass Kitchen path additionally needs the modified temporal extension (library AND Python API); installing stock comfy-kitchen alone does not provide it.\n\nSafe default here: TARA uses PyTorch model attention + Flash partitions (no compile). To try Kitchen, select comfy kitchen attention in Model Attention Backend and comfy kitchen (experimental) in the TARA/conditioning backend control.\n\nUpdate BFSNodes main (1.115.33+), restart ComfyUI, then let BFS install its verified temporal extension on supported Linux/Windows x86_64 NVIDIA GPUs. CUDA-13-capable driver required; PyTorch can use CUDA 12.x. Unsupported/offline setups may keep a slower compatibility path. Flash partitions does not require this extension.\n\nConfirm the fused kernel in the sampling log: Kitchen ONE-PASS dense kernel ACTIVE (or Kitchen ONE-PASS sol kernel ACTIVE when separately using supported Sol attention). A completed render alone does not prove it used the modified kernel. Do not add VSA/SLA to these examples.\n\nSetup and limitations: https://github.com/alisson-anjos/ComfyUI-BFSNodes/blob/main/H3_NATIVE_TEMPORAL.md#kernel-downloads\nManual install: https://github.com/alisson-anjos/comfy-kitchen/blob/feat/h3-native-temporal/MANUAL_TEMPORAL_INSTALL.md\nVerified release/checksums: https://github.com/alisson-anjos/comfy-kitchen/releases/tag/temporal-native-0413d43878606425a84aa400f1e5da50ed9dcdad\nBinaries passed ABI/build checks; not every GPU/OS has full-video validation."
       ],
       "color": "#234",
       "bgcolor": "#345"
@@ -1581,7 +1581,7 @@
       "planner": false,
       "reference_policy": "1..N flexible roles; no required background",
       "base": "Ref2VA",
-      "bfs_min_version": "1.115.34"
+      "bfs_min_version": "1.115.33"
     }
   },
   "version": 0.4
