@@ -1,3 +1,5 @@
+// The Portuguese guide (pt-BR/) shares this script: its messages follow the page language.
+const pt=document.documentElement.lang.startsWith('pt');
 const dialog = document.querySelector('#image-viewer');
 for (const link of document.querySelectorAll('a.zoom')) {
   link.addEventListener('click', event => {
@@ -17,13 +19,13 @@ for (const button of document.querySelectorAll('[data-copy]')) {
     const text = document.getElementById(button.dataset.copy)?.textContent || '';
     try {
       await navigator.clipboard.writeText(text);
-      document.getElementById('copy-status').textContent = 'Exemplo copiado.';
-      button.textContent = 'Copiado ✓';
-      setTimeout(() => {button.textContent = 'Copiar exemplo';}, 2000);
+      document.getElementById('copy-status').textContent = (pt?'Exemplo copiado.':'Example copied.');
+      button.textContent = (pt?'Copiado ✓':'Copied ✓');
+      setTimeout(() => {button.textContent = (pt?'Copiar exemplo':'Copy example');}, 2000);
     } catch {
       const range = document.createRange();range.selectNodeContents(document.getElementById(button.dataset.copy));
       const selection = window.getSelection();selection.removeAllRanges();selection.addRange(range);
-      document.getElementById('copy-status').textContent = 'Selecione e copie o texto com Ctrl+C.';
+      document.getElementById('copy-status').textContent = (pt?'Selecione e copie o texto com Ctrl+C.':'Select the text and copy it with Ctrl+C.');
     }
   });
 }

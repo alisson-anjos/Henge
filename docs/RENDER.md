@@ -1,46 +1,48 @@
-# Atualizar a UI no Render
+# Updating the UI on Render
 
-O Render precisa receber código ou imagem que já foi publicado. Um commit apenas local
-não aparece no serviço remoto.
+Render needs code or an image that has already been published. A commit that only exists locally does not show up
+in the remote service.
 
-## Serviço usando a imagem `henge-ui`
+## Service using the `henge-ui` image
 
-1. Envie a `main` revisada para o GitHub: `git push origin main`.
-2. Em GitHub → Actions, aguarde o workflow **Docker** concluir a publicação da imagem de UI.
-   O workflow deste repositório publica `ghcr.io/<owner>/henge-ui:latest` na branch principal,
-   além das tags de branch e SHA.
-3. No Render, abra o serviço e confira **Settings → Image URL**.
-4. Para acompanhar as novas versões, mantenha o endereço da imagem e use a tag `:latest`.
-   Uma tag `:sha-...` ou um digest fixa uma versão; repetir o deploy dessa referência
-   não busca automaticamente a imagem correspondente ao novo código.
+1. Push the reviewed `main` to GitHub: `git push origin main`.
+2. In GitHub → Actions, wait for the **Docker** workflow to finish publishing the UI image.
+   This repository's workflow publishes `ghcr.io/<owner>/henge-ui:latest` on the main branch, plus branch and SHA tags.
+3. In Render, open the service and check **Settings → Image URL**.
+4. To follow new versions, keep the image address with the `:latest` tag.
+   A `:sha-...` tag or a digest pins one version; redeploying that reference does not fetch the image of newer code.
 5. Use **Manual Deploy → Deploy latest reference**.
-6. Quando o serviço estiver disponível, abra o estúdio e confira o link **Dicas**.
-   O guia fica em `/guides/index.html` na mesma instância.
+6. When the service is up, open the studio and check the **Tips** link.
+   The guide is at `/guides/index.html` on the same instance (Portuguese: `/guides/pt-BR/index.html`).
 
-Serviços baseados em imagem não fazem redeploy automático só porque o conteúdo da tag
-`latest` mudou. É necessário disparar o deploy no Render (ou configurar automação por deploy hook).
+Image-based services do not redeploy on their own just because the `latest` tag changed. You have to trigger the
+deploy in Render (or set up automation with a deploy hook).
 
-## Serviço conectado diretamente ao GitHub
+Redeploying restarts the bridge: wait until no job is running, or the running job is marked as failed and has to be
+retried.
 
-1. Envie a `main` revisada ao GitHub.
-2. Confira qual branch está conectada ao serviço.
-3. Use **Manual Deploy → Deploy latest commit**, ou aguarde o auto-deploy configurado.
+## Service connected directly to GitHub
 
-## O que esta atualização inclui
+1. Push the reviewed `main` to GitHub.
+2. Check which branch is connected to the service.
+3. Use **Manual Deploy → Deploy latest commit**, or wait for the configured auto-deploy.
 
-O guia visual com capturas, avisos sobre prompts e TARA, o controle de seed e os ajustes do bridge
-fazem parte da imagem de UI. O worker de geração é um componente separado.
+## What this update includes
 
-Referências oficiais:
-- [Deploy de imagem Docker no Render](https://render.com/docs/deploying-an-image)
-- [Deploys manuais e automáticos](https://render.com/docs/deploys)
+The visual guide with screenshots, the notices about prompts and TARA, the seed control and the bridge fixes are part
+of the UI image. The generation worker is a separate component.
 
-## Refiner visível, mas desabilitado
+Official references:
 
-Atualizar `henge-ui` no Render atualiza a interface e o bridge; não atualiza o ComfyUI nem
-instala pesos no RunPod. O Refiner + LMS exige a nova imagem do worker, os pesos do perfil
-`regenerate` no volume e um inventário atualizado no bridge. Em Serverless, use um pod temporário
-para completar o volume; definir o perfil apenas no worker não faz downloads.
+- [Deploying a Docker image on Render](https://render.com/docs/deploying-an-image)
+- [Manual and automatic deploys](https://render.com/docs/deploys)
 
-Siga os [passos de atualização do endpoint](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint).
-Depois execute um job curto com outro método pelo Henge para atualizar o cache e recarregue a página.
+## Refiner visible but disabled
+
+Updating `henge-ui` on Render updates the interface and the bridge; it does not update ComfyUI or install weights on
+RunPod. Refiner + LMS needs the new worker image, the `regenerate` profile's weights on the volume and an updated
+inventory in the bridge. On Serverless, use a temporary pod to top up the volume; setting the profile only on the
+worker does not download anything.
+
+Follow the [endpoint update steps](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint).
+Then run a short job with another method from Henge to refresh the cache, and reload the page.

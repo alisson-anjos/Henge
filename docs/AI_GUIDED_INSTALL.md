@@ -60,7 +60,7 @@ Steps and checks:
    git clone https://github.com/alisson-anjos/ComfyUI-BFSNodes.git <ComfyUI>/custom_nodes/bfsnodes
    $COMFY_PY -m pip install -r <ComfyUI>/custom_nodes/bfsnodes/requirements.txt -r backend/requirements.txt
    $COMFY_PY scripts/download_models.py --manifest config/model-repos.example.json \
-     --models-dir <ComfyUI>/models --profiles character,motion,headswap,sharpness,klein,sam2d,audio --dry-run   # list, then without --dry-run
+     --models-dir <ComfyUI>/models --profiles character,motion,headswap,sharpness,regenerate,klein,sam2d,audio --dry-run   # list, then without --dry-run
    ```
    Models the user already has in that ComfyUI are reused (old names, other subfolders), never renamed or
    downloaded twice. Ask which modes the user wants; profiles: `character` (Character Swap), `motion` (every Motion Transfer LoRA, FFP included), `klein` (first-frame editor), `headswap`, `sharpness`, `audio`

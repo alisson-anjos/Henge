@@ -4,11 +4,11 @@
 few pictures, and it swaps characters, transfers motion, swaps heads or sharpens the video — locally, on a RunPod pod
 or on RunPod Serverless.
 
-[Visual usage guide (Português)](docs/GUIA-VISUAL.md) · In the studio, open **Dicas** for screenshots and practical tips.
+[Visual usage guide](docs/VISUAL-GUIDE.md) · In the studio, open **Tips** for screenshots and practical tips.
 
-[Update the UI on Render (Português)](docs/RENDER.md).
+[Update the UI on Render](docs/RENDER.md).
 
-[Histórico de atualizações por data](CHANGELOG.md) — mudanças, testes e estado de publicação/deploy.
+[Changelog by date](CHANGELOG.md) — changes, tests and publish/deploy status.
 
 [![Watch the Henge 2-minute demo — studio interface](docs/images/demo/studio.jpg)](https://github.com/alisson-anjos/Henge/releases/download/demo-v1/henge-demo-under-2min.mp4)
 
@@ -124,7 +124,7 @@ You need a working ComfyUI (PyTorch with CUDA 13, NVIDIA driver 580+), Node.js 2
    ```sh
    /path/to/comfy/python scripts/download_models.py \
      --manifest config/model-repos.example.json --models-dir /path/to/ComfyUI/models \
-     --profiles character,motion,headswap,sharpness,klein,sam2d,audio
+     --profiles character,motion,headswap,sharpness,regenerate,klein,sam2d,audio
    ```
 
    No token needed. Models you already have in ComfyUI are reused, even under another name or subfolder.

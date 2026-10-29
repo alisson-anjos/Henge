@@ -28,7 +28,7 @@ ARG BFS_REF=6df4276ae9666e70a54be28c605338390010ce8a
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 NODE_ENV=production \
     COMFY_ROOT=/opt/ComfyUI COMFY_BASE_URL=http://127.0.0.1:8189 \
     HENGE_BACKEND_URL=http://127.0.0.1:8766 HENGE_DATA_DIR=/state/jobs \
-    HENGE_MODELS_DIR=/opt/ComfyUI/models HENGE_MODEL_PROFILES=character,motion,headswap,sharpness,omniref,klein,sam2d,sam3d,audio \
+    HENGE_MODELS_DIR=/opt/ComfyUI/models HENGE_MODEL_PROFILES=character,motion,headswap,sharpness,regenerate,omniref,klein,sam2d,sam3d,audio \
     HENGE_MODEL_MANIFEST=/app/config/model-repos.example.json \
     HENGE_MOLMO_PYTHON=/opt/molmo/bin/python HENGE_MOLMO_REPO=tollea1234/Molmo2-8B-FP8 \
     HF_HOME=/state/huggingface HF_XET_HIGH_PERFORMANCE=1 \

@@ -1,121 +1,120 @@
-# Janelas temporais puras no Henge
+# Pure temporal windows in Henge
 
-Em **Configurações → Processamento temporal → Estratégia de processamento**, escolha:
+In **Settings → Temporal processing → Processing strategy**, choose:
 
-- **Processamento padrão**: mantém o caminho anterior. É a seleção inicial.
-- **Janelas temporais puras · experimental**: todas as avaliações de denoise usam janelas sobrepostas,
-  cujas previsões são combinadas antes de o sampler atualizar o latent global. Não há aquecimento sequencial.
+- **Standard processing**: keeps the previous path. This is the default.
+- **Pure temporal windows · experimental**: every denoise evaluation uses overlapping windows whose
+  predictions are combined before the sampler updates the global latent. There is no sequential warmup.
 
-- **Segmentos → refiner completo com janelas · experimental**: no Sharpness com Open-H3 Refiner + LMS
-  e saída 1080p/2K, a etapa 1 gera normalmente os segmentos (até 107 frames, mantendo contexto entre
-  trechos). Depois de unir os segmentos sem crossfade, a etapa 2 refina **todo o intervalo** com janelas
-  sobrepostas a cada passo. A etapa 1 não usa context windows nem executa um refiner por segmento.
+- **Segments → full-video refiner windows · experimental**: in Sharpness with Open-H3 Refiner + LMS
+  and 1080p/2K output, stage 1 renders the segments as usual (up to 107 frames, keeping context between
+  segments). After the segments are joined without crossfade, stage 2 refines **the whole interval** with
+  overlapping windows at every step. Stage 1 uses no context windows and runs no per-segment refiner.
 
-A opção de janelas em todas as passagens está disponível para Character Swap, Motion Transfer (Guide Latents e TARA), Head Swap e Sharpness.
-No Sharpness ela se aplica à primeira passagem e também ao refino H3/Open-H3, quando presente.
-NVIDIA VSR continua operando nos frames depois da primeira passagem; não é um denoise adicional.
+Windows in every pass are available for Character Swap, Motion Transfer (Guide Latents and TARA), Head Swap
+and Sharpness. In Sharpness they apply to the first pass and also to the H3/Open-H3 refinement, when present.
+NVIDIA VSR still runs on the frames after the first pass; it is not an extra denoise.
 
-## Segmentos primeiro, refiner global depois
+## Segments first, global refiner after
 
-Esta estratégia mantém uma única avaliação global do sampler por nível de ruído na segunda etapa:
-previsões locais são combinadas antes da atualização. Janela e sobreposição começam em 107/22 frames;
-o refiner mantém os 2 passos padrão e `er_sde`. Não é o sampler híbrido que troca de estratégia no meio
-**da mesma passagem**: são duas passagens completas, com modelos e schedules separados.
+This strategy keeps a single global sampler evaluation per noise level in stage 2: local predictions are
+combined before the update. Window and overlap start at 107/22 frames; the refiner keeps its default 2 steps
+and `er_sde`. It is not the hybrid sampler that switches strategy in the middle **of the same pass**: these are
+two complete passes, with separate models and schedules.
 
-Para reutilizar a infraestrutura de segmentos e permitir Retry/Redo, os frames montados da primeira
-passagem são re-encodados pelo VAE tiled. Não se concatenam arquivos de latents de geração: essa
-recodificação pode introduzir perda. O upscaler latente nativo recebe o vídeo re-encodado, enquanto
-Add Guide ancora o intervalo do **vídeo original** na resolução final. O áudio final continua seguindo
-os controles de áudio do job; a segunda passagem não substitui a trilha por uma nova geração.
+To reuse the segment infrastructure and allow Retry/Redo, the assembled first-pass frames are re-encoded with
+the tiled VAE. Generation latent files are not concatenated, so this re-encode can introduce some loss. The
+native latent upscaler receives the re-encoded video, while Add Guide anchors the interval of the **original
+video** at the final resolution. The final audio still follows the job's audio controls; the second pass does
+not replace the track with a new generation.
 
-As janelas da segunda etapa podem atravessar cortes de câmera, inclusive os que dividiram a primeira
-etapa. O guia completo mantém os cortes como controle, mas isso não garante transições perfeitas.
-Compare essas regiões; reduza janela/sobreposição se houver mistura. A separação automática `fit→every`
-descrita abaixo se refere apenas à opção de janelas em todas as passagens, não a esta estratégia.
+Stage-2 windows can cross camera cuts, including the ones that split stage 1. The full guide keeps the cuts as
+control, but this does not guarantee perfect transitions. Compare those regions and reduce window/overlap if
+they blend. The automatic `fit→every` split described below applies only to windows in every pass, not to this
+strategy.
 
-O loader limita o intervalo completo a **3600 frames após padding** (aproximadamente 150 s a 24 fps).
-Mesmo dentro desse limite, VAE, guia e latent global podem consumir muita RAM/VRAM. O limite de memória
-da avaliação do modelo não elimina o custo de manter/encodar o vídeo completo.
-Ao refazer um segmento, a etapa 2 é executada novamente sobre a montagem atualizada.
+The loader limits the full interval to **3600 frames after padding** (about 150 s at 24 fps). Even within that
+limit, the VAE, the guide and the global latent can use a lot of RAM/VRAM. The memory bound on model
+evaluations does not remove the cost of holding and encoding the full video.
+Redoing a segment runs stage 2 again on the updated assembly.
 
-Na API, use `temporal_windows.enabled=true` e `scope="refiner_full"`. O valor `scope="all"` (ou sua
-omissão) mantém janelas em todas as passagens. `enabled=false` mantém o caminho anterior, sem alterações.
+In the API, use `temporal_windows.enabled=true` and `scope="refiner_full"`. `scope="all"` (or leaving it out)
+keeps windows in every pass. `enabled=false` keeps the previous path, unchanged.
 
-## Três controles diferentes
+## Three different controls
 
-| Controle | O que faz |
+| Control | What it does |
 | --- | --- |
-| Shots / detecção de cortes | Separa o vídeo em cenas ou trechos de trabalho |
-| Frames de contexto entre trechos | Usa parte de um resultado já gerado para condicionar o próximo trecho |
-| Janelas temporais puras | Compartilha previsões entre janelas durante cada passo de geração de um shot |
+| Shots / cut detection | Splits the video into scenes or working segments |
+| Context frames between segments | Uses part of an already generated result to condition the next segment |
+| Pure temporal windows | Shares predictions between windows during every generation step of one shot |
 
-As janelas não concatenam vários vídeos prontos. Existe um latent global e um único sampler com seu
-schedule, ruído e histórico. A cada avaliação do modelo, as janelas enxergam o mesmo nível de ruído.
-As sobreposições recebem pesos positivos maiores no centro e são normalizadas depois de todas as previsões.
-Isso não é crossfade de frames finais e não requer o sampler híbrido nem suas dependências.
+The windows do not concatenate several finished videos. There is one global latent and a single sampler with
+its schedule, noise and history. At every model evaluation, all windows see the same noise level. Overlaps
+get larger positive weights in their centre and are normalized after all predictions. This is not a crossfade
+of final frames and needs neither the hybrid sampler nor its dependencies.
 
-Com detecção de cortes ativa, o modo puro transforma `fit` em `every`: cada corte detectado começa um
-shot novo, impedindo a mistura de previsões entre essas cenas. Desligar a detecção mantém explicitamente
-o intervalo contínuo escolhido. Cortes que o detector não reconhecer continuam dependendo de revisão manual.
-Os frames de contexto entre shots continuam seguindo as regras existentes do Planner.
+With cut detection on, pure mode turns `fit` into `every`: each detected cut starts a new shot, so predictions
+from different scenes never mix. Turning detection off keeps the chosen interval explicitly continuous. Cuts the
+detector misses still need manual review. Context frames between shots keep following the existing Planner rules.
 
-## Valores iniciais
+## Starting values
 
-- **Janela: 107 frames**, aproximadamente 4,46 s a 24 fps.
-- **Sobreposição: 22 frames**, aproximadamente 0,92 s.
-- Ambos respeitam a grade H3 `17n+5`, com a sobreposição menor que a janela.
-- Acumulação das previsões em **CPU/FP32**, devolvendo ao sampler o tipo e dispositivo esperados.
+- **Window: 107 frames**, about 4.46 s at 24 fps.
+- **Overlap: 22 frames**, about 0.92 s.
+- Both follow the H3 `17n+5` grid, with the overlap smaller than the window.
+- Predictions accumulate on **CPU/FP32** and go back to the sampler with the expected dtype and device.
 
-Shots menores que a janela usam uma única janela. Para um primeiro teste, compare esse caso com o modo
-padrão, mantendo a mesma seed e os demais ajustes. Depois teste um shot que precise de várias janelas.
-Janelas menores reduzem os tokens por avaliação, mas aumentam o número de avaliações por passo.
-A última janela é deslocada para terminar exatamente no fim do latent; nenhum frame ou coluna de áudio fica descoberto.
+Shots shorter than the window use a single window. For a first test, compare that case with standard mode,
+keeping the same seed and settings. Then test a shot that needs several windows. Smaller windows reduce the
+tokens per evaluation but increase the number of evaluations per step. The last window is shifted to end
+exactly at the end of the latent; no frame or audio column is left uncovered.
 
-No refiner padrão, a proteção que divide trechos longos em blocos de até 107 frames continua ativa.
-Ao selecionar janelas puras, esse limite extra é dispensado: o comprimento dos shots segue os controles
-do usuário e os cortes; as avaliações do modelo ficam limitadas pela janela temporal.
+In the standard refiner, the guard that splits long segments into blocks of up to 107 frames stays on.
+With pure windows that extra limit is lifted: shot length follows the user's controls and the cuts, and model
+evaluations are bounded by the temporal window.
 
-## Condicionamento, referências e áudio
+## Conditioning, references and audio
 
-O node **HengeH3PureWindows** usa o protocolo de contexto do ComfyUI sem substituir o sampler:
+The **HengeH3PureWindows** node uses ComfyUI's context protocol without replacing the sampler:
 
-- O Add Guide é recortado na grade temporal da janela e recebe índices locais.
-- Referências de imagem mantêm seus papéis e sua ordem; não são convertidas em novos personagens.
-- No TARA, o vídeo de referência e seu áudio associado acompanham o mesmo intervalo. O layout empacotado
-  é reconstruído antes do wrapper de atenção TARA consultar as posições temporais.
-- Frames de ancoragem individuais são mantidos somente nas janelas em que aparecem.
-- Máscaras temporais de denoise de vídeo e áudio são recortadas junto dos respectivos streams.
-- O sampler mantém seu ruído e histórico globais; não cria uma seed por janela nem reinicia um solver
-  multistep em cada recorte. `er_sde` continua sendo o sampler do refiner; não foi trocado por Euler.
+- Add Guide is cropped to the window's temporal grid and gets local indices.
+- Image references keep their roles and order; they do not become new characters.
+- In TARA, the reference video and its audio follow the same interval. The packed layout is rebuilt before the
+  TARA attention wrapper reads the temporal positions.
+- Single anchor frames are kept only in the windows where they appear.
+- Video and audio temporal denoise masks are cropped together with their streams.
+- The sampler keeps its global noise and history; it does not draw a seed per window or restart a multistep
+  solver on every crop. `er_sde` is still the refiner's sampler; it was not replaced with Euler.
 
-As referências de vídeo usadas como controle de movimento precisam ter o mesmo comprimento temporal do alvo.
-Clips Add Guide parcialmente recortados precisam estar alinhados à grade causal; um caso incompatível gera
-um erro explícito. O suporte inicial cobre os guias frame-0 e os anchors gerados pelos fluxos do Henge.
+Video references used as motion control must have the same temporal length as the target. Partially cropped
+Add Guide clips must be aligned to the causal grid; an incompatible case raises an explicit error. Initial
+support covers frame-0 guides and the anchors produced by Henge's flows.
 
-## Memória e limites
+## Memory and limits
 
-A redução é no tamanho das avaliações do DiT. Não é uma garantia de que qualquer duração/resolução cabe:
-carregamento do vídeo, VAE, segmentação/tracking, latent global e exportação ainda consomem RAM/VRAM.
-Em caso de falta de memória, reduza também duração por shot ou resolução. Não há promessa de identidade,
-movimento ou qualidade iguais à atenção global com várias janelas.
+The reduction is in the size of the DiT evaluations. It does not guarantee that any duration or resolution fits:
+video loading, the VAE, segmentation/tracking, the global latent and export still use RAM/VRAM. If memory runs
+out, also reduce the duration per shot or the resolution. Identity, motion and quality are not promised to
+match global attention when several windows are used.
 
-Não combine esta opção com **Causal**, **atenção regional**, outro context handler ou ControlNet.
-Esses caminhos precisam de integração própria e são rejeitados no caminho correspondente.
-TARA/Kitchen continua dependendo da extensão temporal modificada: veja
-[o guia de Motion Transfer](motion-transfer.md#comfy-kitchen-works-with-tara--use-the-modified-temporal-kernel).
+Do not combine this option with **Causal**, **regional attention**, another context handler or ControlNet.
+Those paths need their own integration and are rejected where they apply.
+TARA/Kitchen still depends on the modified temporal extension: see
+[the Motion Transfer guide](motion-transfer.md#comfy-kitchen-works-with-tara--use-the-modified-temporal-kernel).
 
-## Atualizar UI e worker
+## Updating the UI and the worker
 
-São necessários o frontend/bridge novo e a imagem do worker que contenha `HengeH3PureWindows`.
-Não há pesos extras nem novo perfil de download para janelas puras.
+Both the new frontend/bridge and a worker image that contains `HengeH3PureWindows` are needed.
+Pure windows need no extra weights and no new download profile.
 
-No RunPod, aguarde a publicação Docker, atualize o template e recicle os workers quando os jobs ativos
-terminarem. O bridge habilita a opção quando o inventário reporta o node novo
-(`temporal_windows_ready=true` em `/health`). O cache é atualizado pela resposta de um job do worker;
-veja [atualização do endpoint](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint).
-A UI avisa quando o worker ainda é antigo, incluindo em configurações importadas.
+On RunPod, wait for the Docker publish, update the template and recycle the workers once active jobs finish.
+The bridge enables the option when the inventory reports the new node (`temporal_windows_ready=true` in
+`/health`). The cache is refreshed by a worker job's reply; see
+[updating the endpoint](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint).
+The UI warns when the worker is still old, including for imported settings.
 
-API e exportação de ajustes usam:
+The API and settings export use:
 
 ```json
 {
@@ -127,24 +126,27 @@ API e exportação de ajustes usam:
 }
 ```
 
-A configuração fica salva e aparece nos ajustes/comparações do job. Desligar a opção restaura o grafo
-normal; não ativa o processamento híbrido como fallback.
+The setting is saved and shows in the job's settings/comparisons. Turning it off restores the normal graph;
+it does not fall back to hybrid processing.
 
-## Referências de implementação e validação
+## Implementation references and validation
 
-Implementação independente no Henge, usando a API do
-[ComfyUI ContextHandler](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/context_windows.py).
-[HybridWindows](https://github.com/Jalen-Brunson/ComfyUI-HybridWindows) foi estudado como referência H3
-para áudio/vídeo, condicionamento por janela e a distinção entre fase sequencial e conjunta; esta opção
-não usa sua fase de aquecimento, não instala esse pacote e não depende de MMH3Tools.
+Independent implementation in Henge, using the
+[ComfyUI ContextHandler](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/context_windows.py) API.
+[HybridWindows](https://github.com/Jalen-Brunson/ComfyUI-HybridWindows) was studied as an H3 reference for
+audio/video, per-window conditioning and the distinction between sequential and joint phases; this option does
+not use its warmup phase, does not install that package and does not depend on MMH3Tools.
 
-Testes CPU verificam cobertura AV, normalização das previsões, CFG, preservação de duração, anchors,
-recorte de máscaras, controles incompatíveis, cancelamento e roteamento dos modelos nos modos do Henge.
-Um H3 pequeno com pesos aleatórios também exercitou uma e várias janelas em CPU, incluindo o wrapper
-TARA real em backend Flex, com saída finita e formatos AV preservados. Isso não valida os LoRAs de
-produção nem os kernels Flash/Kitchen em GPU. É necessário comparar vídeos reais antes de promover o modo a padrão.
+CPU tests check AV coverage, prediction normalization, CFG, duration preservation, anchors, mask cropping,
+incompatible controls, cancellation and model routing in Henge's modes. A small H3 with random weights also ran
+one and several windows on CPU, including the real TARA wrapper on the Flex backend, with finite output and AV
+shapes preserved. That does not validate the production LoRAs or the Flash/Kitchen GPU kernels.
 
-Para repetir o teste com o H3 reduzido em CPU (sem baixar pesos), no Python do ComfyUI:
+Real generations on RunPod Serverless (2026-10-29, see the [changelog](../CHANGELOG.md)) showed no seam between
+windows in Sharpness, Character Swap results, Motion Transfer and TARA on short clips; longer clips with several
+windows and camera cuts are still to be compared before promoting the mode to default.
+
+To repeat the reduced-H3 CPU test (no weight download), with ComfyUI's Python:
 
 ```bash
 python scripts/check_h3_pure_windows_cpu.py --comfy-root /path/to/ComfyUI --bfs-root /path/to/ComfyUI-BFSNodes

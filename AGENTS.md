@@ -8,6 +8,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+## Language
+
+Everything committed to this repository is in English: code comments, commit messages, README, docs, CHANGELOG
+entries and the in-app guide. The UI keeps its `tr(en, pt, es)` translations, and an optional Portuguese guide lives
+under `public/guides/pt-BR/` and `docs/pt-BR/`. Do not write new documentation in another language.
+
 ## Project update history
 
 For user-facing features, fixes, workflow changes or deployment changes, update `CHANGELOG.md` with

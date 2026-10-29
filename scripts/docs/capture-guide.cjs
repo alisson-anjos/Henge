@@ -75,25 +75,25 @@ async function main() {
     const first = await openJob(tara);
     const page = first.page;
     await seek(page);
-    await capture(page, '01-estudio');
-    await capture(page, '02-referencias', '.reference-dropzone');
+    await capture(page, '01-studio');
+    await capture(page, '02-references', '.reference-dropzone');
     await capture(page, '03-tara-seed', '.generation-settings-card');
     await capture(page, '04-seed', '.seed-control');
-    await capture(page, '05-marcas', 'section[aria-label="Personagens e referências"]');
+    await capture(page, '05-marks', 'section[aria-label="Personagens e referências"]');
     await page.getByRole('textbox',{name:'Execution prompt'}).fill('Verde → @Picture1: boné com detalhes dourados e óculos.\nRoxo → @Picture2: cabelo descoberto e óculos.\nCiano → @Picture3: boné azul-marinho, sem óculos.\nMantenha a identidade ligada à cor ao mudar de posição ou ficar de costas. Preserve pose, câmera e pessoas sem marcação.');
     await capture(page, '06-prompt', '.prompt-card');
     await page.locator('.generation-job .job-section').first().evaluate(e => {e.open = true;});
-    await capture(page, '07-revisar-plano', '.generation-job .job-section');
+    await capture(page, '07-review-plan', '.generation-job .job-section');
     await seek(page, 1.8);
-    await capture(page, '08-resultado', '.finished-preview');
+    await capture(page, '08-result', '.finished-preview');
     await page.getByRole('button', {name: 'Guia + resultado + referências', exact: true}).click();
     const comparison = page.locator('.finished-preview video');
     await comparison.evaluate(v => new Promise((resolve,reject) => {if (v.readyState >= 2) return resolve(); v.addEventListener('loadeddata', resolve, {once: true});setTimeout(() => reject(Error('Comparison video did not load')), 20000);}));
     await seek(page, 1.8);
-    await capture(page, '09-comparacao', '.finished-preview');
+    await capture(page, '09-comparison', '.finished-preview');
     await page.getByRole('button', {name: 'Editar intervalo do vídeo', exact: true}).click();
     await page.getByRole('heading', {name: 'Choose your performance'}).waitFor();
-    await capture(page, '10-intervalo', '.trim-modal');
+    await capture(page, '10-interval', '.trim-modal');
     await page.getByRole('button', {name: 'Cancel video selection'}).click();
     await capture(page, '11-shots', '.controls .input-card');
     await page.getByRole('button', {name: 'Configurações', exact: true}).click();
@@ -101,40 +101,40 @@ async function main() {
     await page.getByText('Usar o Molmo2', {exact: false}).waitFor();
     await capture(page, '12-molmo', '.settings-center');
     await page.locator('.settings-close').click();
-    await capture(page, '20-novo-cenario', '.background-card');
-    await capture(page, '21-audio-saida', '.output-settings');
+    await capture(page, '20-new-background', '.background-card');
+    await capture(page, '21-audio-output', '.output-settings');
     const firstFrame=page.locator('.reference-dropzone details').first();
     if(await firstFrame.count()){
       await firstFrame.evaluate(e=>{e.open=true});
-      await capture(page,'22-primeiro-quadro','.reference-dropzone');
+      await capture(page,'22-first-frame','.reference-dropzone');
       await firstFrame.evaluate(e=>{e.open=false});
     }
     await page.locator('details.generation-advanced').evaluate(e=>{e.open=true});
-    await capture(page,'23-avancado','.generation-settings-card');
+    await capture(page,'23-advanced','.generation-settings-card');
     await page.locator('details.generation-advanced').evaluate(e=>{e.open=false});
 
     await page.getByRole('button', {name: /Assistente$/}).click();
     await page.locator('.assistant-panel').waitFor();
     await page.getByRole('button',{name:'Nova conversa',exact:true}).click();
-    await capture(page, '17-assistente', '.assistant-panel');
+    await capture(page, '17-assistant', '.assistant-panel');
     await page.locator('.assistant-fab').click();
     await page.locator('.main-nav').getByRole('button',{name:'Histórico',exact:true}).click();
     await page.locator('.history-search').fill('Maverick');
     await page.evaluate(()=>window.scrollTo(0,0));
-    await capture(page,'24-historico');
+    await capture(page,'24-history');
 
     await first.context.close();
 
     const second = await openJob(character);
-    await capture(second.page, '13-prompt-multiplos', 'section[aria-label="Personagens e referências"]');
+    await capture(second.page, '13-prompt-multiple', 'section[aria-label="Personagens e referências"]');
     await second.page.locator('section[aria-label="Personagens e referências"]').getByRole('button',{name:'MASK',exact:true}).click();
-    await capture(second.page, '19-mascara', 'section[aria-label="Personagens e referências"]');
+    await capture(second.page, '19-mask', 'section[aria-label="Personagens e referências"]');
     await second.page.locator('.mode-picker button').filter({hasText:'Troca de cabeça'}).click();
     const guideButton=second.page.getByRole('button',{name:'Guide Latents',exact:true});
     if(await guideButton.count()) await guideButton.click();
     await capture(second.page, '15-head-swap', '.generation-settings-card');
     await second.page.locator('.mode-picker button').filter({hasText:'Nitidez'}).click();
-    await capture(second.page, '16-nitidez', '.output-settings');
+    await capture(second.page, '16-sharpness', '.output-settings');
     await second.context.close();
 
     if (marks) {
@@ -142,7 +142,7 @@ async function main() {
       const preview = third.page.locator('.marks-preview');
       if (await preview.count()) {
         await seek(third.page);
-        await capture(third.page, '14-previa-mascaras', '.marks-preview');
+        await capture(third.page, '14-mask-preview', '.marks-preview');
       }
       await third.context.close();
     }
@@ -159,7 +159,7 @@ async function main() {
         }));
       });
 
-      await capture(fourth.page,'18-shots-por-corte','.shot-plan');
+      await capture(fourth.page,'18-shots-by-cut','.shot-plan');
       await fourth.context.close();
     }
     await fs.writeFile(path.join(directory, 'capture-manifest.json'), JSON.stringify({captured_at: new Date().toISOString(), viewport: '1440×1000', jobs: {tara, character, marks}, images: captured, api_writes_blocked: blockedWrites, browser_errors: errors, note: 'Real UI captures from existing jobs; isolated browser storage. No new AI generations. The prompt editor example is an unsent draft in the isolated browser.'}, null, 2) + '\n');

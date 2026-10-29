@@ -1,113 +1,143 @@
-# Histórico de atualizações do Henge
+# Henge changelog
 
-Mudanças mais recentes primeiro. Datas no formato `AAAA-MM-DD`.
-Este histórico começa com as atualizações de 28/10/2026; os commits anteriores continuam no histórico Git.
+Newest changes first. Dates as `YYYY-MM-DD`.
+This log starts with the 2026-10-28 updates; earlier commits remain in the Git history.
 
-**Código publicado** significa disponível na `main`. Isso não significa que a imagem Docker terminou
-ou que Render e RunPod já foram atualizados. Cada entrada registra esses estados separadamente.
-Resultados de testes são descritos com seu alcance; testes CPU não substituem geração com os modelos reais.
+**Code published** means available on `main`. It does not mean the Docker image has finished building or that
+Render and RunPod have been updated; each entry records those states separately. Test results are described with
+their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
-### Refazer um shot com o prompt ajustado
+### Documentation in English; optional Portuguese guide
 
-- Ao refazer um shot, abre um editor com o prompt que ele usou; dá para ajustar só esse shot antes de gerar
-  de novo (ex.: "a câmera está de ponta-cabeça: o personagem aparece de ponta-cabeça"). Sem mudança no
-  texto, refaz como antes, só com outra seed. Os outros shots não mudam.
-- **Componente:** UI/bridge (`GET /jobs/{id}/shots/{n}/prompt`; `prompt` opcional no redo); não muda o worker.
-- **Testes:** leitura do prompt, validação e o prompt novo no nó de condicionamento do shot refeito.
+- All repository documentation is in English: README, changelog, temporal windows, Open-H3, Render, RunPod and the
+  visual guide (`docs/VISUAL-GUIDE.md`, formerly `docs/GUIA-VISUAL.md`).
+- The in-app guide (**Tips**) is in English at `/guides/index.html`; the Portuguese version is kept as an option at
+  `/guides/pt-BR/index.html` (and `docs/pt-BR/VISUAL-GUIDE.md`). The studio opens the Portuguese guide when the
+  interface is in Portuguese. The guides no longer link to a fixed `localhost` address.
+- **Component:** UI/bridge image (guide pages) and documentation.
 
-### Sharpness: LMS opcional no Open-H3 Refiner
+### Default model profiles include `regenerate`
 
-- Novo switch "Somar o LMS ao refiner" (ligado por padrão, como antes) e controle de força do LMS no
-  refiner (0,1–1,5; padrão 1,0). Desligado, a segunda etapa usa só o refiner e o turbo. Vale para o refiner
-  por segmento e para o refiner do vídeo completo com context windows. A força do LMS da primeira etapa
-  continua no controle de força do LoRA.
-- **Componente:** UI/bridge (monta os grafos); não exige mudar o worker.
-- **Testes:** grafos com e sem LMS e força aplicada nos dois caminhos do refiner; 80 testes passaram.
-  Ainda sem comparação visual com o LMS desligado ou em força reduzida.
+- The default Sharpness method (Open-H3 Refiner + LMS) now has its weights downloaded by default: `regenerate` was
+  added to `HENGE_MODEL_PROFILES` in the Dockerfile, `scripts/runpod_template.sh`, `scripts/runpod_volume.sh` and the
+  docs. It adds two files (the refiner LoRA and the native latent upscaler); DMAD and LMS come with `sharpness`.
+- The live RunPod pod template was updated to the same list (it still listed `fibo`, removed from the defaults in
+  `3aef7be`).
+- **Component:** image defaults, pod template and docs. Existing pods and volumes keep their files; add the profile
+  and restart to download it there.
 
-### Context windows — publicado e validado no Serverless
+### Refiner latent upscaler: base or Henge LMS v0.1
 
-- Processamento temporal opcional para Character Swap, Motion Transfer, TARA, Head Swap e Sharpness.
-- Janelas puras avaliam trechos sobrepostos em cada passo e combinam as previsões antes de atualizar o
-  latent global. As avaliações ocorrem uma janela por vez; a acumulação das previsões fica em CPU.
-- Estratégia adicional no Sharpness: segmentos normais com continuidade na primeira etapa, montagem
-  sem crossfade e Open-H3 Refiner sobre o vídeo completo com context windows na segunda etapa.
-- Janela/sobreposição configuráveis, inicialmente 107/22 frames. Opções experimentais, desligadas por padrão.
-- Worker antigo mantém a opção indisponível; combinações sem suporte têm validação explícita.
-- **Publicação:** código na `main`, commit `d1672fd`. Imagem Docker publicada; worker Serverless em
-  `henge:sha-d1672fd` e UI/bridge do Render em `henge-ui:sha-d1672fd` (ComfyUI `35060f0`, BFS `6df4276`).
-- **Testes:** testes de lógica, UI com Playwright e H3 reduzido em CPU passaram, incluindo o wrapper TARA
-  em Flex. Geração real no RunPod Serverless, seed 42, todos concluídos sem erro:
-  - Sharpness em duas etapas (LMS por segmentos → Open-H3 Refiner com janelas 73/22 sobre o vídeo
-    completo): 124 frames, saída 1952×1088.
-  - Refiner com janelas sobre um resultado existente de Character Swap: 124 frames, personagem, pose e
-    fundo preservados. Também concluído pelo fluxo normal da UI no Render, com comparativo no histórico.
-  - Motion Transfer e Motion Transfer TARA, normal × janelas 39/5 em 56 frames (duas janelas): mesma
-    identidade e movimento; o TARA com janelas levou 107 s contra 227 s neste teste.
-  - Nenhuma emenda entre janelas: o maior salto na zona de sobreposição ficou igual ao da versão sem
-    janelas (0,9–1,4× a variação mediana entre frames), abaixo dos picos de movimento do próprio vídeo.
-- **Limites:** um clipe por modo, curto (2,3–5,2 s); a comparação de tempo é de uma execução só e o pico de
-  VRAM não foi medido. Falta um clipe longo com várias janelas e cortes de câmera.
-- [Controles, funcionamento e limites](docs/temporal-windows.md).
+- The Open-H3 refiner stage can use our latent upscaler `h3_upscaler_lms_v0.1.safetensors` (LBH-123-AI base
+  fine-tuned on the LMS data) instead of the base `minimax_h3_latent_upscaler_3d_conv_v1_bf16`. Default: base.
+- Checked against ComfyUI's native loader: same detection keys, 12+12 blocks, 512 channels, temporal kernel 5.
+  `/health` reports which refiner upscalers the backend has (`upscalers.refiner_upscalers`).
+- **Component:** UI/bridge; the file is already in the `sharpness` profile (`latent_upscale_models/`).
+- **Tests:** graph and option tests. Not yet compared visually against the base upscaler.
 
-### Junção dos shots e reinício do bridge
+### Redo a shot with an adjusted prompt
 
-- Removido o carregamento dos dois shots inteiros em RGB e suas cópias em float na memória do bridge.
-  Agora apenas a sobreposição é analisada em miniaturas; FFmpeg processa os frames completos por streaming.
-- Mantidos o corte direto, a duração e a remoção única dos frames duplicados. Sem crossfade.
-- Removido também o ajuste automático de cor: cada shot conserva suas próprias cores.
-- As duas saídas temporárias são verificadas antes de substituir os arquivos dos shots.
-- Recuperado um teste cujos dois shots terminaram no RunPod, mas cujo bridge reiniciou depois da geração;
-  a montagem foi concluída sem repetir a inferência. Falta de RAM é uma suspeita sustentada pelo consumo
-  encontrado na junção anterior; a causa do reinício não foi confirmada pelos logs do Render.
-- **Publicação:** commits `1ec3192` e `8dbff80` na `main`. A correção exige atualizar a imagem da
-  **UI/bridge no Render**; não exige alterar o worker GPU.
-- **Testes:** 145 testes na versão estável, com 1 ignorado; cobertura FFmpeg real para duração, preservação
-  das cores, falha de encode e sobreposição. Montagem dos shots recuperados e teste com shots mais longos concluídos.
-- [Diagnóstico e atualização](docs/SERVERLESS.md#bridge-restarts-between-shots).
+- Redoing a shot opens an editor with the prompt it used, so that shot alone can be adjusted before generating
+  again (e.g. "the camera is upside down: the character appears upside down"). Without a text change it redoes as
+  before, only with a new seed. The other shots do not change.
+- **Component:** UI/bridge (`GET /jobs/{id}/shots/{n}/prompt`; optional `prompt` in the redo); no worker change.
+- **Tests:** reading the prompt, validation, and the new prompt in the redone shot's conditioning node.
 
-### Sharpness / Open-H3 e workflows Motion Transfer
+### Sharpness: optional LMS in the Open-H3 refiner
 
-- Ao selecionar Open-H3 Refiner + LMS, a primeira etapa recebe o preset DMAD, 4 passos e CFG 1;
-  os passos do refiner continuam independentes.
-- Corrigido o layout dos controles de Sharpness fora da seção Avançado.
-- Refinamento tradicional por segmento limitado a 107 frames para conter o custo de memória em clipes longos.
-- Publicados quatro workflows ComfyUI: nativo e Planner para Motion Transfer Guide Latents e para TARA.
-  As referências podem ter papéis variados; não há exigência de uma imagem de pessoa e outra de fundo.
-- Requisitos alinhados à versão pública do BFS. Documentado o kernel temporal modificado do Comfy Kitchen
-  necessário para a implementação TARA correspondente.
+- New switch **Add LMS on top of the refiner** (on by default, as before) and an LMS strength control in the
+  refiner (0.1–1.5; default 1.0). Off, the second stage uses only the refiner and the turbo. It applies to the
+  per-segment refiner and to the full-video refiner with context windows. First-stage LMS strength stays on the
+  LoRA strength control.
+- **Component:** UI/bridge (builds the graphs); no worker change.
+- **Tests:** graphs with and without LMS and the strength applied in both refiner paths. No visual comparison yet
+  with LMS off or at reduced strength.
+
+### Context windows — published and validated on Serverless
+
+- Optional temporal processing for Character Swap, Motion Transfer, TARA, Head Swap and Sharpness.
+- Pure windows evaluate overlapping segments at every step and combine the predictions before updating the global
+  latent. Evaluations run one window at a time; predictions accumulate on CPU.
+- Extra Sharpness strategy: normal segments with continuity in the first stage, assembly without crossfade, and the
+  Open-H3 refiner over the full video with context windows in the second stage.
+- Configurable window/overlap, initially 107/22 frames. Experimental options, off by default.
+- An old worker keeps the option unavailable; unsupported combinations are validated explicitly.
+- **Publishing:** code on `main`, commit `d1672fd`. Docker image published; Serverless worker on
+  `henge:sha-d1672fd` and Render UI/bridge on `henge-ui:sha-d1672fd` (ComfyUI `35060f0`, BFS `6df4276`).
+- **Tests:** logic tests, UI with Playwright and a reduced H3 on CPU passed, including the TARA wrapper on Flex.
+  Real generation on RunPod Serverless, seed 42, all finished without errors:
+  - Two-stage Sharpness (LMS per segment → Open-H3 refiner with 73/22 windows over the full video): 124 frames,
+    1952×1088 output.
+  - Refiner with windows over an existing Character Swap result: 124 frames, character, pose and background kept.
+    Also completed through the normal UI flow on Render, with the comparison in the history.
+  - Motion Transfer and Motion Transfer TARA, standard × 39/5 windows on 56 frames (two windows): same identity and
+    motion; TARA with windows took 107 s against 227 s in this test.
+  - No seam between windows: the largest jump in the overlap zone matched the version without windows (0.9–1.4×
+    the median frame-to-frame change), below the clip's own motion peaks.
+  - 22 s Character Swap (portrait, extreme close-ups, upside-down camera) with 107/22 windows in five shots:
+    identity and motion held; the upside-down shot needed a prompt fix, which led to redo with a prompt.
+- **Limits:** short clips for the measured comparisons (2.3–5.2 s); the timing comparison is a single run and peak
+  VRAM was not measured.
+- [Controls, how it works and limits](docs/temporal-windows.md).
+
+### Shot joins and bridge restarts
+
+- The bridge no longer loads both whole shots as RGB plus float copies in memory. Only the overlap is analysed, on
+  thumbnails; FFmpeg processes the full frames by streaming.
+- The direct cut, the duration and the single removal of duplicated frames are kept. No crossfade.
+- The automatic colour adjustment was removed as well: each shot keeps its own colours.
+- Both temporary outputs are checked before replacing the shot files.
+- Recovered a test whose two shots finished on RunPod but whose bridge restarted after generation; the assembly was
+  completed without repeating inference. Running out of RAM is a suspicion backed by the earlier join's usage; the
+  restart cause was not confirmed by the Render logs.
+- **Publishing:** commits `1ec3192` and `8dbff80` on `main`. The fix needs the **UI/bridge image on Render**; it
+  does not need a GPU worker change.
+- **Tests:** 145 tests on the stable version, 1 skipped; real FFmpeg coverage for duration, colour preservation,
+  encode failure and overlap. Assembly of the recovered shots and a test with longer shots completed.
+- [Diagnosis and update](docs/SERVERLESS.md#bridge-restarts-between-shots).
+
+### Sharpness / Open-H3 and Motion Transfer workflows
+
+- Selecting Open-H3 Refiner + LMS presets the first stage to DMAD, 4 steps and CFG 1; refiner steps stay separate.
+- Fixed the layout of the Sharpness controls outside the Advanced section.
+- Traditional per-segment refinement is capped at 107 frames to bound memory on long clips.
+- Published four ComfyUI workflows: native and Planner for Motion Transfer Guide Latents and for TARA. References
+  can have varied roles; one person picture plus one background picture is not required.
+- Requirements aligned with the public BFS release. Documented the modified Comfy Kitchen temporal kernel needed by
+  the matching TARA implementation.
 - [Workflows](workflows/README.md) · [Motion Transfer](docs/motion-transfer.md) · [Open-H3](docs/open-h3-regenerate.md).
 
 ## 2026-10-28
 
 ### Open-H3 Refiner + LMS
 
-- Adicionado o upscale com o refiner rank 16 do Kijai, upscaler latente nativo e LMS carregado separadamente.
-- Mantida a base Ref2VA existente; não foi adicionada dependência de FL2VA.
-- Add Guide usa o vídeo original para orientar a segunda passagem. Refiner + LMS tornou-se a seleção
-  inicial do upscale Sharpness, com saída 1080p/2K.
-- Prompt opcional do refiner exposto no painel principal. Sem descrição manual, o fluxo pode solicitar
-  uma descrição automática da cena.
-- Corrigida a criação do ambiente isolado Molmo no Docker e a resolução da dependência Click do RunPod.
-- Documentados os downloads no volume Serverless e a atualização do inventário: atualizar a UI não
-  instala nodes/pesos no worker; definir perfis no worker não preenche o volume automaticamente.
+- Added the upscale with Kijai's rank-16 refiner, the native latent upscaler and LMS loaded separately.
+- Kept the existing Ref2VA base; no FL2VA dependency was added.
+- Add Guide uses the original video to drive the second pass. Refiner + LMS became the default Sharpness upscale,
+  with 1080p/2K output.
+- Optional refiner prompt exposed in the main panel. Without a manual description, the flow can ask for an
+  automatic scene description.
+- Fixed the creation of the isolated Molmo environment in Docker and the RunPod Click dependency resolution.
+- Documented downloads on the Serverless volume and the inventory refresh: updating the UI does not install
+  nodes/weights on the worker; setting profiles on the worker does not fill the volume automatically.
 
-### Personagens, shots e interface
+### Characters, shots and interface
 
-- Recomendado TARA com seu LoRA correspondente para marcações de cor. Character Swap pode funcionar
-  com múltiplos personagens, mas depende especialmente da descrição e associação das referências no prompt.
-- Melhorada a associação das identidades por shot quando personagens mudam de posição ou aparecem mais tarde.
-- Expostos controles de seed para comparar gerações com ajustes reproduzíveis.
-- Mantida a montagem sem crossfade após comparação visual favorável.
-- Adicionados guia visual, dicas com capturas Playwright e instruções de atualização da UI no Render.
-- [Guia visual](docs/GUIA-VISUAL.md) · [Atualização Render](docs/RENDER.md).
+- Recommended TARA with its matching LoRA for colour marks. Character Swap can work with multiple characters, but
+  depends especially on how the references are described and bound in the prompt.
+- Improved per-shot identity binding when characters change position or appear later.
+- Exposed seed controls to compare generations with reproducible settings.
+- Kept the assembly without crossfade after a favourable visual comparison.
+- Added the visual guide, tips with Playwright screenshots and instructions to update the UI on Render.
+- [Visual guide](docs/VISUAL-GUIDE.md) · [Updating on Render](docs/RENDER.md).
 
-## Como manter este histórico
+## Keeping this log
 
-- Para cada mudança relevante, registrar data, comportamento alterado e motivo.
-- Informar em qual componente entra: UI/bridge, worker, modelos, workflows ou documentação.
-- Distinguir código na `main`, imagem publicada, deploy realizado e teste concluído.
-- Atualizar a entrada quando um teste ou deploy pendente terminar, com resultado e limitações.
-- Referenciar commits e documentação; nunca incluir credenciais, tokens ou dados privados de jobs.
+- For each relevant change, record the date, the changed behaviour and the reason.
+- Say which component it affects: UI/bridge, worker, models, workflows or documentation.
+- Distinguish code on `main`, published image, completed deploy and completed test.
+- Update the entry when a pending test or deploy finishes, with the result and limitations.
+- Reference commits and documentation; never include credentials, tokens or private job data.
+- Write entries in English.

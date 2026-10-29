@@ -16,15 +16,15 @@ profile is `common` or listed in `HENGE_MODEL_PROFILES`. Files already on the
 volume are skipped, so only the first boot downloads. To change a link, edit
 that file (and rebuild) or override it at runtime (see below).
 
-## Refiner + LMS no Sharpness
+## Refiner + LMS in Sharpness
 
-O método padrão do Sharpness exige a imagem atualizada e os pesos opcionais do perfil
-`regenerate`. Em um **pod normal**, acrescente `regenerate` a `HENGE_MODEL_PROFILES`
-e reinicie com a imagem nova para baixar os arquivos no volume existente.
+The default Sharpness method needs the updated image and the weights of the `regenerate` profile, which is now part
+of the default `HENGE_MODEL_PROFILES`. On a **regular pod** created before that, add `regenerate` to
+`HENGE_MODEL_PROFILES` and restart with the new image to download the files into the existing volume.
 
-Em **Serverless**, essa variável no worker não baixa pesos: complete o volume por um pod
-temporário e atualize os workers. Veja [os passos para um endpoint existente](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint)
-e [arquivos/nodes exigidos](open-h3-regenerate.md). Atualizar apenas o Render/bridge não habilita o método.
+On **Serverless**, that variable on the worker does not download weights: top up the volume with a temporary pod
+and update the workers. See [the steps for an existing endpoint](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint)
+and [the required files/nodes](open-h3-regenerate.md). Updating only Render/the bridge does not enable the method.
 
 ## 1. Image
 
@@ -66,7 +66,7 @@ Environment variables (all optional):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,omniref,klein,sam2d,sam3d,audio` | Comma list: `character`, `omniref` (+22 GB base), `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0, Combined), `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with Motion Transfer v1.0 and TARA v1.0, and the Solar 4-step turbo), `klein` (FLUX.2 Klein 4B first-frame editor) |
+| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,regenerate,omniref,klein,sam2d,sam3d,audio` | Comma list: `character`, `regenerate` (Open-H3 refiner and native H3 latent upscaler for the default Sharpness method), `omniref` (+22 GB base), `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0, Combined), `solar` (~25 GB: SolarRenderer control alone, its 0.5 merges with Motion Transfer v1.0 and TARA v1.0, and the Solar 4-step turbo), `klein` (FLUX.2 Klein 4B first-frame editor) |
 | `HF_TOKEN` | — | Not needed for the default profiles. Only for the optional `klein3` profile (FLUX.3 [image klein], gated: accept its license at huggingface.co/black-forest-labs/flux-3-image-klein-comfy) or an override that points at a private repository |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that replaces a model URL or destination from the bundled manifest |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |

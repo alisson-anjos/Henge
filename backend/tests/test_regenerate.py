@@ -49,6 +49,18 @@ class RegenerateTests(unittest.TestCase):
         g=full_refiner_graph('henge/t/first.mp4','henge/t/source.mp4','scene',1376,768,2560,1440,362,360,42,lms_strength=0.)
         self.assertNotIn('74',g);self.assertEqual(g['81']['inputs']['model'],['73',0])
 
+    def test_refiner_latent_upscaler_can_be_ours(self):
+        from workflows import REGENERATE_UPSCALERS, full_refiner_graph
+        self.assertEqual(server.refiner_upscaler({}),REGENERATE['upscaler'])
+        self.assertEqual(server.refiner_upscaler({'refiner_upscaler':'lms'}),'h3_upscaler_lms_v0.1.safetensors')
+        g=h3_graph('clip.mp4',[],'LMS instruction',1344,768,22,22,'sharpness',42,8,'original',[],'human',0,
+                   upscale={'method':'regenerate','width':2560,'height':1440,'steps':2,'prompt':'x','model':REGENERATE_UPSCALERS['lms']})
+        self.assertEqual(g['30']['inputs']['model_name'],'h3_upscaler_lms_v0.1.safetensors')
+        g=full_refiner_graph('henge/t/first.mp4','henge/t/source.mp4','scene',1376,768,2560,1440,362,360,42,upscaler_model=REGENERATE_UPSCALERS['lms'])
+        self.assertEqual(g['30']['inputs']['model_name'],'h3_upscaler_lms_v0.1.safetensors')
+        g=full_refiner_graph('henge/t/first.mp4','henge/t/source.mp4','scene',1376,768,2560,1440,362,360,42)
+        self.assertEqual(g['30']['inputs']['model_name'],REGENERATE['upscaler'])
+
     def test_joint_latent_and_audio_survive_native_upscale(self):
         g=self.graph()
         self.assertEqual(g['31']['class_type'],'MiniMaxH3LatentUpscaleWithModel')

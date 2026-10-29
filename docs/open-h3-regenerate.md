@@ -1,20 +1,35 @@
-# Open-H3 Regenerate no Sharpness
+# Open-H3 Regenerate in Sharpness
 
-O modo **Open-H3 Refiner + LMS · padrão**, primeira opção e seleção inicial do dropdown de upscale do Sharpness, executa primeiro a nitidez LMS do Henge e depois uma segunda passagem generativa. Pode alterar detalhes: compare sempre com o vídeo original.
+**Open-H3 Refiner + LMS · default**, the first entry and default selection of the Sharpness upscale dropdown,
+first runs Henge's LMS sharpening and then a second, generative pass. It can change details: always compare
+with the original video.
 
-A segunda passagem usa a mesma base Ref2VA já instalada, carregada em uma cadeia independente de LoRAs, DMAD 4-step, o refiner rank 16 do Kijai e nosso LMS v1.0 r64 em strength 1.0. Esse arquivo contém **somente o refiner**, sem LMS e sem LightX2V Turbo. O LMS é carregado separadamente nas duas passagens, uma vez por cadeia de modelo. Na segunda passagem, `MiniMaxH3AddGuide` ancora o vídeo original do shot na resolução final, começando no frame 0.
+The second pass uses the same Ref2VA base that is already installed, loaded in an independent LoRA chain:
+DMAD 4-step, Kijai's rank-16 refiner and our LMS v1.0 r64. That file contains **only the refiner**, without
+LMS and without LightX2V Turbo. LMS is loaded separately in each pass, once per model chain. In the second pass
+LMS is optional (**Add LMS on top of the refiner**, on by default) with its own strength (0.1–1.5, default 1.0);
+off, the second pass runs the refiner and the turbo only. In the second pass, `MiniMaxH3AddGuide` anchors the
+shot's original video at the final resolution, starting at frame 0.
 
-O grafo adapta `minimax_h3_2stage_testing.json`: upscaler latente nativo, descrição textual mais Add Guide do vídeo original na segunda passagem e sampler `er_sde`. Selecionar esse método na interface preenche a primeira passagem com **DMAD 4-step, 4 passos e CFG 1**. Esses controles continuam editáveis após a seleção. O refiner tem passos independentes: o padrão usa dois passos (`0.7, 0.494118, 0`); três passos são experimentais (`0.909375, 0.857143, 0.666667, 0`), a partir do schedule alternativo não conectado no workflow. O DMAD público usado aqui é avg rank 39, diferente do arquivo rank 83 local daquele workflow. A base Ref2VA também difere da FL2VA do workflow fornecido. Essa combinação é experimental e não é uma reprodução idêntica da inferência CUDA da NVIDIA.
+The graph adapts `minimax_h3_2stage_testing.json`: native latent upscaler, a text description plus Add Guide of
+the original video in the second pass, and the `er_sde` sampler. Selecting this method in the UI sets the first
+pass to **DMAD 4-step, 4 steps and CFG 1**. Those controls stay editable afterwards. The refiner has its own
+steps: the default is two (`0.7, 0.494118, 0`); three are experimental (`0.909375, 0.857143, 0.666667, 0`), from
+the alternative schedule that is not connected in that workflow. The public DMAD used here is avg rank 39,
+unlike the local rank-83 file of that workflow. The Ref2VA base also differs from the workflow's FL2VA. This
+combination is experimental and is not an identical reproduction of NVIDIA's CUDA inference.
 
-## Instalação no worker
+## Installing on the worker
 
-O Dockerfile agora fixa o ComfyUI em `35060f0156181ae78a86b10f098f67ce8e83697f`, que inclui `MiniMaxH3LatentUpscaleWithModel`. Atualizar apenas o frontend não instala esse node no worker. Reconstrua e publique a imagem do worker e atualize o endpoint para essa imagem.
+The Dockerfile pins ComfyUI to `35060f0156181ae78a86b10f098f67ce8e83697f`, which includes
+`MiniMaxH3LatentUpscaleWithModel`. Updating only the frontend does not install that node on the worker.
+Rebuild and publish the worker image and point the endpoint at it.
 
-### Pod normal / instalação local
+### Regular pod / local install
 
-Adicione `regenerate` aos perfis existentes em `HENGE_MODEL_PROFILES` (por exemplo,
-`character,sharpness,regenerate`) e reinicie o pod com a imagem atualizada. O perfil é opcional;
-reaproveita a base Ref2VA comum e não baixa nem exige FL2VA. Para instalação manual:
+Add `regenerate` to the existing profiles in `HENGE_MODEL_PROFILES` (for example
+`character,sharpness,regenerate`) and restart the pod with the updated image. The profile is optional; it reuses
+the common Ref2VA base and neither downloads nor needs FL2VA. For a manual install:
 
 ```bash
 python scripts/download_models.py --models-dir /opt/ComfyUI/models --profiles sharpness,regenerate
@@ -22,75 +37,82 @@ python scripts/download_models.py --models-dir /opt/ComfyUI/models --profiles sh
 
 ### RunPod Serverless
 
-**Workers Serverless não executam o downloader.** Acrescentar o perfil apenas nas variáveis do
-worker não instala os pesos. Use um pod temporário para completar o volume ligado ao endpoint:
+**Serverless workers do not run the downloader.** Adding the profile only to the worker's variables does not
+install the weights. Use a temporary pod to top up the volume attached to the endpoint:
 
 ```bash
-VOLUME_ID=<volume-existente> DATACENTER=<datacenter-do-volume> \
+VOLUME_ID=<existing-volume> DATACENTER=<volume-datacenter> \
   PROFILES=regenerate scripts/runpod_volume.sh
 ```
 
-Depois, atualize a imagem do template do worker e recicle os workers antigos quando não houver
-jobs ativos. Preserve o mesmo volume. O volume aparece em `/workspace/henge/models` no pod de
-download e em `/runpod-volume/henge/models` no worker; ambos são o mesmo armazenamento persistente.
+Then update the worker template's image and recycle the old workers when no jobs are active. Keep the same
+volume. It shows up as `/workspace/henge/models` in the download pod and `/runpod-volume/henge/models` in the
+worker; both are the same persistent storage.
 
-O bridge guarda o inventário retornado pelo worker. Após a atualização, execute pelo Henge um
-job curto com outro método disponível e recarregue a página. Isso atualiza o cache sem precisar
-reinstalar o bridge. `/health` e **Test connection** não acordam o worker para buscar um novo inventário.
-Uma chamada direta de `inventory` no RunPod não atualiza automaticamente o cache do bridge.
+The bridge keeps the inventory the worker returns. After the update, run a short job with another available
+method from Henge and reload the page. That refreshes the cache without reinstalling the bridge. `/health` and
+**Test connection** do not wake the worker to fetch a new inventory, and a direct `inventory` call to RunPod does
+not refresh the bridge's cache either.
 
-Veja o [procedimento completo Serverless](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint).
+See the [full Serverless procedure](SERVERLESS.md#enable-refiner--lms-on-an-existing-endpoint).
 
-### Dependências que habilitam o dropdown
+### Dependencies that enable the dropdown
 
-| Tipo | Arquivo em `models/` |
+| Type | File under `models/` |
 | --- | --- |
-| Base já usada pelo Henge | `diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors` |
+| Base already used by Henge | `diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors` |
 | DMAD | `loras/henge/minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors` |
 | Refiner | `loras/henge/minimax_h3_open_regenerate_2k_refiner_rank_16_bf16.safetensors` |
 | LMS | `loras/henge/minimax_h3_lms_v1.0_r64.safetensors` |
-| Upscaler nativo | `latent_upscale_models/minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors` |
+| Native upscaler | `latent_upscale_models/minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors` |
 
-Os nodes verificados são `MiniMaxH3LatentUpscaleWithModel`, `LatentUpscaleModelLoader`,
-`ManualSigmas`, `BasicGuider` e `MiniMaxH3AddGuide`. O upscaler LMS anterior não substitui o
-upscaler nativo listado acima. Um worker antigo pode ter os pesos e continuar sem os nodes necessários.
-O diagnóstico está em `regenerate.missing_nodes` e `regenerate.missing_models` na resposta do
-bridge `/health` (pela UI: `/api/backend/health`).
+The checked nodes are `MiniMaxH3LatentUpscaleWithModel`, `LatentUpscaleModelLoader`, `ManualSigmas`,
+`BasicGuider` and `MiniMaxH3AddGuide`. The earlier LMS upscaler does not replace the native upscaler listed
+above. An old worker can have the weights and still lack the nodes. The diagnosis is in
+`regenerate.missing_nodes` and `regenerate.missing_models` in the bridge's `/health` reply (from the UI:
+`/api/backend/health`).
 
-## Uso e limites
+## Use and limits
 
-Ao entrar em Nitidez, resoluções de 480p/720p passam para **1080p**, compatível com o método padrão. Também é possível escolher **2K**. O dropdown e o campo **Prompt do refiner (opcional)** ficam no painel principal de criação, fora de Avançado. Configurações salvas com método explícito continuam sendo respeitadas. A primeira passagem roda com lado curto de 768 pixels; a segunda recebe as dimensões finais explicitamente, preservando a orientação do vídeo. 4K não está habilitado para este método.
+Entering Sharpness switches 480p/720p to **1080p**, which the default method supports; **2K** is also available.
+The dropdown and the **Refiner prompt (optional)** field are in the main creation panel, outside Advanced. Saved
+settings with an explicit method are still honoured. The first pass runs with a 768-pixel short side; the second
+gets the final dimensions explicitly, keeping the video's orientation. 4K is not enabled for this method.
 
-Informe uma descrição fiel da cena ou deixe vazio para o VLM configurado descrever os frames. Essa descrição é separada da instrução técnica LMS e pode ser revisada no plano do job. Não depende do Molmo local. Em clipes com vários shots, a descrição automática cobre o intervalo inteiro; valide especialmente os cortes e cenas diferentes.
+Give a faithful description of the scene, or leave it empty for the configured VLM to describe the frames. That
+description is separate from the technical LMS instruction and can be reviewed in the job's plan. It does not
+depend on local Molmo. On clips with several shots the automatic description covers the whole interval; check
+cuts and different scenes in particular.
 
-Os testes automatizados verificam montagem do grafo, schedules, áudio, resolução e bloqueio de dependências ausentes. Ainda é necessário testar qualidade, tempo e VRAM no worker atualizado; não há estimativa de capacidade nem resultado visual validado deste modo.
+Automated tests check graph assembly, schedules, audio, resolution and the block on missing dependencies. Real
+generations on RunPod Serverless (2026-10-29, see the [changelog](../CHANGELOG.md)) completed at 1952×1088;
+quality, time and VRAM still need more comparisons, and there is no capacity estimate yet.
 
-Fontes: [workflow/modelos Kijai](https://huggingface.co/Kijai/MiniMax-H3-experimental), [node nativo ComfyUI](https://github.com/Comfy-Org/ComfyUI/commit/35060f0156181ae78a86b10f098f67ce8e83697f), [modelo NVIDIA](https://huggingface.co/Efficient-Large-Model/Open-H3-Regenerate-2K).
+Sources: [Kijai workflow/models](https://huggingface.co/Kijai/MiniMax-H3-experimental),
+[native ComfyUI node](https://github.com/Comfy-Org/ComfyUI/commit/35060f0156181ae78a86b10f098f67ce8e83697f),
+[NVIDIA model](https://huggingface.co/Efficient-Large-Model/Open-H3-Regenerate-2K).
 
-### Limite de memória por bloco
+### Memory limit per block
 
-O refiner processa blocos de no máximo **107 frames (~4,46 s a 24 fps)**, inclusive quando
-a UI pede um único trecho longo. Os blocos compartilham o contexto de continuidade configurado;
-a junção remove a sobreposição e mantém a duração completa, sem introduzir crossfade.
-Esse limite reduz a carga dos dois passes e do Add Guide na resolução final; não é uma garantia
-de VRAM/RAM suficiente para qualquer resolução ou hardware.
+The refiner processes blocks of at most **107 frames (~4.46 s at 24 fps)**, even when the UI asks for one long
+segment. The blocks share the configured continuity context; the join removes the overlap and keeps the full
+duration, without crossfade. This limit reduces the load of both passes and of Add Guide at the final
+resolution; it does not guarantee enough VRAM/RAM for every resolution or hardware.
 
-Um grafo de falha recuperado em 29/10/2026 tentou 328 frames, primeira passagem 1376×768 e
-refino com guia 1952×1088. O worker fechou a conexão; o log antigo não estava disponível para
-confirmar OOM. A mensagem de WebSocket fechado não deve ser tratada como diagnóstico definitivo.
+A failed graph recovered on 2026-10-29 tried 328 frames, a 1376×768 first pass and refinement with a 1952×1088
+guide. The worker closed the connection; the old log was not available to confirm an OOM. A closed WebSocket
+message should not be treated as a definitive diagnosis.
 
-### Opção de janelas puras
+### Pure windows option
 
-O controle **Configurações → Processamento temporal** também se aplica às duas passagens do Sharpness.
-Ele combina previsões por passo, mantendo o sampler global. Não é o mesmo que dividir em blocos concluídos
-nem o modo híbrido de aquecimento sequencial. Veja [configuração, explicação e limites](temporal-windows.md).
+**Settings → Temporal processing** also applies to both Sharpness passes. It combines predictions per step and
+keeps the global sampler. It is not the same as splitting into finished blocks, nor the hybrid sequential-warmup
+mode. See [setup, explanation and limits](temporal-windows.md).
 
+### Segments → full-video refiner windows (optional)
 
-### Segmentos → refiner completo com janelas (opcional)
-
-Em **Configurações → Processamento temporal**, a estratégia de duas etapas mantém a geração normal
-por segmentos na resolução inicial e aplica o Open-H3 apenas depois de montar o vídeo completo.
-A segunda passagem usa context windows puras, inicialmente 107 frames e 22 de sobreposição, em cada
-passo do refiner. A configuração padrão continua sendo o caminho anterior por segmento.
-É necessário atualizar também o worker. Veja [processamento temporal](temporal-windows.md) para os
-limites de memória, recodificação VAE, áudio e cortes de câmera.
+In **Settings → Temporal processing**, the two-stage strategy keeps the normal segment-by-segment generation at
+the initial resolution and applies Open-H3 only after the full video is assembled. The second pass uses pure
+context windows, initially 107 frames with 22 of overlap, at every refiner step. The default is still the
+previous per-segment path. The worker must be updated too. See [temporal processing](temporal-windows.md) for
+the limits on memory, VAE re-encoding, audio and camera cuts.

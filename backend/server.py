@@ -179,6 +179,7 @@ def validate_request(r,options,slots):
         if options.get('regenerate_steps',2) not in (2,3):raise ValueError('Regenerate needs 2 or 3 refine steps')
         if not isinstance(options.get('refiner_lms',True),bool):raise ValueError('refiner_lms must be true or false')
         clamp_float(options.get('refiner_lms_strength',1.),.1,1.5,'refiner LMS strength')
+        if options.get('refiner_upscaler','base') not in workflows.REGENERATE_UPSCALERS:raise ValueError('refiner_upscaler must be base or lms')
         if not isinstance(options.get('regenerate_prompt',''),str) or len(options.get('regenerate_prompt',''))>4000:raise ValueError('Refiner scene description must be at most 4000 characters')
 
     if clamp_float(options.get('structure_cfg',1.),1,3,'structure guidance')>1 and options.get('conditioning_mode','guide')!='tara':raise ValueError('Structure guidance is a TARA option')
@@ -809,6 +810,10 @@ def regenerate_scene_prompt(job):
     return text[:4000]
 
 
+def refiner_upscaler(options):
+    """Latent upscaler checkpoint of the Open-H3 refiner stage: the LBH-123-AI base or our LMS fine-tune."""
+    return workflows.REGENERATE_UPSCALERS[options.get('refiner_upscaler','base')]
+
 def refiner_lms_strength(options):
     """The LMS LoRA's strength on top of the Open-H3 refiner; 0 when the user turned it off."""
     return float(options.get('refiner_lms_strength',1.)) if options.get('refiner_lms',True) else 0.
@@ -960,7 +965,7 @@ def generate(job):
             # Native resize targets the final canvas explicitly, not an assumed 2x ratio.
             w,h=size(768)
             W,H=size(short)
-            upscale={'method':method,'width':W,'height':H,'model':REGENERATE['upscaler'],'steps':options.get('regenerate_steps',2),'prompt':plan.get('regenerate_prompt') or options.get('regenerate_prompt',''),'lms_strength':refiner_lms_strength(options)}
+            upscale={'method':method,'width':W,'height':H,'model':refiner_upscaler(options),'steps':options.get('regenerate_steps',2),'prompt':plan.get('regenerate_prompt') or options.get('regenerate_prompt',''),'lms_strength':refiner_lms_strength(options)}
         elif method=='h3':
             choices=comfy_choices(comfy_info(),'HengeH3LatentUpscale','model_name')
             upscale['model']=next((m for m in H3_UPSCALERS if m in choices),None)
@@ -1159,7 +1164,7 @@ def refine_full_video(job,joined,W,H):
     guide=inp/f'refine_source_full_{W}x{H}.mp4'
     start,end=r['video']['start_seconds'],r['video']['end_seconds']
     run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/job['assets']['video']),'-t',str(end-start),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-an','-c:v','libx264','-threads','2','-crf','17','-y',str(guide)])
-    graph=workflows.full_refiner_graph(staged.relative_to(INPUT).as_posix(),guide.relative_to(INPUT).as_posix(),job['plan'].get('regenerate_prompt') or options.get('regenerate_prompt') or job['plan']['prompt'],size['width'],size['height'],W,H,length,frames,int(options.get('seed',42)),steps=options.get('regenerate_steps',2),attention=options.get('attention','comfy kitchen attention'),temporal_windows=options.get('temporal_windows'),lms_strength=refiner_lms_strength(options))
+    graph=workflows.full_refiner_graph(staged.relative_to(INPUT).as_posix(),guide.relative_to(INPUT).as_posix(),job['plan'].get('regenerate_prompt') or options.get('regenerate_prompt') or job['plan']['prompt'],size['width'],size['height'],W,H,length,frames,int(options.get('seed',42)),steps=options.get('regenerate_steps',2),attention=options.get('attention','comfy kitchen attention'),temporal_windows=options.get('temporal_windows'),lms_strength=refiner_lms_strength(options),upscaler_model=refiner_upscaler(options))
     save(job,message='Stage 2: refining the assembled video with temporal windows',progress=.9)
     outputs=execute_graph(job,graph,'h3_refine_full')
     results=output_files(outputs,'17','videos')
@@ -1314,6 +1319,9 @@ def health():
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
     regenerate=regenerate_requirements(info)
     upscalers['regenerate']=regenerate['available']
+    # Refiner latent upscalers the backend has (the native loader lists latent_upscale_models).
+    listed=set(comfy_choices(info,'LatentUpscaleModelLoader','model_name'))
+    upscalers['refiner_upscalers']={key:unknown or name in listed for key,name in workflows.REGENERATE_UPSCALERS.items()}
     return {'temporal_windows_ready':'HengeH3PureWindows' in info,'regenerate':regenerate,'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')

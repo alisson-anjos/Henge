@@ -1,8 +1,9 @@
 # Guia visual de uso do Henge
 
-Na instância local: **[abrir o guia](http://localhost:8188/guides/index.html)**,
-ou clique em **Dicas** no topo do estúdio. O guia é estático e acompanha o Henge em
-`public/guides/`; não exige um serviço externo.
+[English version](../VISUAL-GUIDE.md)
+
+No estúdio, clique em **Dicas** no topo. O guia é estático, acompanha o Henge em `public/guides/` e é servido pela
+sua própria instância em `/guides/pt-BR/index.html` (local, pod ou Render); não exige um serviço externo.
 
 Inclui capturas reais da interface, dicas de referências e prompts, marcações por cor,
 TARA, seed, shots/vistas de costas, máscaras, revisão do plano, comparação de resultados,
@@ -15,7 +16,7 @@ Prompts são extremamente importantes. Descreva atributos que distinguem as refe
 e mantenha cada identidade ligada à pessoa marcada, independentemente da posição na tela.
 Uma vista de costas continua de costas; uma pessoa ausente não deve ser criada no shot.
 
-![Personagens, cores e importância do prompt](../public/guides/images/13-prompt-multiplos.png)
+![Personagens, cores e importância do prompt](../../public/guides/images/13-prompt-multiple.png)
 
 ## Modelo e seed
 
@@ -23,14 +24,14 @@ Para marcações por cor, recomendamos Motion Transfer TARA com método TARA e p
 Character Swap também pode funcionar; o resultado depende da associação e da descrição das referências.
 Mantenha a seed para comparar uma mudança de cada vez, ou use Sortear nova seed.
 
-![Configurações de TARA e seed](../public/guides/images/03-tara-seed.png)
+![Configurações de TARA e seed](../../public/guides/images/03-tara-seed.png)
 
 ## Validar a troca
 
 Use a comparação com guia e referências. Confira identidade, pose, pessoas não marcadas,
 acessórios e continuidade. Os testes ilustrados não garantem comportamento em outros shots.
 
-![Comparação com referências, guia e resultado](../public/guides/images/09-comparacao.png)
+![Comparação com referências, guia e resultado](../../public/guides/images/09-comparison.png)
 
 ## Atualizar as capturas
 
@@ -63,4 +64,4 @@ O roteiro `scripts/docs/check-guide.cjs` confere o link Dicas no estúdio, os 24
 os links internos, a ampliação, a cópia do prompt e o layout mobile. Use as mesmas
 variáveis de navegador do roteiro de captura.
 
-Para atualizar a instância hospedada, veja [Atualizar no Render](RENDER.md).
+Para atualizar a instância hospedada, veja [Atualizar no Render](../RENDER.md) (em inglês).

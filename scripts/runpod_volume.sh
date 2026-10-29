@@ -13,7 +13,7 @@ set -euo pipefail
 DATACENTER=${DATACENTER:-EU-RO-1}
 VOLUME_GB=${VOLUME_GB:-180}
 IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:latest}
-PROFILES=${PROFILES:-character,motion,headswap,sharpness,omniref,klein,sam2d,sam3d,audio}
+PROFILES=${PROFILES:-character,motion,headswap,sharpness,regenerate,omniref,klein,sam2d,sam3d,audio}
 # REMOVE: optional comma-separated model paths (relative to models/) to delete from the volume, e.g. retired files.
 # OVERRIDES: JSON for HENGE_MODEL_OVERRIDES (e.g. a link newer than the image's manifest).
 ENV_JSON=$(PROFILES=$PROFILES REMOVE=${REMOVE:-} OVERRIDES=${OVERRIDES:-} python3 -c 'import json,os;e={"HENGE_MODEL_PROFILES":os.environ["PROFILES"]};e.update({"HENGE_REMOVE_MODELS":os.environ["REMOVE"]} if os.environ["REMOVE"] else {});e.update({"HENGE_MODEL_OVERRIDES":os.environ["OVERRIDES"]} if os.environ["OVERRIDES"] else {});e.update({"HF_TOKEN":os.environ["HF_TOKEN"]} if os.environ.get("HF_TOKEN") else {});print(json.dumps(e))')

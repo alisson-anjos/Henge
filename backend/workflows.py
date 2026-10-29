@@ -77,6 +77,9 @@ REGENERATE={
  'lms':MODELS['sharpness']['lora'],
  'upscaler':'minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors',
 }
+# Latent upscaler of the refiner stage (native ComfyUI loader): the LBH-123-AI base, or ours fine-tuned on the LMS data
+# (same architecture and latent contract).
+REGENERATE_UPSCALERS={'base':REGENERATE['upscaler'],'lms':'h3_upscaler_lms_v0.1.safetensors'}
 REGENERATE_SIGMAS={2:'0.7, 0.494118, 0',3:'0.909375, 0.857143, 0.666667, 0'}
 # Learned H3 latent upscalers, preferred first (LBH-123-AI 3D upscaler, MIT; ours is fine-tuned on the LMS data).
 H3_UPSCALERS=('h3_upscaler_lms_v0.1.safetensors','minimax_h3_latent_upscaler_3d_bf16.safetensors')
@@ -236,7 +239,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             g['36']['inputs']['model']=g['34']['inputs']['model']=['81',0]
     return g
 
-def full_refiner_graph(video,guide,prompt,width,height,output_width,output_height,length,trim_frames,seed,steps=2,attention="comfy kitchen attention",temporal_windows=None,lms_strength=1.):
+def full_refiner_graph(video,guide,prompt,width,height,output_width,output_height,length,trim_frames,seed,steps=2,attention="comfy kitchen attention",temporal_windows=None,lms_strength=1.,upscaler_model=None):
     """Refine the assembled first pass once, using a separate Ref2VA stack and global sampler.
 
     Persisted first-pass frames are re-encoded (not concatenated latent caches). The original
@@ -244,7 +247,7 @@ def full_refiner_graph(video,guide,prompt,width,height,output_width,output_heigh
     """
     windows={**(temporal_windows or {}),'enabled':True}
     g=h3_graph(guide,[],prompt,width,height,length,trim_frames,'sharpness',seed,4,'original',[],'human',0,
-               attention=attention,upscale={'method':'regenerate','width':output_width,'height':output_height,'steps':steps,'prompt':prompt,'lms_strength':lms_strength})
+               attention=attention,upscale={'method':'regenerate','width':output_width,'height':output_height,'steps':steps,'prompt':prompt,'lms_strength':lms_strength,**({'model':upscaler_model} if upscaler_model else {})})
     g['90']=node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length)
     g['91']=node('VAEEncodeTiled',pixels=['90',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
     g['92']=node('EmptyMiniMaxH3LatentAV',width=width,height=height,length=length)

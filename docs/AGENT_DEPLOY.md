@@ -43,7 +43,7 @@ Ask the user for:
 
 - which option: **B** (one pod, everything inside) or **C** (UI on their computer, GPU on Serverless);
 - the datacenter (default `EU-RO-1`; it must have RTX 5090 in stock) and which model profiles they need
-  (default: all of `character,motion,headswap,sharpness,omniref,fibo,klein,sam2d,sam3d,audio`).
+  (default: all of `character,motion,headswap,sharpness,regenerate,omniref,klein,sam2d,sam3d,audio`).
 
 ## Option B: one pod
 

@@ -53,7 +53,7 @@ Download the models with your ComfyUI Python (or by hand from [the model guide](
 
 ```sh
 python scripts/download_models.py --manifest config/model-repos.example.json \
-  --models-dir /absolute/path/to/ComfyUI/models --profiles character,motion,headswap,sharpness,fibo,klein,sam2d,audio
+  --models-dir /absolute/path/to/ComfyUI/models --profiles character,motion,headswap,sharpness,regenerate,klein,sam2d,audio
 ```
 
 Models you already have are reused, even under an older name or in another subfolder (for example
