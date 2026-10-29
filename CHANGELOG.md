@@ -9,7 +9,7 @@ Resultados de testes são descritos com seu alcance; testes CPU não substituem 
 
 ## 2026-10-29
 
-### Context windows — publicado, em validação Serverless
+### Context windows — publicado e validado no Serverless
 
 - Processamento temporal opcional para Character Swap, Motion Transfer, TARA, Head Swap e Sharpness.
 - Janelas puras avaliam trechos sobrepostos em cada passo e combinam as previsões antes de atualizar o
@@ -18,11 +18,20 @@ Resultados de testes são descritos com seu alcance; testes CPU não substituem 
   sem crossfade e Open-H3 Refiner sobre o vídeo completo com context windows na segunda etapa.
 - Janela/sobreposição configuráveis, inicialmente 107/22 frames. Opções experimentais, desligadas por padrão.
 - Worker antigo mantém a opção indisponível; combinações sem suporte têm validação explícita.
-- **Publicação:** código na `main`, commit `d1672fd`. Imagem Docker em construção; atualização do worker
-  Serverless e da UI/bridge no Render ainda pendentes no início desta validação.
+- **Publicação:** código na `main`, commit `d1672fd`. Imagem Docker publicada; worker Serverless em
+  `henge:sha-d1672fd` e UI/bridge do Render em `henge-ui:sha-d1672fd` (ComfyUI `35060f0`, BFS `6df4276`).
 - **Testes:** testes de lógica, UI com Playwright e H3 reduzido em CPU passaram, incluindo o wrapper TARA
-  em Flex. A geração real no RunPod Serverless está em andamento; ainda não há conclusão sobre qualidade,
-  fidelidade de movimento, transições ou pico de VRAM com os modelos reais.
+  em Flex. Geração real no RunPod Serverless, seed 42, todos concluídos sem erro:
+  - Sharpness em duas etapas (LMS por segmentos → Open-H3 Refiner com janelas 73/22 sobre o vídeo
+    completo): 124 frames, saída 1952×1088.
+  - Refiner com janelas sobre um resultado existente de Character Swap: 124 frames, personagem, pose e
+    fundo preservados. Também concluído pelo fluxo normal da UI no Render, com comparativo no histórico.
+  - Motion Transfer e Motion Transfer TARA, normal × janelas 39/5 em 56 frames (duas janelas): mesma
+    identidade e movimento; o TARA com janelas levou 107 s contra 227 s neste teste.
+  - Nenhuma emenda entre janelas: o maior salto na zona de sobreposição ficou igual ao da versão sem
+    janelas (0,9–1,4× a variação mediana entre frames), abaixo dos picos de movimento do próprio vídeo.
+- **Limites:** um clipe por modo, curto (2,3–5,2 s); a comparação de tempo é de uma execução só e o pico de
+  VRAM não foi medido. Falta um clipe longo com várias janelas e cortes de câmera.
 - [Controles, funcionamento e limites](docs/temporal-windows.md).
 
 ### Junção dos shots e reinício do bridge
