@@ -74,16 +74,16 @@
     },
     {
       "id": "turbo_pika6",
-      "repo_id": "Pika-Labs/Pika-H3-Flex",
-      "revision": "0ddf55ad7067ca1e76812253bd7b4600df87f759",
-      "filename": "comfy/loras/pika_h3_flex_ref2va_comfy_bf16.safetensors",
-      "destination": "loras/henge/pika_h3_flex_ref2va_comfy_bf16.safetensors",
+      "repo_id": "Kijai/MiniMax-H3_comfy",
+      "revision": "4c24460ce97e4c4b01acfe7ebcb7e01e1a86a234",
+      "filename": "loras/Pika/pika_h3_flex_ref2va_v1_avg_rank_55_bf16.safetensors",
+      "destination": "loras/henge/pika_h3_flex_ref2va_v1_avg_rank_55_bf16.safetensors",
       "profiles": [
         "common",
         "pika"
       ],
-      "note": "Downloaded by default; optional turbo selection. Ref2VA, strength 1.0; Comfy workflow uses LCM and 6 manual-sigma steps. SHA256 e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1. MiniMax H3 Community License.",
-      "sha256": "e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1"
+      "note": "Downloaded by default; optional turbo selection. Pika H3 Flex Ref2VA adapter (Pika-Labs) reduced by Kijai to a dynamic rank (sv_fro 0.99 from 384, average 55, 553 MB instead of 1.96 GB); strength 1.0, Comfy workflow uses LCM and 6 manual-sigma steps. SHA256 7b5a7e707860412c214559666c6283cde2cddc79e13e124007fa47a5392352da. MiniMax H3 Community License.",
+      "sha256": "7b5a7e707860412c214559666c6283cde2cddc79e13e124007fa47a5392352da"
     },
     {
       "id": "pika_license",

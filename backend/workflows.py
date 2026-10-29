@@ -41,7 +41,7 @@ TURBOS={
 SAMPLING=json.loads((Path(__file__).resolve().parents[1]/'lib/h3-sampling.json').read_text())
 SAMPLERS=tuple(SAMPLING['samplers'])
 PIKA=SAMPLING['pika']
-TURBOS[PIKA['turbo']]={'label':'Pika H3 Flex · 6-step (experimental stack)','lora':'henge/pika_h3_flex_ref2va_comfy_bf16.safetensors','steps':PIKA['steps']}
+TURBOS[PIKA['turbo']]={'label':'Pika H3 Flex · 6-step (experimental stack)','lora':'henge/pika_h3_flex_ref2va_v1_avg_rank_55_bf16.safetensors','steps':PIKA['steps']}
 
 # LoRA files keep their published filenames under loras/henge/. Installs from before 2026-10-27 used short names;
 # localize_loras() falls back to the old name when only that one is installed, so nothing has to be downloaded again.

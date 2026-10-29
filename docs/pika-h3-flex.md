@@ -35,9 +35,15 @@ profile downloads include them. The optional `pika` profile can be used to top u
 python scripts/download_models.py --models-dir /path/to/ComfyUI/models --profiles pika
 ```
 
-The adapter is installed as `loras/henge/pika_h3_flex_ref2va_comfy_bf16.safetensors`. Downloads are pinned to revision
-`0ddf55ad7067ca1e76812253bd7b4600df87f759`; its published SHA256 is
-`e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1`. The download manifest records this checksum;
+The adapter is Kijai's reduced copy of Pika's Ref2VA Comfy adapter: the same 208 modules, a dynamic rank kept at
+99% of the Frobenius energy (`sv_fro 0.99` from rank 384, average 55), 553 MB instead of 1.96 GB, with Pika's
+copyright and license files in its metadata. It is installed as
+`loras/henge/pika_h3_flex_ref2va_v1_avg_rank_55_bf16.safetensors`, pinned to
+[Kijai/MiniMax-H3_comfy](https://huggingface.co/Kijai/MiniMax-H3_comfy/blob/4c24460ce97e4c4b01acfe7ebcb7e01e1a86a234/loras/Pika/pika_h3_flex_ref2va_v1_avg_rank_55_bf16.safetensors)
+revision `4c24460ce97e4c4b01acfe7ebcb7e01e1a86a234`, SHA256
+`7b5a7e707860412c214559666c6283cde2cddc79e13e124007fa47a5392352da`. The license and notice files still come from
+Pika-Labs/Pika-H3-Flex at revision `0ddf55ad7067ca1e76812253bd7b4600df87f759`. An existing install of the full Pika
+file (`pika_h3_flex_ref2va_comfy_bf16.safetensors`) keeps working and is not downloaded again. The download manifest records this checksum;
 the explicit on-demand installer verifies it. The bootstrap profile downloader records the checksum without adding
 a separate checksum pass.
 

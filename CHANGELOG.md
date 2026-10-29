@@ -9,6 +9,15 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Pika H3 Flex: Kijai's reduced Ref2VA adapter
+
+- The Pika turbo now downloads Kijai's `pika_h3_flex_ref2va_v1_avg_rank_55_bf16` (dynamic rank, sv_fro 0.99 from
+  384; 553 MB instead of 1.96 GB). Checked against Pika's Ref2VA adapter: the same 208 modules. Pinned revision and
+  SHA256 in the manifest; Pika's license and notice files are still installed. Existing installs of the full file
+  keep using it without a new download.
+- **Component:** model manifest and bridge (LoRA name). **Tests:** Pika graph and manifest tests. No render yet
+  with the reduced file.
+
 ### Sharpness defaults to pure temporal windows
 
 - Entering Sharpness selects **Pure temporal windows** (107/22) when the worker supports them; leaving Sharpness

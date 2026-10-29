@@ -18,5 +18,6 @@
  "henge/solarrenderer_control_comfy.safetensors": "henge/solar_control.safetensors",
  "henge/solarrenderer_4step_comfy.safetensors": "henge/turbo_solar_4step.safetensors",
  "henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors": "henge/vfx_ffp_solar05_fro_dyn99.safetensors",
- "henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors": "henge/vfx_ffp_solar05_fro_dyn95.safetensors"
+ "henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors": "henge/vfx_ffp_solar05_fro_dyn95.safetensors",
+ "henge/pika_h3_flex_ref2va_v1_avg_rank_55_bf16.safetensors": "henge/pika_h3_flex_ref2va_comfy_bf16.safetensors"
 }
