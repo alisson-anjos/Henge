@@ -51,6 +51,8 @@ their scope; CPU tests do not replace generation with the real models.
   refiner (0.1–1.5; default 1.0). Off, the second stage uses only the refiner and the turbo. It applies to the
   per-segment refiner and to the full-video refiner with context windows. First-stage LMS strength stays on the
   LoRA strength control.
+- The switch and its strength slider sit together on one full-width row in the Sharpness panel; the slider is
+  dimmed and disabled while the switch is off.
 - **Component:** UI/bridge (builds the graphs); no worker change.
 - **Tests:** graphs with and without LMS and the strength applied in both refiner paths. No visual comparison yet
   with LMS off or at reduced strength.
