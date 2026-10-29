@@ -94,7 +94,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None,gen_audio=False,regional_attention=None):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None,gen_audio=False,regional_attention=None,temporal_windows=None):
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
@@ -219,7 +219,49 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         g['14']=node('HengeCausalSampler',model=g['10']['inputs']['model'],positive=['9',0],latent=['9',1],seed=seed,steps=steps,
                      chunk=int(causal.get('chunk',5)),window=int(causal.get('window',6)),sampler='euler',cache='auto')
         for k in ('10','11','12','13','24'):g.pop(k,None)
+    if temporal_windows and temporal_windows.get('enabled'):
+        if temporal_windows.get('scope')=='refiner_full':raise ValueError('Full-video refinement requires assembling the normal segments first')
+        if causal or (regional_attention and regional_attention.get('enabled')):
+            raise ValueError('Pure temporal windows cannot be combined with Causal or regional attention')
+        window_args={'window_frames':int(temporal_windows.get('window_frames',107)),'overlap_frames':int(temporal_windows.get('overlap_frames',22)),'accumulator_device':'cpu'}
+        g['80']=node('HengeH3PureWindows',model=g['10']['inputs']['model'],**window_args)
+        g['10']['inputs']['model']=g['13']['inputs']['model']=['80',0]
+        if upscale and upscale['method']=='regenerate':
+            g['81']=node('HengeH3PureWindows',model=g['34']['inputs']['model'],**window_args)
+            g['34']['inputs']['model']=['81',0]
+        elif upscale and upscale['method']=='h3':
+            g['81']=node('HengeH3PureWindows',model=g['36']['inputs']['model'],**window_args)
+            g['36']['inputs']['model']=g['34']['inputs']['model']=['81',0]
     return g
+
+def full_refiner_graph(video,guide,prompt,width,height,output_width,output_height,length,trim_frames,seed,steps=2,attention="comfy kitchen attention",temporal_windows=None):
+    """Refine the assembled first pass once, using a separate Ref2VA stack and global sampler.
+
+    Persisted first-pass frames are re-encoded (not concatenated latent caches). The original
+    source interval remains the Add Guide control; no first-pass model or sampler is executed here.
+    """
+    windows={**(temporal_windows or {}),'enabled':True}
+    g=h3_graph(guide,[],prompt,width,height,length,trim_frames,'sharpness',seed,4,'original',[],'human',0,
+               attention=attention,upscale={'method':'regenerate','width':output_width,'height':output_height,'steps':steps,'prompt':prompt})
+    g['90']=node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length)
+    g['91']=node('VAEEncodeTiled',pixels=['90',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
+    g['92']=node('EmptyMiniMaxH3LatentAV',width=width,height=height,length=length)
+    g['93']=node('LTXVSeparateAVLatent',av_latent=['92',0])
+    g['94']=node('LTXVConcatAVLatent',video_latent=['91',0],audio_latent=['93',1])
+    g['31']['inputs']['samples']=['94',0]
+    g['81']=node('HengeH3PureWindows',model=['74',0],window_frames=int(windows.get('window_frames',107)),overlap_frames=int(windows.get('overlap_frames',22)),accumulator_device='cpu')
+    g['34']['inputs']['model']=['81',0]
+    g['17']['inputs']['filename']=video.replace('.mp4','_refined.mp4')
+    # Keep only ancestors of the saved output, so stage one cannot run again accidentally.
+    keep=set()
+    def visit(key):
+        if key in keep:return
+        keep.add(key)
+        for value in g[key]['inputs'].values():
+            if isinstance(value,list) and len(value)==2 and isinstance(value[0],str) and value[0] in g:visit(value[0])
+    visit('17')
+    return {key:value for key,value in g.items() if key in keep}
+
 
 def fibo_graph(image,refs,instruction,seed):
     g={'1':node('UNETLoader',unet_name='fibo2_edit_turbo_int8_convrot.safetensors',weight_dtype='default'),'2':node('CLIPLoader',clip_name='qwen3vl_4b_int8_convrot.safetensors',type='fibo2',device='default'),'3':node('VAELoader',vae_name='flux2-vae.safetensors'),'4':node('LoadImage',image=image),'5':node('TextEncodeFibo2',clip=['2',0],vae=['3',0],prompt=instruction,negative_prompt='',width=0,height=0,batch_size=1,**{'images.image_1':['4',0]}),'6':node('KSampler',model=['1',0],positive=['5',0],negative=['5',1],latent_image=['5',2],seed=seed,steps=4,cfg=1.,sampler_name='euler',scheduler='simple',denoise=1.),'7':node('VAEDecode',samples=['6',0],vae=['3',0]),'8':node('SaveImage',images=['7',0],filename_prefix=image.rsplit('.',1)[0]+'_fibo')}

@@ -456,3 +456,6 @@ NODE_CLASS_MAPPINGS['HengeRegionalAttention']=HengeRegionalAttention
 
 from .molmo import HengeMolmo
 NODE_CLASS_MAPPINGS['HengeMolmo']=HengeMolmo
+
+from .temporal_windows import HengeH3PureWindows
+NODE_CLASS_MAPPINGS['HengeH3PureWindows']=HengeH3PureWindows

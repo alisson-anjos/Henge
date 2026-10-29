@@ -193,6 +193,17 @@ def validate_request(r,options,slots):
         if r['mode']!='swap' or r.get('subject_guidance',{}).get('representation') not in ('2d','3d') or not r.get('subject_guidance',{}).get('bindings'):raise ValueError('Regional attention needs marked people in a 2D/3D Character Swap')
         if options.get('conditioning_mode','guide')!='guide' or r['processing'].get('mode')=='causal':raise ValueError('Regional attention needs Guide Latents and shot sampling')
         if not re.fullmatch(r'\d+(?:\s*,\s*\d+)*',str(regional.get('layers','10,25,40'))):raise ValueError('Regional attention layers must be comma-separated indices')
+    windows=options.get('temporal_windows') or {}
+    if not isinstance(windows,dict) or set(windows)-{'enabled','window_frames','overlap_frames','scope'}:raise ValueError('Invalid temporal window settings')
+    if not isinstance(windows.get('enabled',False),bool):raise ValueError('Temporal windows enabled must be boolean')
+    if windows.get('scope','all') not in ('all','refiner_full'):raise ValueError('Unknown temporal window scope')
+    if full_refiner_enabled(options):
+        if r['mode']!='sharpness' or upscale_method(options)!='regenerate' or r.get('quality') not in ('1080p','1440p'):raise ValueError('Full-video window refinement needs Sharpness, Open-H3 Refiner + LMS and 1080p or 2K')
+        if grid_frames(round((r['video']['end_seconds']-r['video']['start_seconds'])*24))>3600:raise ValueError('Full-video refinement supports up to 3600 padded frames; select a shorter interval')
+    window=windows.get('window_frames',107);overlap=windows.get('overlap_frames',22)
+    if type(window) is not int or not 22<=window<=362 or window%17!=5:raise ValueError('Temporal window must be 22..362 frames on the H3 17n+5 grid')
+    if type(overlap) is not int or not 5<=overlap<window or overlap%17!=5:raise ValueError('Temporal overlap must be smaller than the window on the H3 17n+5 grid')
+    if windows.get('enabled') and (r.get('processing',{}).get('mode')=='causal' or regional.get('enabled')):raise ValueError('Pure temporal windows cannot be combined with Causal or regional attention')
     mask=options.get('mask') or {}
     if not isinstance(mask,dict) or set(mask)-{'threshold','shape','padding','expand','fill_holes','temporal_expand','blockify','invert','strength'}:raise ValueError('Invalid latent mask settings')
     if mask.get('shape','box') not in ['box','silhouette']:raise ValueError('Unknown mask shape')
@@ -802,6 +813,10 @@ def upscale_method(options):
 
 CUT_MODES=('fit','every','off')
 
+def full_refiner_enabled(options):
+    windows=options.get('temporal_windows') or {}
+    return bool(windows.get('enabled') and windows.get('scope')=='refiner_full')
+
 def cut_mode(job):
     """fit: shots keep the requested length and end at the last camera cut within reach; every: a new shot at each
     camera cut; off: fixed-length shots. Set with the Auto cut length (request.processing); older jobs carry it in
@@ -809,11 +824,12 @@ def cut_mode(job):
     options=job.get('options') or {}
     guidance=job['request'].get('subject_guidance') or {}
     marked=guidance.get('representation','original')!='original' and bool(guidance.get('bindings'))
+    pure=bool((options.get('temporal_windows') or {}).get('enabled')) and not full_refiner_enabled(options)
     for mode in (job['request']['processing'].get('cut_mode'),options.get('cut_mode')):
         # Marked people are tracked shot by shot: a camera cut inside a shot would lose them, so with marks every
         # cut starts a new shot (fixed length 'off' stays the user's explicit choice).
-        if mode in CUT_MODES:return 'every' if marked and mode=='fit' else mode
-    return 'fit' if options.get('detect_cuts',True) else 'off'
+        if mode in CUT_MODES:return 'every' if (marked or pure) and mode=='fit' else mode
+    return ('every' if pure else 'fit') if options.get('detect_cuts',True) else 'off'
 
 def camera_cuts(job):
     """Scene-change frames (24 fps, from the selected start), detected once per interval and kept on the job."""
@@ -835,7 +851,7 @@ def plan_shots(job):
     per=max(22,min(362,5+17*math.floor((round(processing['requested_seconds_per_shot']*24)-5)/17)))
     regenerate=r['mode']=='sharpness' and upscale_method(job.get('options',{}))=='regenerate'
     # Refinement also encodes an output-resolution guide. Bound both passes even for Single mode.
-    if regenerate:per=min(per,107)
+    if regenerate and (full_refiner_enabled(job.get('options',{})) or not (job.get('options',{}).get('temporal_windows') or {}).get('enabled')):per=min(per,107)
     elif processing.get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
     context=min(processing.get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17))
     # A single or causal render follows the guide straight through its cuts.
@@ -922,6 +938,7 @@ def generate(job):
             shutil.copyfile(dest,work/f'reference_{i}_prepared.png');prepared.append(dest.relative_to(INPUT).as_posix())
             urls.append(f"/api/backend/jobs/{job['id']}/files/reference_{i}_prepared.png")
         refs=prepared;save(job,prepared_reference_urls=urls)
+    if (options.get('temporal_windows') or {}).get('enabled') and 'HengeH3PureWindows' not in comfy_info():raise ValueError('Update the worker to use pure temporal windows')
     width,height=meta['width'],meta['height']
     def size(short):scale=short/min(width,height);return max(32,round(width*scale/32)*32),max(32,round(height*scale/32)*32)
     short=QUALITY[r['quality']];W,H=size(short);upscale=None
@@ -954,12 +971,15 @@ def generate(job):
     if plan['adapt_reference'] and not swap_figure:
         figure=adapt_request(job)['figure'];adapted_ref=adapt_prepare(job,job);refs.append(adapted_ref.relative_to(INPUT).as_posix())
         if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> shows that character in humanoid form, in the starting pose of the guide; use it for body shape, limb proportions and appearance only, it does not supply motion or a background." if figure else f" <Picture {len(refs)}> is the prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
+    full_refine=full_refiner_enabled(options)
+    segment_upscale=None if full_refine else upscale
+    segment_windows=None if full_refine else options.get('temporal_windows')
     pieces=[];guide_pieces=[];previous=None;save(job,shot_urls=[],shot_plans=[])
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         if shot.get('reset_context'):previous=None
         name=f'shot_{i:03d}.mp4';path=inp/name;t=start+shot['start']/24;duration=shot['frames']/24
-        args=['ffmpeg','-v','error','-ss',str(t),'-i',str(INPUT/assets['video']),'-t',str(duration),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-c:v','libx264','-threads','2','-crf','18','-pix_fmt','yuv420p','-c:a','aac','-y',str(path)];run(args)
+        args=['ffmpeg','-v','error','-ss',str(t),'-i',str(INPUT/assets['video']),'-t',str(duration),'-vf',f'fps=24,scale={w if full_refine else W}:{h if full_refine else H}:force_original_aspect_ratio=decrease,pad={w if full_refine else W}:{h if full_refine else H}:(ow-iw)/2:(oh-ih)/2','-c:v','libx264','-threads','2','-crf','18','-pix_fmt','yuv420p','-c:a','aac','-y',str(path)];run(args)
         relative=path.relative_to(INPUT).as_posix();context_rel=None
         if previous is not None:
             ctx=inp/f'context_{i:03d}.mp4';run(['ffmpeg','-v','error','-sseof',str(-context/24),'-i',str(previous),'-an','-c:v','libx264','-threads','2','-y',str(ctx)]);context_rel=ctx.relative_to(INPUT).as_posix()
@@ -970,7 +990,7 @@ def generate(job):
         skip=max(0,shot['overlap']-JOIN_OVERLAP) if shot['frames']-shot['overlap']>=context else 0
         shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
                         **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
-        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**({**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.),'labels':bool(r.get('subject_guidance',{}).get('mark_labels'))} if plan['representation']=='2d' else options.get('mask') or {}),**source_blur_settings(options)},lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')),regional_attention=options.get('regional_attention'));result_node,guide_node='17','18'
+        graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**({**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.),'labels':bool(r.get('subject_guidance',{}).get('mark_labels'))} if plan['representation']=='2d' else options.get('mask') or {}),**source_blur_settings(options)},lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=segment_upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')),regional_attention=options.get('regional_attention'),temporal_windows=segment_windows);result_node,guide_node='17','18'
         per_shot_identities=r['mode'] in ('swap','motion') and bindings and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True)
         if per_shot_identities:
             # Run the exact guide node first: absence must be known before H3 sees any references.
@@ -1118,12 +1138,38 @@ def shot_audio(job,outputs,i,shot,piece):
     raw=FILES.download(sound[0],INPUT/'henge'/job['id']/f'audio_{i:03d}_raw.flac')
     run(['ffmpeg','-v','error','-ss',str(shot['overlap']/24),'-i',str(raw),'-t',str(frame_count(piece)/24),'-af','apad','-ar','48000','-ac','2','-y',str(job_path(job['id'])/f'audio_{i:03d}.wav')])
 
+def refine_full_video(job,joined,W,H):
+    """Stage 2 after assembling all normal segments. Also used after redoing one segment."""
+    options=job['options'];r=job['request'];work=job_path(job['id']);inp=INPUT/'henge'/job['id']
+    frames=frame_count(joined)
+    if frames<1:raise ValueError('The assembled first pass contains no readable frames')
+    length=grid_frames(frames)
+    if length>3600:raise ValueError('Full-video refinement exceeds the 3600-frame loader limit')
+    # Comfy caches node inputs by path. Content-address the assembly so a Redo cannot reuse stale frames.
+    digest=hashlib.sha256()
+    with joined.open('rb') as source:
+        for chunk in iter(lambda:source.read(1<<20),b''):digest.update(chunk)
+    size=probe(joined);staged=inp/f'first_pass_full_{digest.hexdigest()[:16]}.mp4';shutil.copyfile(joined,staged)
+    guide=inp/f'refine_source_full_{W}x{H}.mp4'
+    start,end=r['video']['start_seconds'],r['video']['end_seconds']
+    run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/job['assets']['video']),'-t',str(end-start),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-an','-c:v','libx264','-threads','2','-crf','17','-y',str(guide)])
+    graph=workflows.full_refiner_graph(staged.relative_to(INPUT).as_posix(),guide.relative_to(INPUT).as_posix(),job['plan'].get('regenerate_prompt') or options.get('regenerate_prompt') or job['plan']['prompt'],size['width'],size['height'],W,H,length,frames,int(options.get('seed',42)),steps=options.get('regenerate_steps',2),attention=options.get('attention','comfy kitchen attention'),temporal_windows=options.get('temporal_windows'))
+    save(job,message='Stage 2: refining the assembled video with temporal windows',progress=.9)
+    outputs=execute_graph(job,graph,'h3_refine_full')
+    results=output_files(outputs,'17','videos')
+    if not results:raise ValueError('ComfyUI finished without the full-video refinement')
+    refined=FILES.download(results[0],work/'refined_full.mp4')
+    if frame_count(refined)!=frames:raise ValueError('Full-video refinement changed the frame count')
+    return refined
+
+
 def finalize(job,pieces,guide_pieces,W,H):
     """Join the shot pieces into result.mp4 (with the source audio when kept), the guide video and the comparison.
     Used at the end of a render and after a shot is redone."""
     r=job['request'];assets=job['assets'];meta=job['video_info'];plan=job['plan'];work=job_path(job['id'])
     start,end=r['video']['start_seconds'],r['video']['end_seconds']
     concat=work/'concat.txt';concat.write_text(''.join(f"file '{p.name}'\n" for p in pieces));joined=work/'joined.mp4';run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(concat),'-c','copy','-y',str(joined)])
+    if full_refiner_enabled(job.get('options',{})):joined=refine_full_video(job,joined,W,H)
     output=work/'result.mp4';args=['ffmpeg','-v','error','-i',str(joined)]
     sounds=[work/f"audio_{p.stem.split('_')[-1]}.wav" for p in pieces]
     if r.get('output_audio',{}).get('generate') and sounds and all(x.is_file() for x in sounds):
@@ -1262,7 +1308,7 @@ def health():
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
     regenerate=regenerate_requirements(info)
     upscalers['regenerate']=regenerate['available']
-    return {'regenerate':regenerate,'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'temporal_windows_ready':'HengeH3PureWindows' in info,'regenerate':regenerate,'upscalers':upscalers,'bases':bases,'turbos':turbos,'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/settings')
 def connection_settings():return {'comfy_url':URL}
@@ -1379,6 +1425,7 @@ async def create_job(request:Request):
         pictures={int(k.split('_')[1]):v for k,v in form.items() if re.fullmatch(r'picture_\d+',k)}
         if len(pictures)>11:raise ValueError('Attach up to 11 reference images')
         validate_request(r,options,list(pictures))
+        if (options.get('temporal_windows') or {}).get('enabled') and 'HengeH3PureWindows' not in comfy_info():raise HTTPException(409,'Pure temporal windows need the updated Henge worker (HengeH3PureWindows node)')
         if upscale_method(options)=='regenerate':
             status=regenerate_requirements(comfy_info())
             if not status['available']:raise HTTPException(409,status['message'])
@@ -1677,6 +1724,8 @@ def job_settings(job):
         if o.get('base','h3')!='h3':parts.append(BASES.get(o['base'],{}).get('label',o['base']))
         if plan.get('representation','original')!='original':parts.append(f"guide {plan['representation']}")
         if plan.get('adapt_reference'):parts.append('adapted reference')
+    if (o.get('temporal_windows') or {}).get('enabled'):
+        w=o['temporal_windows'];parts.append(f"{'segments → full refiner windows' if w.get('scope')=='refiner_full' else 'pure temporal windows'} {w.get('window_frames',107)}/{w.get('overlap_frames',22)} frames")
     parts+=[f"{o.get('steps',8)} steps",job.get('quality',''),f"seed {o.get('seed',42)}"]
     return ' · '.join(str(p) for p in parts if p)
 
@@ -1740,6 +1789,11 @@ def bundle_zip(jid:str):
 def workflow(jid:str,stage:str|None=None):
     load(jid);graphs={p.name:json.loads(p.read_text()) for p in job_path(jid).glob('*.api.json')}
     if stage is None:return graphs
+    # The optional two-stage path may fail during either stage; export the last render actually submitted.
+    if stage=='render_latest':
+        renders=list(job_path(jid).glob('h3_*.api.json'))
+        if not renders:raise HTTPException(404,'No render workflow has run yet')
+        stage=max(renders,key=lambda p:p.stat().st_mtime_ns).name.removesuffix('.api.json')
     # One API-format graph, ready to drag into ComfyUI (Workflow > Open also accepts it).
     name=stage+'.api.json'
     if name not in graphs:raise HTTPException(404,'Unknown workflow stage')

@@ -362,3 +362,5 @@ come from scripts shared by **crinklypaper** on the Banodoco Discord. Every mode
 Optional experimental Sharpness mode: [Open-H3 Regenerate rank-16 setup and limits](docs/open-h3-regenerate.md). Requires the updated worker and the `regenerate` model profile.
 
 Motion Transfer ComfyUI examples: [native and Planner workflows for Guide Latents and TARA](workflows/README.md), with [flexible reference roles and modified Kitchen-kernel setup](docs/motion-transfer.md).
+
+Optional experimental inference: [pure temporal windows and segments → full-video refinement](docs/temporal-windows.md). Pure windows are available across generation modes; the two-stage strategy is available in Sharpness with Open-H3 Refiner + LMS. Both require an updated worker and are disabled by default.

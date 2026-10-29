@@ -391,3 +391,10 @@ This fix belongs to the **Render UI/bridge image**, not the RunPod GPU worker. D
 image after active jobs finish. Updating only the RunPod template does not change bridge-side joining.
 A Retry reuses an existing plan but can submit render graphs again; do not assume every completed
 GPU request will be recovered automatically after a bridge restart.
+
+## Pure temporal windows
+
+The optional temporal-processing control requires the updated UI/bridge and a worker image containing
+`HengeH3PureWindows`. No extra model downloads or profiles are needed. Update/recycle workers after active
+jobs finish and refresh the bridge inventory as above. `temporal_windows_ready` in `/health` reports node
+availability. See [controls, conditioning and validation limits](temporal-windows.md).

@@ -78,3 +78,19 @@ de VRAM/RAM suficiente para qualquer resolução ou hardware.
 Um grafo de falha recuperado em 29/10/2026 tentou 328 frames, primeira passagem 1376×768 e
 refino com guia 1952×1088. O worker fechou a conexão; o log antigo não estava disponível para
 confirmar OOM. A mensagem de WebSocket fechado não deve ser tratada como diagnóstico definitivo.
+
+### Opção de janelas puras
+
+O controle **Configurações → Processamento temporal** também se aplica às duas passagens do Sharpness.
+Ele combina previsões por passo, mantendo o sampler global. Não é o mesmo que dividir em blocos concluídos
+nem o modo híbrido de aquecimento sequencial. Veja [configuração, explicação e limites](temporal-windows.md).
+
+
+### Segmentos → refiner completo com janelas (opcional)
+
+Em **Configurações → Processamento temporal**, a estratégia de duas etapas mantém a geração normal
+por segmentos na resolução inicial e aplica o Open-H3 apenas depois de montar o vídeo completo.
+A segunda passagem usa context windows puras, inicialmente 107 frames e 22 de sobreposição, em cada
+passo do refiner. A configuração padrão continua sendo o caminho anterior por segmento.
+É necessário atualizar também o worker. Veja [processamento temporal](temporal-windows.md) para os
+limites de memória, recodificação VAE, áudio e cortes de câmera.
