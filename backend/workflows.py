@@ -38,6 +38,11 @@ TURBOS={
  'lightx4':{'label':'lightx2v 4-step v1.0 (768p)','lora':'henge/minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors','steps':4},
  'solar4':{'label':'SolarRenderer 4-step (ComfyUI keys)','lora':'henge/solarrenderer_4step_comfy.safetensors','steps':4},
 }
+SAMPLING=json.loads((Path(__file__).resolve().parents[1]/'lib/h3-sampling.json').read_text())
+SAMPLERS=tuple(SAMPLING['samplers'])
+PIKA=SAMPLING['pika']
+TURBOS[PIKA['turbo']]={'label':'Pika H3 Flex · 6-step (experimental stack)','lora':'henge/pika_h3_flex_ref2va_comfy_bf16.safetensors','steps':PIKA['steps']}
+
 # LoRA files keep their published filenames under loras/henge/. Installs from before 2026-10-27 used short names;
 # localize_loras() falls back to the old name when only that one is installed, so nothing has to be downloaded again.
 LEGACY_LORAS=json.loads((Path(__file__).with_name('legacy_loras.json')).read_text())
@@ -97,7 +102,11 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None,gen_audio=False,regional_attention=None,temporal_windows=None):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None,gen_audio=False,regional_attention=None,temporal_windows=None,sampler_name="auto"):
+    if sampler_name not in SAMPLERS:raise ValueError('Unknown H3 sampler')
+    pika=turbo==PIKA['turbo']
+    if pika and base!='h3':raise ValueError('Pika H3 Flex Ref2VA requires the H3 Ref2VA base')
+    selected_sampler=(PIKA['sampler'] if pika else 'euler') if sampler_name=='auto' else sampler_name
     model=MODELS[profile];g={
       '1':node('UNETLoader',unet_name=BASES[base]['unet'],weight_dtype='default'),
       '2':node('LoraLoaderModelOnly',model=['1',0],lora_name=TURBOS[turbo]['lora'] if model.get('turbo') else model['adapter'],strength_model=1.),
@@ -112,7 +121,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
       '9':node('HengeH3Conditioning',clip=['5',0],vae=['6',0],guide=['8',0],references=['7',1],prompt=prompt,width=width,height=height,length=length,clip_video_fps=clip_fps,reference_size='match',guide_context=model['clip_context'] if guide_context is None else bool(guide_context),audio_conditioning=audio,audio_video=video),
       '10':node('CFGGuider',model=['4',0],positive=['9',0],negative=['9',0],cfg=1.),
       '11':node('RandomNoise',noise_seed=seed),
-      '12':node('KSamplerSelect',sampler_name='euler'),
+      '12':node('KSamplerSelect',sampler_name=selected_sampler),
       '13':node('BasicScheduler',model=['4',0],scheduler=model.get('scheduler','simple'),steps=steps,denoise=1.),
       '14':node('SamplerCustomAdvanced',noise=['11',0],guider=['10',0],sampler=['12',0],sigmas=['13',0],latent_image=['9',1]),
       '15':node('LTXVSeparateAVLatent',av_latent=['14',0]),
@@ -132,6 +141,8 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
     if cfg>1:
         # Undistilled sampling needs real guidance: negative = same conditioning with the text zeroed.
         g['24']=node('ConditioningZeroOut',conditioning=['9',0]);g['10']['inputs'].update(negative=['24',0],cfg=float(cfg))
+    if pika and steps==PIKA['steps']:
+        g['13']=node('ManualSigmas',sigmas=', '.join(str(sigma) for sigma in PIKA['sigmas']))
     if model.get('turbo') and not TURBOS[turbo]['lora']:
         # No speed LoRA: the task LoRA loads straight onto the base.
         del g['2'];g['3']['inputs']['model']=['1',0]
@@ -169,7 +180,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             refine_model=g['10']['inputs']['model']
             if W*H>2_100_000:g['41']=node('HengeH3TiledDiffusion',model=refine_model,tile_width=1024,tile_height=1024,tile_overlap=256,method='gaussian');refine_model=['41',0]
             g['33']=node('LTXVConcatAVLatent',video_latent=['30',0],audio_latent=['15',1])
-            g['34']=node('BasicScheduler',model=refine_model,scheduler=g['13']['inputs']['scheduler'],steps=int(upscale.get('steps',1)),denoise=float(upscale.get('denoise',.15)))
+            g['34']=node('BasicScheduler',model=refine_model,scheduler=model.get('scheduler','simple'),steps=int(upscale.get('steps',1)),denoise=float(upscale.get('denoise',.15)))
             g['35']=node('RandomNoise',noise_seed=seed+1000)
             g['36']=node('CFGGuider',model=refine_model,positive=['32',0],negative=['32',0],cfg=1.)
             g['37']=node('SamplerCustomAdvanced',noise=['35',0],guider=['36',0],sampler=['12',0],sigmas=['34',0],latent_image=['33',0])

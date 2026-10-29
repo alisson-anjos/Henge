@@ -9,6 +9,24 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Pika H3 Flex turbo and H3 sampler controls
+
+- Added the pinned Ref2VA Comfy adapter plus upstream license/notice files to default model downloads. The selected
+  default turbo is unchanged; Pika is an optional choice and is enabled once the worker reports its weight.
+- Selecting Pika presets six steps, CFG 1, the Ref2VA base and Auto/LCM. Six steps use the published Comfy workflow's
+  manual sigmas; custom counts use the normal model scheduler. Advanced exposes H3 sampler overrides.
+- Preserved existing Euler/profile schedules and independent Open-H3 stage-2 sampling; H3 latent refinement keeps
+  its own partial-denoise scheduler. Sampler settings survive exports/imports, Retry, assistant and MCP calls.
+- Documented the Pika model license separately from MIT application code in the README, notices and setup guides.
+- **Validation:** 197 backend tests and 23 subtests passed (4 optional skips); TypeScript and production build passed.
+  Playwright with simulated backend replies checked preset selection, sampler overrides, custom-step feedback,
+  assistant visibility and saved settings. Downloader dry-run includes Pika for standard profiles. Verified the
+  upstream workflow schedule and pinned notice files; no weights were loaded and no quality render was performed.
+- **Deployment:** code on main; UI/bridge deployment and a model-volume top-up are still required for an existing
+  Serverless installation. Workers do not download models. Existing native sampler nodes can run the new graph;
+  publishing a new full image makes the default-download manifest available to new download pods.
+- [Sampling, download and license details](docs/pika-h3-flex.md).
+
 ### README feature and deployment review
 
 - Updated the mode table, multi-subject TARA recommendation, opt-in mask guidance, fixed-seed controls and modified

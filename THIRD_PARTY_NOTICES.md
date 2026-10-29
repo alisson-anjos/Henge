@@ -47,3 +47,12 @@ Discord. Henge's implementation was rewritten for automatic per-shot tracking. S
   [darksidewalker/ComfyUI-DaSiWa-Nodes](https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes) (GPLv3), whose code is
   not used. NVIDIA RTX Video Super Resolution runs through NVIDIA's `nvidia-vfx` package (NVIDIA proprietary
   license), installed in the Docker image.
+
+## Pika H3 Flex model adapter
+
+The optional Pika Ref2VA Comfy adapter is downloaded from [Pika-Labs/Pika-H3-Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex)
+under the [MiniMax H3 Community License Agreement](https://huggingface.co/Pika-Labs/Pika-H3-Flex/blob/main/LICENSE),
+not this application's MIT license. Its model weights are not distributed in this source repository. The download
+manifest preserves the upstream license and notice files alongside the installed model.
+[Pika's NOTICE](https://huggingface.co/Pika-Labs/Pika-H3-Flex/blob/main/NOTICE) attributes MiniMax H3 to MiniMax and
+the FL2VA/Ref2VA adapters to Mellis, Inc. (2026). See [integration details](docs/pika-h3-flex.md).

@@ -140,3 +140,11 @@ creates and caches that comparison on CPU; existing completed jobs with their
 uploaded references can use it too. Audio follows the finished result. Preview
 width is capped at 1600 pixels to keep the comparison manageable; the separate
 result download retains its original resolution.
+
+## Pika H3 Flex turbo
+
+The Ref2VA Comfy adapter is included in normal downloads through the `common` profile, with a pinned upstream
+revision and license/notice files. It is an optional turbo choice, not a new default turbo. Install it under
+`models/loras/henge/pika_h3_flex_ref2va_comfy_bf16.safetensors`; `--profiles pika` can top up an existing models
+folder. Serverless needs a volume top-up through a pod, not just a worker environment change.
+See [Pika sampling, step overrides and deployment](pika-h3-flex.md).

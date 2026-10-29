@@ -38,7 +38,8 @@ Everything Henge builds on, in one place. Exact downloadable weights, destinatio
 - Training adapter V2 — [ostris/minimax_h3_training_adapter](https://huggingface.co/ostris/minimax_h3_training_adapter).
 - Turbo LoRAs — [drbaph](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI) (DMD 8-step),
   [Kijai](https://huggingface.co/Kijai/MiniMax-H3-experimental) (DMAD, pDMD),
-  [lightx2v](https://huggingface.co/lightx2v/Minimax-h3-Turbo).
+  [lightx2v](https://huggingface.co/lightx2v/Minimax-h3-Turbo),
+  [Pika H3 Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex) (Ref2VA Comfy adapter and six-step workflow).
 - FastH3 OmniRef — [FastVideo](https://huggingface.co/FastVideo/FastH3-Omni-Comfy).
 - SAM 3.1 and SAM 3D Body (Meta), BiRefNet, MoGe 2, FIBO (Bria), NVIDIA RTX Video Super Resolution (`nvidia-vfx`).
 - TAEH3 (live previews only) is derived from madebyollin's temporal autoencoder work.

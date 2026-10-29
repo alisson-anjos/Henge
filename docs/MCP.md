@@ -128,3 +128,12 @@ The built-in studio assistant uses `choose_replacement_mode` to show an in-chat 
 request does not explicitly choose a mode. It waits for a click, applies that mode (including the TARA profile and method for Motion Transfer TARA), and stops the edit if cancelled.
 The external MCP client asks the same question in its own conversation before `create_job`; the MCP server does
 not open the browser's choice card. Respect a mode already explicitly chosen for that request.
+
+## Pika turbo and sampler options
+
+`status.samplers` lists supported H3 sampler choices. `sampler_name="auto"` preserves the default Euler behavior
+for existing turbos and chooses LCM for `turbo="pika6"`. The Pika preset is six steps, CFG 1 and the H3 Ref2VA base.
+At six steps, manual sigmas match the Comfy workflow; a different step count uses the model's normal scheduler.
+An explicit sampler override changes the sampler without replacing the six-step sigmas. Open-H3 stage-2 sampling
+remains independent. Pika is downloaded by default, but must be installed and reported by the worker to be usable.
+See [Pika integration](pika-h3-flex.md).

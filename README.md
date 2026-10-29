@@ -79,7 +79,10 @@ Mask is not selected automatically and needs subject marks bound to references. 
 pixels are not guaranteed. SAM tracks marks through the frames; assignments still need checking after camera cuts.
 
 **Generation controls.** Model, method, turbo LoRA, steps, CFG, seed, reference preparation and Comfy Kitchen attention
-are configurable. Use a fixed seed to compare changes; the used seed is saved with each generation. Guide Latents can
+are configurable. [Pika H3 Flex](docs/pika-h3-flex.md) is included in default downloads as an optional turbo: selecting
+it presets six steps, CFG 1 and LCM with the Comfy workflow's manual sigmas. The H3 sampler is adjustable in Advanced;
+custom step counts use the normal scheduler and remain experimental. **The Pika LoRA is not MIT-licensed**;
+see [License](#license). Use a fixed seed to compare changes; the used seed is saved with each generation. Guide Latents can
 send **Latents + CLIP** (UI default), **Latents only**, or use each model's **Auto** setting. Latents only can help when
 source appearance leaks into a replacement. Optional [pure temporal windows](docs/temporal-windows.md) combine
 predictions at each denoising step; they are distinct from shots and carried context frames, and are off by default.
@@ -275,6 +278,7 @@ Images are built by GitHub Actions and published to GitHub Container Registry:
 - [Models and download links](docs/models-and-downloads.md) · [Guide conditioning](docs/conditioning.md)
 - [Motion Transfer workflows](workflows/README.md) · [Flexible references and modified Kitchen kernel](docs/motion-transfer.md)
 - [Open-H3 Refiner + LMS](docs/open-h3-regenerate.md) · [Temporal processing](docs/temporal-windows.md)
+- [Pika H3 Flex turbo, sampling and downloads](docs/pika-h3-flex.md)
 - [Portable ComfyUI workflow exports](docs/workflow-export.md)
 
 ## Login (optional)
@@ -356,6 +360,11 @@ What comes next: [docs/roadmap.md](docs/roadmap.md).
 ## License
 
 MIT for this application code. Model weights, LoRAs, datasets and third-party services have their own licenses and are not included or relicensed by this repository. This project is independent of Higgsfield and Comfy Org.
+
+**Pika Turbo is not MIT-licensed.** If you select the Pika H3 Flex turbo LoRA, its use is subject to the
+[MiniMax H3 Community License Agreement](https://huggingface.co/Pika-Labs/Pika-H3-Flex/blob/main/LICENSE),
+including its terms for use and distribution. The MIT license applies to Henge's application code and does not
+relicense the Pika model adapter. See [Pika's notices](https://huggingface.co/Pika-Labs/Pika-H3-Flex/blob/main/NOTICE).
 
 ## Audio
 

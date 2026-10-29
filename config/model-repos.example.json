@@ -73,6 +73,54 @@
       ]
     },
     {
+      "id": "turbo_pika6",
+      "repo_id": "Pika-Labs/Pika-H3-Flex",
+      "revision": "0ddf55ad7067ca1e76812253bd7b4600df87f759",
+      "filename": "comfy/loras/pika_h3_flex_ref2va_comfy_bf16.safetensors",
+      "destination": "loras/henge/pika_h3_flex_ref2va_comfy_bf16.safetensors",
+      "profiles": [
+        "common",
+        "pika"
+      ],
+      "note": "Downloaded by default; optional turbo selection. Ref2VA, strength 1.0; Comfy workflow uses LCM and 6 manual-sigma steps. SHA256 e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1. MiniMax H3 Community License."
+    },
+    {
+      "id": "pika_license",
+      "repo_id": "Pika-Labs/Pika-H3-Flex",
+      "revision": "0ddf55ad7067ca1e76812253bd7b4600df87f759",
+      "filename": "LICENSE",
+      "destination": "licenses/pika-h3-flex/LICENSE",
+      "profiles": [
+        "common",
+        "pika"
+      ],
+      "note": "License/notice accompanying the Pika model derivative; not an application-code license."
+    },
+    {
+      "id": "pika_notice",
+      "repo_id": "Pika-Labs/Pika-H3-Flex",
+      "revision": "0ddf55ad7067ca1e76812253bd7b4600df87f759",
+      "filename": "NOTICE",
+      "destination": "licenses/pika-h3-flex/NOTICE",
+      "profiles": [
+        "common",
+        "pika"
+      ],
+      "note": "License/notice accompanying the Pika model derivative; not an application-code license."
+    },
+    {
+      "id": "pika_upstream_license",
+      "repo_id": "Pika-Labs/Pika-H3-Flex",
+      "revision": "0ddf55ad7067ca1e76812253bd7b4600df87f759",
+      "filename": "licenses/MiniMax-H3-LICENSE.txt",
+      "destination": "licenses/pika-h3-flex/MiniMax-H3-LICENSE.txt",
+      "profiles": [
+        "common",
+        "pika"
+      ],
+      "note": "License/notice accompanying the Pika model derivative; not an application-code license."
+    },
+    {
       "id": "turbo_dmad4",
       "url": "https://huggingface.co/Kijai/MiniMax-H3-experimental/resolve/main/loras/minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
       "destination": "loras/henge/minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
