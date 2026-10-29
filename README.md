@@ -139,6 +139,9 @@ You need a working ComfyUI (PyTorch with CUDA 13, NVIDIA driver 580+), Node.js 2
    HENGE_DATA_DIR=/path/to/henge-data   # jobs, uploads and results
    ```
 
+   Machine-specific values (other hosts, keys, a login for remote access) go only in `.env.local`, which Git
+   ignores; `.env.example` lists every option and [what to change](docs/RUN_LOCAL.md#what-to-change-for-your-machine).
+
 5. Start the bridge and the UI, then open http://127.0.0.1:8188:
 
    ```sh

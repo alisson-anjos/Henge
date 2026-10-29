@@ -49,7 +49,8 @@ CHROMIUM_EXECUTABLE=/path/to/chrome \
 node scripts/docs/capture-guide.cjs
 ```
 
-By default the script looks for the local Maverick tests. In another environment set `HENGE_GUIDE_JOB` (TARA),
+By default the script uses the newest completed job of each kind on your instance. To pick specific jobs set
+`HENGE_GUIDE_JOB` (TARA),
 `HENGE_CHARACTER_JOB` (Character Swap), `HENGE_MARKS_JOB` (colour preview) and `HENGE_FULL_JOB` (a plan awaiting
 approval with several shots). `HENGE_GUIDE_URL` can also be changed.
 

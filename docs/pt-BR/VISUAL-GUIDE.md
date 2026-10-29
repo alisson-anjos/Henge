@@ -50,7 +50,8 @@ CHROMIUM_EXECUTABLE=/caminho/chrome \
 node scripts/docs/capture-guide.cjs
 ```
 
-Por padrão, o roteiro procura os testes Maverick locais. Em outro ambiente, informe
+Por padrão, o roteiro usa o job concluído mais recente de cada tipo na sua instância. Para escolher
+jobs específicos, informe
 `HENGE_GUIDE_JOB` (TARA), `HENGE_CHARACTER_JOB` (Character Swap), `HENGE_MARKS_JOB`
 (prévia de cores) e `HENGE_FULL_JOB` (plano aguardando aprovação com vários shots).
 Também é possível mudar `HENGE_GUIDE_URL`.

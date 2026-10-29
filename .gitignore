@@ -21,3 +21,6 @@ __pycache__/
 config/model-repos.json
 config/*.local.json
 secrets/
+
+# Saved chat/session transcripts (local only; may contain private hosts and paths)
+20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.txt

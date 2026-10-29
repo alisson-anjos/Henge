@@ -18,11 +18,12 @@ async function main() {
     const response = await api.request.get(base + '/api/backend/jobs');
     if (!response.ok()) throw Error('Cannot read existing jobs: ' + response.status());
     const jobs = await response.json();
-    const find = (env, profile) => process.env[env] || jobs.find(j => j.status === 'completed' && j.options?.profile === profile && /Maverick.*prompt explícito/i.test(j.project || ''))?.id;
+    // Defaults: the newest completed job of each kind; set the variables to pick specific jobs.
+    const find = (env, profile) => process.env[env] || jobs.find(j => j.status === 'completed' && j.options?.profile === profile)?.id;
     const tara = find('HENGE_GUIDE_JOB', 'motion_tara');
     const character = find('HENGE_CHARACTER_JOB', 'character');
-    const full = process.env.HENGE_FULL_JOB || jobs.find(j => j.id === 'c20d487d89004c3ba9949f4ec399daa9')?.id;
-    const marks = process.env.HENGE_MARKS_JOB || jobs.find(j => j.marks_preview_url && /Maverick/i.test(j.project || ''))?.id;
+    const full = process.env.HENGE_FULL_JOB || jobs.find(j => j.status === 'awaiting_approval' && (j.plan?.shots?.length || 0) > 1)?.id;
+    const marks = process.env.HENGE_MARKS_JOB || jobs.find(j => j.marks_preview_url)?.id;
     if (!tara || !character) throw Error('Set HENGE_GUIDE_JOB and HENGE_CHARACTER_JOB to existing completed test jobs.');
     await api.close();
 
@@ -162,7 +163,7 @@ async function main() {
       await capture(fourth.page,'18-shots-by-cut','.shot-plan');
       await fourth.context.close();
     }
-    await fs.writeFile(path.join(directory, 'capture-manifest.json'), JSON.stringify({captured_at: new Date().toISOString(), viewport: '1440×1000', jobs: {tara, character, marks}, images: captured, api_writes_blocked: blockedWrites, browser_errors: errors, note: 'Real UI captures from existing jobs; isolated browser storage. No new AI generations. The prompt editor example is an unsent draft in the isolated browser.'}, null, 2) + '\n');
+    await fs.writeFile(path.join(directory, 'capture-manifest.json'), JSON.stringify({captured_at: new Date().toISOString(), viewport: '1440×1000', images: captured, api_writes_blocked: blockedWrites, browser_errors: errors, note: 'Real UI captures from existing jobs; isolated browser storage. No new AI generations. The prompt editor example is an unsent draft in the isolated browser.'}, null, 2) + '\n');
     if (errors.length) throw Error('Browser errors: ' + errors.join('; '));
     console.log(`Finished: ${captured.length} screenshots; ${blockedWrites.length} blocked API writes.`);
   } finally {await browser.close();}

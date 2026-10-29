@@ -108,6 +108,25 @@ Open **http://127.0.0.1:8188**. For development, use
 `0.0.0.0` and expose that port through your provider. Localhost working inside a
 pod does not prove its public proxy is configured.
 
+### What to change for your machine
+
+Everything specific to your setup goes in `.env.local` (ignored by Git), never in the code. The defaults use
+`127.0.0.1`, so nothing is reachable from other machines unless you choose so.
+
+| Variable | Change it when |
+| --- | --- |
+| `COMFY_BASE_URL` | ComfyUI runs on another port or machine (e.g. `http://<comfy-host>:8189`) |
+| `COMFY_ROOT` | ComfyUI is on this machine and you want the model download checklist |
+| `HENGE_DATA_DIR` | always: a folder of yours for jobs and results |
+| `HENGE_BACKEND`, `RUNPOD_ENDPOINT_ID`, `RUNPOD_API_KEY` | the GPU is a RunPod Serverless endpoint |
+| `HENGE_PASSWORD` (`HENGE_USER`) | the UI is opened from any address other than localhost |
+| `HENGE_DEV_ORIGINS` | you open `npm run dev` from another device (LAN IP or a private tunnel host, comma list) |
+| `VLM_*`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | you use an external VLM or the assistant with your own key |
+
+To open the UI from another device, use a private network or tunnel you control (Tailscale, WireGuard,
+`cloudflared` with access rules) and set `HENGE_PASSWORD`. Do not commit hosts, IPs, keys or local paths: keep them
+in `.env.local`.
+
 ## Connection settings in the UI
 
 The gear in the top bar opens **Settings → Connection** (it also opens as the first step of the setup wizard on

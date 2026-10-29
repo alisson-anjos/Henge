@@ -14,6 +14,15 @@ Everything committed to this repository is in English: code comments, commit mes
 entries and the in-app guide. The UI keeps its `tr(en, pt, es)` translations, and an optional Portuguese guide lives
 under `public/guides/pt-BR/` and `docs/pt-BR/`. Do not write new documentation in another language.
 
+## Public repository: no private details
+
+This repository is public. Never commit anything that identifies a contributor's own machines or accounts: IP
+addresses, private hostnames (Tailscale `*.ts.net`, LAN names), hosted instance URLs, RunPod endpoint/worker/volume
+ids, API keys, absolute local paths, e-mail addresses or private job ids. Defaults use `127.0.0.1`/`localhost`;
+anything machine-specific comes from environment variables in `.env.local` (ignored by Git) and is documented in
+`.env.example` and `docs/RUN_LOCAL.md`. Before committing, search the diff for such values. The public Henge pod
+template id and the published image names are fine.
+
 ## Project update history
 
 For user-facing features, fixes, workflow changes or deployment changes, update `CHANGELOG.md` with

@@ -9,6 +9,16 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-29
 
+### Repository: no private details; local settings documented
+
+- Removed hard-coded private hosts from `next.config.ts` (development origins now come from `HENGE_DEV_ORIGINS` in
+  `.env.local`), absolute local paths from four workflow JSONs, internal test notes with local job ids
+  (`docs/tests/`) and job ids from the guide capture manifest; the capture script now picks the newest jobs of each
+  kind instead of named local tests.
+- `.env.example` lists the RunPod Serverless, login and development-origin variables; `docs/RUN_LOCAL.md` has a
+  "What to change for your machine" table. `AGENTS.md` states the rule for every contributor and agent.
+- **Component:** repository and documentation; no behaviour change.
+
 ### Full-video refiner: long videos are refined in chunks
 
 - A 22 s Sharpness run (530 frames, 2K) with the segments → full-video refiner strategy killed the RTX 5090
