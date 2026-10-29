@@ -158,6 +158,11 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
     setRestored(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Choosing this two-stage recipe also applies its first-pass sampling defaults.
+  // Keep these editable afterwards; changing steps/turbo alone does not reapply the preset.
+  useEffect(() => {
+    if (restored && mode === 'sharpness' && upscaleMethod === 'regenerate') {setTurbo('dmad4'); setSteps(4); setCfg(1);}
+  }, [mode, upscaleMethod, restored]);
   useEffect(() => {setShowReferenceComparison(false); if (selected) try {localStorage.setItem(SELECTED_KEY, selected);} catch {/* private mode */}}, [selected]);
   useEffect(() => {
     let disposed = false, first = true, timer: ReturnType<typeof setTimeout>;
@@ -251,7 +256,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
           <option value="nvidia" disabled={health?.upscalers?.nvidia === false}>{tr('NVIDIA RTX Video Super Resolution · fast, no new detail', 'NVIDIA RTX Video Super Resolution · rápido, sem detalhe novo', 'NVIDIA RTX Video Super Resolution · rápido, sin detalle nuevo')}{health?.upscalers?.nvidia === false ? tr(' · not installed', ' · não instalado', ' · no instalado') : ''}</option>
           <option value="none">{tr('None · sharpen directly at the output size (slower)', 'Nenhum · nitidez direto no tamanho final (mais lento)', 'Ninguno · nitidez directa al tamaño final (más lento)')}</option></Select></label>
         {upscaleMethod === 'regenerate' && <>
-          <p className="muted">{tr('Experimental generative refinement after the LMS pass. Supports 1080p and 2K; compare identity and detail with the source.', 'Refino generativo experimental após o passe LMS. Suporta 1080p e 2K; compare identidade e detalhes com o original.', 'Refinado generativo experimental tras el pase LMS. Admite 1080p y 2K; compara identidad y detalle con el original.')}</p>
+          <p className="muted">{tr('Selecting this method presets the first pass to DMAD, 4 steps and CFG 1. Refiner steps below are separate. Supports 1080p and 2K.', 'Selecionar este método configura a primeira passagem com DMAD, 4 passos e CFG 1. Os passos do refiner abaixo são separados. Suporta 1080p e 2K.', 'Seleccionar este método configura la primera pasada con DMAD, 4 pasos y CFG 1. Los pasos del refiner son independientes. Admite 1080p y 2K.')}</p>
           {regenerateUnavailable && <p className="validation" role="alert">{tr('Update ComfyUI on the worker and install the regenerate model profile.', 'Atualize o ComfyUI no worker e instale os modelos do perfil regenerate.', 'Actualiza ComfyUI en el worker e instala el perfil regenerate.')}</p>}
           {regenerateResolutionInvalid && <p className="validation" role="alert">{tr('Choose 1080p or 2K output to use this method.', 'Escolha saída 1080p ou 2K para usar este método.', 'Elige salida 1080p o 2K para usar este método.')}</p>}
           <label>{tr('Refiner steps', 'Passos do refiner', 'Pasos del refiner')}<Select value={regenerateSteps} onChange={e => setRegenerateSteps(Number(e.target.value))}><option value="2">2</option><option value="3">3</option></Select></label>
