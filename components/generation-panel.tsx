@@ -192,7 +192,8 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   // Choosing this two-stage recipe also applies its first-pass sampling defaults.
   // Keep these editable afterwards; changing steps/turbo alone does not reapply the preset.
   useEffect(() => {
-    if (restored && mode === 'sharpness' && upscaleMethod === 'regenerate') {setTurbo(DEFAULT_TURBO); setSteps(DEFAULT_STEPS); setCfg(1); setSamplerName('auto');}
+    // Sharpness keeps its own validated first pass (the Open-H3 recipe): DMAD at 4 steps; other modes use DEFAULT_STEPS.
+    if (restored && mode === 'sharpness' && upscaleMethod === 'regenerate') {setTurbo(DEFAULT_TURBO); setSteps(4); setCfg(1); setSamplerName('auto');}
   }, [mode, upscaleMethod, restored]);
   // The default turbo falls back to DMD 8-step while the backend does not list its file; a turbo picked by hand is kept
   // and shown as not installed.
@@ -252,7 +253,14 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   // The assistant always calls the latest closures (they read this render's request and options).
   useEffect(() => {registerControls?.({submit, setAutoApprove, setEnhancePrompt, selectJob: id => void selectJob(id),
     // New: every generation setting back to its default (normalizeSettings of nothing); mode and language are the studio's.
-    resetOptions: () => {manualTurbo.current = false; manualWindows.current = false; applySettings({});},
+    resetOptions: () => {
+      manualTurbo.current = false; manualWindows.current = false; applySettings({});
+      // Then the current mode's own defaults (the Sharpness preset only runs when the mode changes, so apply it here).
+      if (mode === 'sharpness') {
+        setTurbo(DEFAULT_TURBO); setSteps(4); setCfg(1); setSamplerName('auto');
+        if (health?.temporal_windows_ready === true) {autoWindows.current = true; setTemporalWindows(v => ({...v, enabled: true, scope: 'all'}));}
+      }
+    },
     getOptions: () => ({options: {...shareOptions, profile}, models: health?.models, samplers: SAMPLING.samplers, turbos: health?.turbos, bases: health?.bases, upscalers: health?.upscalers, tara_ready: health?.tara_ready, temporal_windows_ready: health?.temporal_windows_ready === true, generation_blockers: [...(health?.model_install_active ? ['Model installation is running; wait before generating'] : []), ...(windowsUnavailable ? ['Temporal windows enabled but worker support is unavailable or unknown'] : []), ...(windowsConflict ? ['Temporal windows conflict with Causal, regional attention, or refiner_full requirements'] : [])]}),
     applyOptions: patch => {
       const current: Record<string, unknown> = {...shareOptions, profile};
