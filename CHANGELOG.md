@@ -9,6 +9,15 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-30
 
+### Windows model paths survive input normalization
+
+- The bridge preserves the exact model names resolved from ComfyUI's loader lists, including Windows backslashes.
+  Previously, staged-input normalization changed `henge\...` model names to forward slashes after resolution,
+  causing Character Swap LoRA validation to fail. Legacy staged video and image paths still use forward slashes.
+- **Component:** bridge (`posix_inputs`). **Validation:** seven CPU tests passed, covering Windows and POSIX loader
+  names and ComfyUI file handling. **Limitations:** no live Windows generation tested.
+- **Publishing:** local changes only; no push, image publication or deployment performed.
+
 ### Motion Transfer runs without the training adapter
 
 - The Motion Transfer LoRAs were trained over ostris' training adapter V2, which only counters the base model's

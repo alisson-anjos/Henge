@@ -392,10 +392,11 @@ def known_loras():
 
 def posix_inputs(graph):
     """Staged inputs are henge/<job>/<file>; jobs created on Windows before 2026-10-27 stored henge\\<job>\\<file>, which
-    ComfyUI's upload step does not recognise."""
+    ComfyUI's upload step does not recognise. Model names must retain ComfyUI's exact loader-list spelling."""
+    model_keys=set(workflows.LOADERS.values())
     for n in graph.values():
         for k,v in (n.get('inputs') or {}).items():
-            if isinstance(v,str) and v.startswith('henge\\'):n['inputs'][k]=v.replace('\\','/')
+            if k not in model_keys and isinstance(v,str) and v.startswith('henge\\'):n['inputs'][k]=v.replace('\\','/')
     return graph
 
 def execute_graph(job,graph,stage):
