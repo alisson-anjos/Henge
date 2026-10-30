@@ -1,11 +1,16 @@
 name: Docker image
 
+# Images are published per release: push a v* tag (e.g. v2026.10.30) or run the workflow by hand. Commits on main
+# alone do not build, so a series of small commits does not queue a series of 12-minute builds.
 on:
   push:
-    branches: ["main"]
     tags: ["v*"]
-    paths-ignore: ["docs/**", "**/*.md"]
   workflow_dispatch:
+
+# A newer release supersedes a build still running.
+concurrency:
+  group: docker-images
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -37,8 +42,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/henge
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
+            type=raw,value=latest
             type=sha,format=short
             type=ref,event=tag
 
@@ -58,8 +62,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/henge-ui
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
+            type=raw,value=latest
             type=sha,format=short
             type=ref,event=tag
 

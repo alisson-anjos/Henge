@@ -31,8 +31,9 @@ def fetch(url):
 
 
 def latest_published():
-    """The newest main commit whose Docker images finished building: updating to a newer commit is not possible yet."""
-    runs=fetch(API+'/actions/workflows/docker.yml/runs?branch=main&status=success&per_page=1').json().get('workflow_runs') or []
+    """The commit of the newest successful image build (a v* release tag or a manual run): updating to a newer
+    commit is not possible until it is released."""
+    runs=fetch(API+'/actions/workflows/docker.yml/runs?status=success&per_page=1').json().get('workflow_runs') or []
     sha=runs[0].get('head_sha') if runs else None
     return sha if isinstance(sha,str) and re.fullmatch(r'[0-9a-f]{40}',sha) else None
 

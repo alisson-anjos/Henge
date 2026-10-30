@@ -8,9 +8,10 @@ in the remote service.
 
 ## Service using the `henge-ui` image
 
-1. Push the reviewed `main` to GitHub: `git push origin main`.
-2. In GitHub → Actions, wait for the **Docker** workflow to finish publishing the UI image.
-   This repository's workflow publishes `ghcr.io/<owner>/henge-ui:latest` on the main branch, plus branch and SHA tags.
+1. Release the reviewed `main`: `git tag v2026.10.30 && git push origin v2026.10.30` (any `v*` name), or run the
+   **Docker image** workflow by hand in GitHub → Actions. Pushing commits alone does not build an image.
+2. In GitHub → Actions, wait for the **Docker image** workflow to finish publishing the UI image.
+   It publishes `ghcr.io/<owner>/henge-ui:latest`, the release tag and a `sha-<commit>` tag.
 3. In Render, open the service and check **Settings → Image URL**.
 4. To follow new versions, keep the image address with the `:latest` tag.
    A `:sha-...` tag or a digest pins one version; redeploying that reference does not fetch the image of newer code.

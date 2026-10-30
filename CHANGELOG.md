@@ -9,6 +9,13 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-30
 
+### Images are built per release tag
+
+- Docker images are built only for a pushed `v*` tag (or a manual run), no longer for every commit on `main`; a newer
+  release cancels a build still running. Each release publishes `latest`, the release tag and `sha-<commit>`, so
+  Render's "Deploy latest reference" works as before. The update notice compares with the newest successful build.
+- **Component:** CI and docs (README, RENDER.md); bridge update check.
+
 ### Source video: the interval label no longer covers the play button
 
 - The selected-interval label moved from the bottom-left corner of the source video, over the player's play button

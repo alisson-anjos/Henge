@@ -266,9 +266,10 @@ job orchestration. Publishing code, building an image and deploying it are separ
   does not update an image-based service. Update UI/bridge for interface and assistant changes; update the worker
   when graphs, nodes or GPU dependencies change.
 
-Images are built by GitHub Actions and published to GitHub Container Registry:
-`ghcr.io/alisson-anjos/henge` (everything; the serverless worker uses it with `HENGE_ROLE=worker`) and
-`ghcr.io/alisson-anjos/henge-ui` (UI and bridge only), tagged `latest` (main), by branch and `sha-<commit>`. Pin a built SHA tag for reproducible worker versions;
+Images are built by GitHub Actions for each release (a pushed `v*` tag, e.g. `v2026.10.30`, or a manual run of the
+**Docker image** workflow) and published to GitHub Container Registry: `ghcr.io/alisson-anjos/henge` (everything; the
+serverless worker uses it with `HENGE_ROLE=worker`) and `ghcr.io/alisson-anjos/henge-ui` (UI and bridge only), tagged
+`latest`, the release tag and `sha-<commit>`. Commits on `main` alone do not publish an image. Pin a built SHA tag for reproducible worker versions;
 `latest` follows newly published images but does not update already running workers.
 
 ### More guides
