@@ -9,6 +9,15 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-30
 
+### Molmo2 analysis reused for the same clip
+
+- Molmo2's description of the guide and its answer to the planner's guide question are saved by clip content
+  (hash of the video), interval, question and Molmo2 settings, so a new generation from the same clip does not watch
+  it again (each run costs GPU time on the backend worker). **Re-analyze the guide with Molmo2** (Advanced, next
+  generation only) asks again and replaces the saved answer.
+- **Component:** UI/bridge. **Tests:** same clip under another file name reuses the answer; refresh replaces it;
+  another interval or question asks again. Playwright: the option shows when Molmo2 is available and is not stored.
+
 ### Motion Transfer TARA is the default
 
 - The studio opens in Motion Transfer with the Motion Transfer TARA model and the TARA method. Character Swap and

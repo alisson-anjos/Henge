@@ -604,17 +604,42 @@ def likeness_check(job,pictures,ask):
         raise ValueError(f'{names} looks like a real public figure. This Henge is set to block real people\'s likeness (HENGE_LIKENESS_FILTER=block); use a picture of yourself, of someone who agreed, or of an invented character.')
     save(job,likeness_warning=f'{names} looks like a real public figure. Only generate with their consent, and do not publish it as real.')
 
+MOLMO_CACHE=ROOT/'molmo_cache';MOLMO_CACHE.mkdir(exist_ok=True)
+
+def video_digest(job):
+    """Content hash of the job's guide video, computed once per job: the same clip uploaded again (a new job, a
+    retry) is recognised whatever its file name."""
+    if job.get('video_sha'):return job['video_sha']
+    digest=hashlib.sha256()
+    with (INPUT/job['assets']['video']).open('rb') as f:
+        for chunk in iter(lambda:f.read(1<<20),b''):digest.update(chunk)
+    job['video_sha']=digest.hexdigest();return job['video_sha']
+
+def molmo_answer(job,question,start,end,folder):
+    """Molmo2's answer about the guide, shared by every job with the same video, interval, question and Molmo2
+    settings, so a new generation from the same clip does not watch it again. options.molmo_refresh asks again
+    and replaces the saved answer."""
+    cfg=molmo_settings()
+    key=hashlib.sha256(json.dumps([video_digest(job),round(start,3),round(end,3),question,cfg.get('model_path') or '',
+                                   cfg.get('image_quality') or '',molmo_pointing.location()]).encode()).hexdigest()[:32]
+    cached=MOLMO_CACHE/f'{key}.json'
+    if cached.is_file() and not (job.get('options') or {}).get('molmo_refresh'):
+        return json.loads(cached.read_text())
+    answer=molmo_pointing.ask_video(INPUT/job['assets']['video'],question,start,end,folder)
+    tmp=cached.with_suffix('.tmp');tmp.write_text(json.dumps(answer));tmp.replace(cached)
+    return answer
+
 def guide_caption(job):
     """Molmo2's timeline of the guide interval (people, actions, camera, cuts), once per job; '' when Molmo2 is not
     set up or fails (planning goes on with the frames only)."""
     if not molmo_pointing.available() or job['request']['mode'] not in ('swap','motion','headswap'):return ''
     cached=job_path(job['id'])/'molmo_guide.txt'
-    if cached.is_file():return cached.read_text()
+    if cached.is_file() and not (job.get('options') or {}).get('molmo_refresh'):return cached.read_text()
     r=job['request'];start,end=r['video']['start_seconds'],r['video']['end_seconds']
     save(job,stage='molmo_guide',message='Watching the guide with Molmo2')
     try:
         folder=job_path(job['id'])/'molmo';folder.mkdir(exist_ok=True)
-        text=molmo_pointing.ask_video(INPUT/job['assets']['video'],molmo_pointing.GUIDE_CAPTION,start,min(end,start+molmo_pointing.MAX_ASK_SECONDS),folder)['answer']
+        text=molmo_answer(job,molmo_pointing.GUIDE_CAPTION,start,min(end,start+molmo_pointing.MAX_ASK_SECONDS),folder)['answer']
     except Exception as e:
         print(f'[Henge] Molmo2 guide caption skipped: {e}',flush=True);return ''
     cached.write_text(text);save(job,guide_caption=text);return text
@@ -645,7 +670,7 @@ def planning(job):
             try:
                 folder=work/'molmo_guide_question';folder.mkdir(exist_ok=True)
                 start,end=r['video']['start_seconds'],r['video']['end_seconds']
-                raw=molmo_pointing.ask_video(INPUT/job['assets']['video'],instruction.replace('Look at these frames of a video.','Watch this video.'),start,min(end,start+molmo_pointing.MAX_ASK_SECONDS),folder)['answer']
+                raw=molmo_answer(job,instruction.replace('Look at these frames of a video.','Watch this video.'),start,min(end,start+molmo_pointing.MAX_ASK_SECONDS),folder)['answer']
             except Exception as e:print(f'[Henge] Molmo2 guide question skipped: {e}',flush=True)
         if raw:pass
         elif planner_cfg:raw=assistant.complete(planner_cfg,instruction,image,tokens)
