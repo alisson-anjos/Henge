@@ -17,9 +17,9 @@ permissions:
   packages: write
 
 env:
-  # Tags that must survive whatever their age: images still referenced by a running deployment
-  # (the Serverless worker template pins a sha tag). Update this list when a deployment is repinned.
-  KEEP_TAGS: latest,sha-750cf58
+  # Tags that must survive whatever their age. Render, the Serverless worker template and the pod template all use
+  # :latest; add a tag here if a deployment is ever pinned to an older image.
+  KEEP_TAGS: latest
 
 jobs:
   cleanup:

@@ -15,6 +15,11 @@ their scope; CPU tests do not replace generation with the real models.
   release cancels a build still running. Each release publishes `latest`, the release tag and `sha-<commit>`, so
   Render's "Deploy latest reference" works as before. The update notice compares with the newest successful build.
 - **Component:** CI and docs (README, RENDER.md); bridge update check.
+- GHCR keeps the three newest tagged versions of each image (with their platform and attestation manifests) plus
+  `latest`; older versions are deleted after each build (about 1,200 removed in the first run).
+- **Publishing:** image `sha-8624cc2` (all changes up to the interval-label fix) built; the Serverless worker template
+  now uses `henge:latest` (workers recycled at 16:14 UTC, same env and limits). Each release recycles the workers so
+  they pull the new `latest`.
 
 ### Source video: the interval label no longer covers the play button
 
