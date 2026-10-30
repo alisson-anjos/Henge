@@ -9,6 +9,12 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-30
 
+### Source video: the interval label no longer covers the play button
+
+- The selected-interval label moved from the bottom-left corner of the source video, over the player's play button
+  and time, to the top-right corner.
+- **Component:** UI. **Tests:** Playwright on desktop and 420 px: no player control is covered.
+
 ### Molmo2 analysis reused for the same clip
 
 - Molmo2's description of the guide and its answer to the planner's guide question are saved by clip content
