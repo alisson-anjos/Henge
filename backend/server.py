@@ -1571,6 +1571,12 @@ async def create_job(request:Request):
             known_loras();installed=workflows.INSTALLED.get('LoraLoaderModelOnly')
             default=workflows.DEFAULT_TURBO if installed and workflows.lora_installed(TURBOS[workflows.DEFAULT_TURBO]['lora'],installed) else 'dmd8'
             options['turbo']=default;options.setdefault('steps',workflows.DEFAULT_STEPS)
+        # Motion Transfer defaults to the TARA model with the TARA method when the worker has the TARA node.
+        if r.get('mode')=='motion' and 'profile' not in options:
+            options['profile']='motion_tara'
+            try:tara='BFSMiniMaxH3NativeTemporal' in comfy_info()
+            except Exception:tara=False
+            if tara:options.setdefault('conditioning_mode','tara')
         # Sharpness defaults to pure temporal windows when the caller (assistant, MCP, API) does not choose and the
         # worker supports them; an explicit setting, including off, is kept.
         if r.get('mode')=='sharpness' and 'temporal_windows' not in options:

@@ -9,6 +9,14 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-30
 
+### Motion Transfer TARA is the default
+
+- The studio opens in Motion Transfer with the Motion Transfer TARA model and the TARA method. Character Swap and
+  Head Swap use Guide Latents unless TARA is picked by hand; switching modes and New follow the same rule. Saved
+  browser settings move once to these defaults. Motion jobs without a model (assistant, MCP) get Motion Transfer TARA,
+  with the TARA method when the worker has the TARA node.
+- **Component:** UI/bridge. **Tests:** Playwright: first open, switching Character Swap / Head Swap / Motion, New.
+
 ### Default sampling: DMAD at 8 steps; New resets the settings
 
 - The default turbo is DMAD at 8 steps, CFG 1, sampler Auto; Sharpness keeps its Open-H3 first pass (DMAD at 4

@@ -78,7 +78,7 @@ export default function Studio() {
   const [importedSettings, setImportedSettings] = useState<Record<string, unknown>>({});
   const [importRevision, setImportRevision] = useState(0);
   const [lang, setLang] = useState<Language>('en');
-  const [mode, setMode] = useState<Mode>('swap');
+  const [mode, setMode] = useState<Mode>('motion');
   const [view, setView] = useState<View>('studio');
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [expectedSlots, setExpectedSlots] = useState<number[]>([]);
@@ -253,7 +253,7 @@ export default function Studio() {
         setGuideRepresentation(['2d', '3d', 'mask'].includes(s.guideRepresentation) ? s.guideRepresentation : 'original');
         setGuideSignature(typeof s.guideSignature === 'string' ? s.guideSignature : '');
         setIntent(typeof s.intent === 'string' ? s.intent : '');
-        setMode(MODES.includes(s.mode) ? s.mode : 'swap');
+        setMode(MODES.includes(s.mode) ? s.mode : 'motion');
         setProject(typeof s.project === 'string' && s.project !== 'Untitled project' ? s.project : '');
         setQuality(['480p', '720p', '1080p', '1440p', '2160p'].includes(s.quality) ? s.quality : '480p');
         setAudioConditioning(s.audioConditioning === true);
