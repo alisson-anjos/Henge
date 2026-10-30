@@ -1,0 +1,38 @@
+name: Clean up old images
+
+# Keeps the three newest tagged versions of each image (with their platform and attestation manifests) plus the tags
+# below, and deletes the rest. Runs after each image build and by hand (dry run by default when started by hand).
+on:
+  workflow_run:
+    workflows: ["Docker image"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list what would be deleted"
+        type: boolean
+        default: true
+
+permissions:
+  packages: write
+
+env:
+  # Tags that must survive whatever their age: images still referenced by a running deployment
+  # (the Serverless worker template pins a sha tag). Update this list when a deployment is repinned.
+  KEEP_TAGS: latest,sha-750cf58
+
+jobs:
+  cleanup:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: henge,henge-ui
+          keep-n-tagged: 3
+          exclude-tags: ${{ env.KEEP_TAGS }}
+          delete-untagged: true
+          delete-partial-images: true
+          validate: true
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          token: ${{ secrets.GITHUB_TOKEN }}
