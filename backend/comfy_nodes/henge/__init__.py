@@ -7,6 +7,7 @@ from PIL import Image
 import folder_paths,comfy.utils,comfy.sd,comfy.model_management as mm
 from .clip_video import clip_with_video_context
 from . import follow
+from .point_tracking import track_marks
 from .report import ui_report
 
 
@@ -133,20 +134,29 @@ class HengeGuide:
             if not str(spec.get('source_blur','off')).startswith('masked area') or not subjects:return (blur_guide(images,spec),empty,{})
         if not subjects:raise ValueError('Color guides need a selected subject and its reference binding')
         if representation=='3d' and source_kind!='human':raise ValueError('SAM 3D Body supports human sources. Use a 2D color guide for animals.')
-        from comfy_extras.nodes_sam3 import SAM3_VideoTrack
+        from comfy_extras.nodes_sam3 import SAM3_VideoTrack,SAM3_Detect
         from comfy.ldm.sam3.tracker import unpack_masks,pack_masks
         loaded=comfy.sd.load_checkpoint_guess_config(folder_paths.get_full_path_or_raise('checkpoints',sam_checkpoint),output_vae=False)
         sam,clip=loaded[:2]
         cond=clip.encode_from_tokens_scheduled(clip.tokenize('person' if source_kind=='human' else 'animal'))
         # Track identity before choosing colors; coordinates are normalized source-image coordinates.
-        masks=track_scenes(images,sam,cond,float(spec['threshold']) if representation=='mask' else .4) # N,tracks,h,w
-        if masks is None:
+        masks,picked,warnings,anchored=track_marks(images,sam,subjects,segment_start,
+            [0,*scene_cuts(images),len(images)],SAM3_Detect.execute,SAM3_VideoTrack.execute,unpack_masks)
+        remaining=[s for s in subjects if s['id'] not in anchored]
+        automatic=track_scenes(images,sam,cond,float(spec['threshold']) if representation=='mask' else .4) if remaining else None
+        if automatic is not None:
+            extra,notes=follow.choose(remaining,automatic,images,segment_start)
+            picked.extend((t+masks.shape[1],s,how) for t,s,how in extra);warnings.extend(notes)
+            masks=torch.cat((masks,automatic),dim=1)
+        if not picked and representation=='mask':
+            del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
+            raise ValueError('SAM could not segment the marked subject in this shot. Move the mark inside the subject in this shot and preview the mask again. '+ '; '.join(warnings))
+        if masks.shape[1]==0:
             # Nobody in this shot (a cutaway, an empty room): it goes through unmarked instead of failing the job.
             del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
             return {'ui':ui_report({'henge_tracks':[json.dumps({'warnings':['Nobody found in this shot; it was left unmarked'],'subjects':[]})]}),'result':(images if representation=='original' else blur_guide(images,spec),empty,{})}
         n,h,w=images.shape[:3]
         # Marks, continuity from the previous shot and recognition by look (follow.py): never guessed by position.
-        picked,warnings=follow.choose(subjects,masks,images,segment_start)
         chosen=[(t,s,tuple(int(s['hex'].lstrip('#')[i:i+2],16) for i in [0,2,4])) for t,s,_ in picked]
         tracking={'ui':ui_report({'henge_tracks':[json.dumps(follow.report(picked,masks,images,warnings))]})}
         attention_regions={}

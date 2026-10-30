@@ -9,6 +9,18 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-30
 
+### Explicit subject marks seed SAM segmentation
+
+- Subject marks now go directly to SAM's point decoder instead of only selecting among text-detected people or
+  animals. The resulting mask initializes video tracking forward and backward from the marked frame, stopping at
+  camera cuts. Coordinates follow the same fit-and-pad transform as the source video.
+- Shots without an explicit mark retain the existing continuity selection. If SAM cannot segment an explicit mark,
+  mask preparation reports it before conditioning and sampling instead of passing an empty mask to generation.
+- **Component:** ComfyUI guide nodes. **Validation:** 29 CPU tests passed, one existing look-recognition test skipped;
+  point seeding, propagation in both directions, camera-cut boundaries, letterboxing, failed marks, guide integration
+  and workflow exports covered. SAM calls are mocked in these tests; no live GPU generation completed.
+- **Release:** `v2026.10.30.1`; worker image publication and deployment pending.
+
 ### Windows model paths survive input normalization
 
 - The bridge preserves the exact model names resolved from ComfyUI's loader lists, including Windows backslashes.
