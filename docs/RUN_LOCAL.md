@@ -121,11 +121,16 @@ Everything specific to your setup goes in `.env.local` (ignored by Git), never i
 | --- | --- |
 | `COMFY_BASE_URL` | ComfyUI runs on another port or machine (e.g. `http://<comfy-host>:8189`) |
 | `COMFY_ROOT` | ComfyUI is on this machine and you want the model download checklist |
+| `HENGE_MODELS_DIR` | your models live outside `COMFY_ROOT/models` (another drive mapped with `extra_model_paths.yaml`): downloads from **Settings → Models** go there |
 | `HENGE_DATA_DIR` | always: a folder of yours for jobs and results |
 | `HENGE_BACKEND`, `RUNPOD_ENDPOINT_ID`, `RUNPOD_API_KEY` | the GPU is a RunPod Serverless endpoint |
 | `HENGE_PASSWORD` (`HENGE_USER`) | the UI is opened from any address other than localhost |
 | `HENGE_DEV_ORIGINS` | you open `npm run dev` from another device (LAN IP or a private tunnel host, comma list) |
 | `VLM_*`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | you use an external VLM or the assistant with your own key |
+
+Models on another drive: ComfyUI's `extra_model_paths.yaml` is honoured. Henge counts a model as installed when it is
+under `COMFY_ROOT/models` or when ComfyUI lists it in a loader, so keep `COMFY_ROOT` set (it enables the checklist)
+and add `HENGE_MODELS_DIR` only to choose where new downloads go.
 
 To open the UI from another device, use a private network or tunnel you control (Tailscale, WireGuard,
 `cloudflared` with access rules) and set `HENGE_PASSWORD`. Do not commit hosts, IPs, keys or local paths: keep them

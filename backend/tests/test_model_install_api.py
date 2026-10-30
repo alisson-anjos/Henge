@@ -15,7 +15,8 @@ class ModelInstallAPITests(unittest.TestCase):
         self.manager=InstallManager(self.root/'state')
         self.manifest={'models':[{'id':'test','url':'https://huggingface.co/example/model/resolve/main/test.safetensors','destination':'loras/test.safetensors'}]}
         self.snapshot={'manifest':self.manifest,'check_ok':True,'catalog_revision':None,'current':'a'*40,'latest':'b'*40,'changelog':'notes'}
-        self.patches=[patch.object(server,'COMFY',self.root),patch.object(server,'REMOTE',None),patch.object(server,'MODEL_INSTALL',self.manager),patch.object(server.app_updates,'snapshot',return_value=self.snapshot),patch.object(server,'active_jobs',return_value=[])]
+        (self.root/'models').mkdir(exist_ok=True)
+        self.patches=[patch.object(server,'COMFY',self.root),patch.object(server,'LOCAL_MODELS',self.root/'models'),patch.object(server,'REMOTE',None),patch.object(server,'MODEL_INSTALL',self.manager),patch.object(server.app_updates,'snapshot',return_value=self.snapshot),patch.object(server,'active_jobs',return_value=[])]
         for p in self.patches:p.start()
         self.client=TestClient(server.app)
     def tearDown(self):

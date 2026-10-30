@@ -9,6 +9,15 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-30
 
+### Models on another drive (extra_model_paths.yaml)
+
+- With `COMFY_ROOT` set, Henge only looked in `COMFY_ROOT/models` and reported models kept on another drive (mapped
+  through ComfyUI's `extra_model_paths.yaml`) as missing. A model now counts as installed when ComfyUI lists it in a
+  loader, wherever it lives; `HENGE_MODELS_DIR` chooses where Settings → Models downloads go. Reported by a user,
+  whose workaround was leaving `COMFY_ROOT` empty (which also hid the checklist).
+- **Component:** bridge and docs (RUN_LOCAL.md, .env.example). **Tests:** an empty models folder with every file
+  listed by ComfyUI makes the modes ready; model-name extraction from ComfyUI's loader lists.
+
 ### Local setup: what the bridge is, and the HTTP 503 message
 
 - `docs/RUN_LOCAL.md` says the job bridge is Henge's own server (not ComfyUI), how to start it with the UI

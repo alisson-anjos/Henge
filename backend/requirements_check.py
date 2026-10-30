@@ -37,9 +37,27 @@ def _status(models_dir):
     try:return json.loads((models_dir/'.henge-downloads.json').read_text())
     except (OSError,ValueError):return {}
 
-def check(models_dir,models):
-    """Return (requirements, mode_ready, setup) for /health."""
-    models_dir=Path(models_dir);status=_status(models_dir)
+MODEL_EXTENSIONS=('.safetensors','.ckpt','.pt','.pth','.bin','.gguf','.sft')
+
+def comfy_listed(info):
+    """Every model file name ComfyUI offers in a loader menu. ComfyUI resolves extra_model_paths.yaml itself, so a
+    model kept on another drive is listed here even though it is not under COMFY_ROOT/models."""
+    names=set()
+    for node in (info or {}).values():
+        for group in ('required','optional'):
+            for spec in ((node.get('input') or {}).get(group) or {}).values():
+                choices=spec[0] if isinstance(spec,(list,tuple)) and spec and isinstance(spec[0],list) else []
+                names.update(c.replace('\\','/') for c in choices if isinstance(c,str) and c.lower().endswith(MODEL_EXTENSIONS))
+    return names
+
+def check(models_dir,models,listed=()):
+    """Return (requirements, mode_ready, setup) for /health. `listed`: model names ComfyUI reports (comfy_listed), so
+    files outside models_dir (extra_model_paths.yaml) count as installed."""
+    models_dir=Path(models_dir);status=_status(models_dir);listed=set(listed)
+    def comfy_has(relative):
+        # A loader lists names relative to its folder (henge/x.safetensors for loras/henge/x.safetensors).
+        rest=relative.split('/',1)[1] if '/' in relative else relative
+        return rest in listed or rest.rsplit('/',1)[-1] in listed
     by_destination={row['destination']:row for row in status.get('models',[])}
     rows={}
     def installed_path(relative):
@@ -54,6 +72,8 @@ def check(models_dir,models):
         row={'id':key,'label':label,'file':relative,'groups':[group]}
         path=installed_path(relative);download=by_destination.get(relative,{})
         if path.is_file() and path.stat().st_size>0:row.update(state='installed',total=path.stat().st_size)
+        elif comfy_has(relative) or (relative.startswith('loras/') and comfy_has('loras/'+(LEGACY_LORAS.get(relative.removeprefix('loras/')) or ''))):
+            row.update(state='installed',location='comfyui')
         else:
             row['state']=download.get('state') if download.get('state') in ('pending','downloading','failed') else 'missing'
             if download.get('total'):row['total']=download['total']
@@ -65,7 +85,7 @@ def check(models_dir,models):
         lora='loras/'+model['lora']
         # Profiles the downloader was not asked to fetch (e.g. local-only mixes) stay out of the checklist;
         # they still report available=False in /health.
-        if lora not in by_destination and not installed_path(lora).is_file():continue
+        if lora not in by_destination and not installed_path(lora).is_file() and not comfy_has(lora):continue
         if model.get('adapter'):
             adapter=model['adapter'];add(profile+'_adapter',adapter_label(adapter),'loras/'+adapter,profile)
         add(profile+'_lora',f"{model.get('label',profile)} LoRA",lora,profile)

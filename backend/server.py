@@ -17,7 +17,7 @@ import model_installer
 from model_installs import InstallManager
 from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts
 from prompt_policy import validate_h3_prompt
-from requirements_check import check as check_requirements
+from requirements_check import check as check_requirements,comfy_listed
 from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
@@ -32,7 +32,10 @@ ROOT=Path(os.environ.get('HENGE_DATA_DIR','/data/henge-data'));JOBS=ROOT/'jobs';
 INPUT=ROOT/'input';INPUT.mkdir(exist_ok=True)
 # COMFY_ROOT is only set when ComfyUI shares this machine: its models folder then feeds the download checklist.
 COMFY=Path(os.environ['COMFY_ROOT']) if os.environ.get('COMFY_ROOT') else None
-LOCAL_MODELS=COMFY/'models' if COMFY and (COMFY/'models').is_dir() else None
+# Where Henge checks and downloads models: COMFY_ROOT/models, or HENGE_MODELS_DIR when they live elsewhere (another drive
+# mapped through ComfyUI's extra_model_paths.yaml). Files ComfyUI lists from other folders still count as installed.
+MODELS_DIR=Path(os.environ['HENGE_MODELS_DIR']) if os.environ.get('HENGE_MODELS_DIR') else (COMFY/'models' if COMFY else None)
+LOCAL_MODELS=MODELS_DIR if MODELS_DIR and MODELS_DIR.is_dir() else None
 SETTINGS=ROOT/'settings.json'
 try:stored_settings=json.loads(SETTINGS.read_text()) if SETTINGS.is_file() else {}
 except (ValueError,OSError):stored_settings={}
@@ -1390,7 +1393,7 @@ def health():
     unknown=bool(REMOTE) and not info
     installed=comfy_choices(info,'LoraLoaderModelOnly','lora_name')
     # The disk checklist describes the local ComfyUI only: with a remote backend (Comfy SDK, RunPod) its files decide.
-    if LOCAL_MODELS and not REMOTE:requirements,mode_ready,setup=check_requirements(LOCAL_MODELS,MODELS)
+    if LOCAL_MODELS and not REMOTE:requirements,mode_ready,setup=check_requirements(LOCAL_MODELS,MODELS,comfy_listed(info))
     else:
         # Remote ComfyUI: no download checklist; availability comes from the files ComfyUI lists.
         requirements,mode_ready=[],{key:online for key in MODELS}
@@ -1422,7 +1425,7 @@ def model_catalog_state():
     MODEL_INSTALL.recover(remote)
     snapshot=app_updates.snapshot();manifest=snapshot['manifest']
     inv=remote.inventory() or {} if remote else {}
-    ready=bool((inv.get('capabilities') or {}).get('model_install')) if remote else bool(COMFY and (COMFY/'models').is_dir() and not REMOTE)
+    ready=bool((inv.get('capabilities') or {}).get('model_install')) if remote else bool(LOCAL_MODELS and not REMOTE)
     choices={name for names in inv.get('choices',{}).values() for name in names if isinstance(name,str)}
     names={name.replace('\\','/').rsplit('/',1)[-1] for name in choices}
     items=[]
@@ -1433,7 +1436,7 @@ def model_catalog_state():
             model_installer.source_url(item)
             model_installer.destination(Path('/models'),item)
         except (ValueError,KeyError):available=False
-        try:present=(item['destination'].rsplit('/',1)[-1] in names) if remote else bool(COMFY and model_installer.installed(COMFY/'models',item))
+        try:present=(item['destination'].rsplit('/',1)[-1] in names) if remote else bool(LOCAL_MODELS and model_installer.installed(LOCAL_MODELS,item))
         except ValueError:present=False;available=False
         items.append({'id':item['id'],'label':'Pika H3 Flex · Ref2VA' if item['id']=='turbo_pika6' else item.get('label') or item['destination'].rsplit('/',1)[-1],
                       'installed':present,'installable':available,'profiles':item.get('profiles',[])})
@@ -1457,7 +1460,7 @@ async def install_model(request:Request):
         with LOCK:
             if active_jobs():raise HTTPException(409,'Wait for active generations to finish before installing models')
             return MODEL_INSTALL.start(model_id,snapshot['manifest'],snapshot['catalog_revision'],
-                                       backend=REMOTE if isinstance(REMOTE,RunPodBackend) else None,models_dir=COMFY/'models' if COMFY else None,on_complete=refresh_info_later if not isinstance(REMOTE,RunPodBackend) else None)
+                                       backend=REMOTE if isinstance(REMOTE,RunPodBackend) else None,models_dir=LOCAL_MODELS,on_complete=refresh_info_later if not isinstance(REMOTE,RunPodBackend) else None)
     except ValueError as exc:raise HTTPException(409,str(exc))
 
 
