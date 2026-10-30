@@ -12,10 +12,14 @@ use [models and downloads](models-and-downloads.md).
 | Job bridge | http://127.0.0.1:8766 | Coordinates plans, files and generation |
 | ComfyUI | http://127.0.0.1:8189 | Executes the generated workflows |
 
+The **job bridge** is Henge's own Python server (`backend/server.py`), not ComfyUI: the web UI talks only to the bridge,
+and the bridge drives ComfyUI (or RunPod Serverless). Start the bridge and the UI together with
+`scripts/local_stack.sh start` (Linux/macOS/WSL; `status` and `stop` too), or with the two commands in steps 4 and 5.
+The Docker images start both by themselves.
+
 A working ComfyUI installation with a compatible NVIDIA/PyTorch environment is
 required for generation. Also install Node.js 22.6+, Python dependencies and
-FFmpeg/ffprobe on PATH. The native setup and Docker build are distinct: the full
-container image has not been built/tested on the current pod.
+FFmpeg/ffprobe on PATH.
 
 ## 1. Get the UI
 
@@ -126,6 +130,21 @@ Everything specific to your setup goes in `.env.local` (ignored by Git), never i
 To open the UI from another device, use a private network or tunnel you control (Tailscale, WireGuard,
 `cloudflared` with access rules) and set `HENGE_PASSWORD`. Do not commit hosts, IPs, keys or local paths: keep them
 in `.env.local`.
+
+## The bridge does not answer (HTTP 503)
+
+The UI is running but cannot reach the job bridge:
+
+- **Only the UI was started** (`npm run start` or `npm run dev`). Start the bridge as well:
+  `PYTHON=/path/to/comfy/python scripts/local_stack.sh start`, or the bridge command of step 4 in its own terminal.
+- **The bridge stopped at startup.** Read `.runtime/logs/bridge.log` (local stack) or its terminal: a missing Python
+  package from `backend/requirements.txt`, or `HENGE_DATA_DIR` pointing to a folder that cannot be created, are the
+  usual causes.
+- **Another port or machine.** The UI looks for the bridge at `HENGE_BACKEND_URL` (default `http://127.0.0.1:8766`);
+  set it in `.env.local` if the bridge runs elsewhere, then restart the UI.
+
+`curl http://127.0.0.1:8766/health` answers when the bridge is up. ComfyUI being offline is a different message
+(**Connection** shows it); it does not make the bridge return 503.
 
 ## Connection settings in the UI
 

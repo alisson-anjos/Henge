@@ -120,7 +120,7 @@ function ConnectionPanel({lang}: {lang: Language}) {
   useEffect(() => {
     fetch('/api/backend/connection').then(async r => {if (!r.ok) throw Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`); return r.json();})
       .then((c: Connection) => {setSaved(c); setDraft(c);})
-      .catch(e => setError(tr(`The bridge does not answer (${e.message}). Start it, then reopen this panel.`, `O bridge não responde (${e.message}). Inicie-o e reabra este painel.`, `El bridge no responde (${e.message}). Inícialo y vuelve a abrir este panel.`)));
+      .catch(e => setError(tr(`The bridge (Henge's server, not ComfyUI) does not answer (${e.message}). Start it with scripts/local_stack.sh start — see docs/RUN_LOCAL.md — then reopen this panel.`, `O bridge (o servidor do Henge, não o ComfyUI) não responde (${e.message}). Inicie com scripts/local_stack.sh start — veja docs/RUN_LOCAL.md — e reabra este painel.`, `El bridge (el servidor de Henge, no ComfyUI) no responde (${e.message}). Inícialo con scripts/local_stack.sh start — ver docs/RUN_LOCAL.md — y vuelve a abrir este panel.`)));
   }, []);
   if (error) return <p className="job-callout error">{error}</p>;
   if (!saved) return <p className="muted"><span className="spinner"/>{tr('Loading…', 'Carregando…', 'Cargando…')}</p>;

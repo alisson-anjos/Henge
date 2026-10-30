@@ -9,6 +9,13 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-30
 
+### Local setup: what the bridge is, and the HTTP 503 message
+
+- `docs/RUN_LOCAL.md` says the job bridge is Henge's own server (not ComfyUI), how to start it with the UI
+  (`scripts/local_stack.sh start` or steps 4 and 5) and has a "The bridge does not answer (HTTP 503)" section. The
+  Settings message names the bridge, the command and that page. `.env.example` paths are clearly placeholders.
+- **Component:** UI and docs. **Tests:** Playwright with a simulated 503 from the bridge.
+
 ### Images are built per release tag
 
 - Docker images are built only for a pushed `v*` tag (or a manual run), no longer for every commit on `main`; a newer
