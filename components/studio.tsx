@@ -769,10 +769,10 @@ export default function Studio() {
   async function resetStudio() {
     const busyDraft = video || pictures.length || prompt.trim() || subjects.length;
     if (busyDraft && !await confirmDialog({tone: 'danger', title: tr('Start a new one?', 'Começar um novo?', '¿Empezar uno nuevo?'),
-      message: tr('The video, pictures, marked people and prompt will be cleared. Mode, language and settings stay. Your generations stay in History.', 'O vídeo, as imagens, as pessoas marcadas e o prompt serão apagados. Modo, idioma e ajustes continuam. Suas gerações continuam no Histórico.', 'Se borrarán el video, las imágenes, las personas marcadas y el prompt. El modo, el idioma y los ajustes se mantienen. Tus generaciones siguen en el Historial.'),
+      message: tr('The video, pictures, marked people and prompt will be cleared, and the settings return to their defaults. Mode and language stay. Your generations stay in History.', 'O vídeo, as imagens, as pessoas marcadas e o prompt serão apagados, e os ajustes voltam ao padrão. Modo e idioma continuam. Suas gerações continuam no Histórico.', 'Se borrarán el video, las imágenes, las personas marcadas y el prompt, y los ajustes vuelven a sus valores por defecto. El modo y el idioma se mantienen. Tus generaciones siguen en el Historial.'),
       confirm: tr('Clear and start new', 'Limpar e começar', 'Borrar y empezar'), cancel: tr('Keep editing', 'Continuar editando', 'Seguir editando')})) return;
     removeVideo(); setGuideSignature(''); removeAllPictures(); setSubjects([]); setPrompt(''); setAutoSource(null); setPendingAutoPromptJob(null);
-    setActiveTemplate(null); setProject(''); setNotice(''); setEditingVideo(false); startFresh();
+    setActiveTemplate(null); setProject(''); setNotice(''); setEditingVideo(false); panelControls.current?.resetOptions(); startFresh();
   }
   function reuse(item: SavedDirection) {
     const r = item.request;

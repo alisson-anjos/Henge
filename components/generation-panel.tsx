@@ -20,9 +20,9 @@ import JobPipeline from './job-pipeline';
 type Plan = {summary: string; prompt: string; source_kind: string; target_kind: string; adapt_reference: boolean; representation: string; preparation_reason?: string; preparation_recommended?: boolean; warnings: string[]; regenerate_prompt?: string; picture_roles: {slot: number; role: string; description: string}[]};
 /** What the studio assistant can do in this panel. */
 export type PanelControls = {submit: () => Promise<string>; setAutoApprove: (value: boolean) => void; setEnhancePrompt: (value: boolean) => void; selectJob: (id: string) => void;
-  getOptions: () => Record<string, unknown>; applyOptions: (patch: Record<string, unknown>) => void};
+  getOptions: () => Record<string, unknown>; applyOptions: (patch: Record<string, unknown>) => void; resetOptions: () => void};
 export type GenerationJob = {id: string; project: string; redone_shots?: Record<string, number>; run_seconds?: number; run_started?: number; updated?: number; mode?: string; duration?: number; quality?: string; options?: Record<string, unknown>; status: string; stage: string; message?: string; error?: string; progress: number; segment?: number; total_segments?: number; plan?: Plan; sampling_preview_url?: string; result_url?: string; comparison_url?: string; guide_preview_url?: string; adapted_preview_url?: string; created: number; step?: number; step_total?: number; eta_seconds?: number | null; prepared_reference_urls?: string[]; shot_urls?: string[]; mask_preview_url?: string; likeness_warning?: string; marks_preview_url?: string; marks_source_url?: string; seconds_per_step?: number | null};
-type Health = {model_install_active?: boolean; comfy_url?: string; provider?: string; online: boolean; training_busy: boolean; tara_ready?: boolean; temporal_windows_ready?: boolean; editor_ready: boolean; frame_editor?: string | null; models: Record<string, {label: string; task?: string; available?: boolean; method?: string}>; turbos?: Record<string, {label: string; steps: number; available: boolean}>; upscalers?: {h3: boolean; nvidia: boolean; regenerate?: boolean; refiner_upscalers?: {base?: boolean; lms?: boolean}}; regenerate?: {available: boolean; message: string}; bases?: Record<string, {label: string; available: boolean}>};
+type Health = {model_install_active?: boolean; molmo?: 'local' | 'backend' | null; comfy_url?: string; provider?: string; online: boolean; training_busy: boolean; tara_ready?: boolean; temporal_windows_ready?: boolean; editor_ready: boolean; frame_editor?: string | null; models: Record<string, {label: string; task?: string; available?: boolean; method?: string}>; turbos?: Record<string, {label: string; steps: number; available: boolean}>; upscalers?: {h3: boolean; nvidia: boolean; regenerate?: boolean; refiner_upscalers?: {base?: boolean; lms?: boolean}}; regenerate?: {available: boolean; message: string}; bases?: Record<string, {label: string; available: boolean}>};
 const relativeTime = (created: number, lang: Language) => {
   const minutes = Math.round((Date.now() / 1000 - created) / 60);
   if (minutes < 60) return new Intl.RelativeTimeFormat(lang, {numeric: 'auto'}).format(-minutes, 'minute');
@@ -35,8 +35,9 @@ const SOURCE_BLUR_REGIONS = ['face', 'head + hands', 'person', 'masked area'] as
 const SOURCE_BLUR_SHARP = ['keep mouth', 'keep lips + tongue', 'mouth too'] as const;
 const SOURCE_BLUR = ['off', ...SOURCE_BLUR_SHARP.flatMap(k => SOURCE_BLUR_REGIONS.map(r => `${r} (${k})`))];
 const SETTINGS_KEY = 'henge-generation-settings';
-// Default turbo: DMAD 4-step (4 steps, CFG 1). DMD 8-step is the fallback while the backend does not list it.
+// Default turbo: DMAD at 8 steps, CFG 1, sampler Auto. DMD 8-step is the fallback while the backend does not list it.
 const DEFAULT_TURBO = 'dmad4';
+const DEFAULT_STEPS = 8;
 const SELECTED_KEY = 'henge-selected-job';
 /** Generation options (as sent to the bridge, exported or stored with a job) -> panel control values. */
 // The bridge versions result/comparison URLs (?v=) when a shot is redone; derived links reuse it to skip stale caches.
@@ -57,7 +58,7 @@ function normalizeSettings(o: Record<string, unknown>) {
     guideClip: (['auto', 'off'].includes(o.guide_clip as string) ? o.guide_clip : 'on') as 'auto' | 'on' | 'off',
     referenceScale: num(o.reference_scale, .25, 1, 1),
     seed: num(o.seed, 0, 4294967295, 42, true),
-    steps: num(o.steps, 1, 60, (typeof o.turbo === 'string' ? o.turbo : DEFAULT_TURBO) === DEFAULT_TURBO ? 4 : 8, true),
+    steps: num(o.steps, 1, 60, DEFAULT_STEPS, true),
     clipFps: typeof o.clip_fps === 'number' && [1, 2, 4, 8].includes(o.clip_fps) ? o.clip_fps : 2,
     enhancePrompt: o.enhance_prompt !== false,
     autoApprove: o.auto_approve === true,
@@ -179,9 +180,9 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
     if (!Object.keys(initialSettings).length) {
       try {
         const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
-        // Settings saved before DMAD became the default still carry the old untouched default (DMD 8-step, 8 steps):
-        // move those to the new default once; any other saved choice is kept.
-        if (stored && typeof stored === 'object' && !stored.defaults_v2 && stored.turbo === 'dmd8' && stored.steps === 8 && (stored.base || 'h3') === 'h3') Object.assign(stored, {turbo: DEFAULT_TURBO, steps: 4});
+        // Once, every saved setting moves to the default sampling (DMAD, 8 steps, Auto sampler, CFG 1, H3 Ref2VA base):
+        // earlier defaults and experiments (Pika, er_sde, 4 steps) stayed in browsers. Choices made afterwards are kept.
+        if (stored && typeof stored === 'object' && !stored.defaults_v3) Object.assign(stored, {turbo: DEFAULT_TURBO, steps: DEFAULT_STEPS, sampler_name: 'auto', cfg: 1, base: 'h3'});
         if (stored && typeof stored === 'object') applySettings(stored);
       } catch {/* private mode */}
     }
@@ -191,7 +192,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   // Choosing this two-stage recipe also applies its first-pass sampling defaults.
   // Keep these editable afterwards; changing steps/turbo alone does not reapply the preset.
   useEffect(() => {
-    if (restored && mode === 'sharpness' && upscaleMethod === 'regenerate') {setTurbo('dmad4'); setSteps(4); setCfg(1);}
+    if (restored && mode === 'sharpness' && upscaleMethod === 'regenerate') {setTurbo(DEFAULT_TURBO); setSteps(DEFAULT_STEPS); setCfg(1); setSamplerName('auto');}
   }, [mode, upscaleMethod, restored]);
   // The default turbo falls back to DMD 8-step while the backend does not list its file; a turbo picked by hand is kept
   // and shown as not installed.
@@ -250,6 +251,8 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   useEffect(() => {onEnhanceChange?.(enhancePrompt);}, [enhancePrompt]);
   // The assistant always calls the latest closures (they read this render's request and options).
   useEffect(() => {registerControls?.({submit, setAutoApprove, setEnhancePrompt, selectJob: id => void selectJob(id),
+    // New: every generation setting back to its default (normalizeSettings of nothing); mode and language are the studio's.
+    resetOptions: () => {manualTurbo.current = false; manualWindows.current = false; applySettings({});},
     getOptions: () => ({options: {...shareOptions, profile}, models: health?.models, samplers: SAMPLING.samplers, turbos: health?.turbos, bases: health?.bases, upscalers: health?.upscalers, tara_ready: health?.tara_ready, temporal_windows_ready: health?.temporal_windows_ready === true, generation_blockers: [...(health?.model_install_active ? ['Model installation is running; wait before generating'] : []), ...(windowsUnavailable ? ['Temporal windows enabled but worker support is unavailable or unknown'] : []), ...(windowsConflict ? ['Temporal windows conflict with Causal, regional attention, or refiner_full requirements'] : [])]}),
     applyOptions: patch => {
       const current: Record<string, unknown> = {...shareOptions, profile};
@@ -319,6 +322,8 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
   /** The base models that run for the current mode and options (not LoRAs, turbos or guidance methods). */
   const engines: {name: string; role: string}[] = [
     ...(mode === 'sharpness' ? [] : [{name: 'Qwen3.5 9B', role: tr('plans the edit', 'planeja a edição', 'planifica la edición')}]),
+    // Molmo2 watches the guide for the planner in these modes when it runs locally or on the backend worker.
+    ...(['swap', 'motion', 'headswap'].includes(mode) && health?.molmo ? [{name: 'Molmo2', role: tr('describes the guide video', 'descreve o vídeo guia', 'describe el vídeo guía')}] : []),
     ...((mode === 'swap' || mode === 'motion') && prepareReferences ? [{name: 'BiRefNet', role: tr('reference background', 'fundo da referência', 'fondo de la referencia')}] : []),
     ...((mode === 'swap' || mode === 'motion') && adapt === 'auto' && health?.editor_ready ? [{name: frameEditorName(health.frame_editor, tr('Image editor', 'Editor de imagem', 'Editor de imagen')), role: tr('reference adaptation', 'adaptação da referência', 'adaptación de la referencia')}] : []),
     ...(usesMask ? [{name: 'SAM 3.1', role: tr('subject mask', 'máscara do personagem', 'máscara del personaje')}] : []),
@@ -415,7 +420,7 @@ export default function GenerationPanel({onEnhanceChange, registerControls, fres
     </div>{onImportSettings && <button className="quiet-button import-settings-button" onClick={onImportSettings}>{tr('Import settings', 'Importar configuração', 'Importar configuración')}</button>}</details>
   </div>;
   const shareOptions = {temporal_windows: temporalWindows, regional_attention: {enabled: regionalAttention && mode === 'swap' && activeConditioning === 'guide' && ['2d', '3d'].includes(request?.subject_guidance?.representation || ''), strength: .5, reference_budget: .35, layers: '10,25,40'}, profile, adapt, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, guide_clip: guideClip, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, sampler_name: samplerName, attention, source_blur: sourceBlur, source_blur_effect: sourceBlurEffect, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise, regenerate_steps: regenerateSteps, refiner_lms: refinerLms, refiner_lms_strength: refinerLmsStrength, refiner_upscaler: refinerUpscaler, regenerate_prompt: regeneratePrompt};
-  const storedOptions = JSON.stringify({...shareOptions, defaults_v2: true});
+  const storedOptions = JSON.stringify({...shareOptions, defaults_v3: true});
   useEffect(() => {if (restored) try {localStorage.setItem(SETTINGS_KEY, storedOptions);} catch {/* private mode */}}, [restored, storedOptions]);
   const actions = <><button className="quiet-button export-settings-button" disabled={!canSubmit} title={tr('Share the prompt and settings; media is not included', 'Compartilhar o pedido e os ajustes, sem incluir as mídias', 'Compartir la petición y ajustes, sin archivos multimedia')} onClick={() => onShareSettings?.(shareOptions)}>{tr('Export', 'Exportar', 'Exportar')}</button>{job && !['completed', 'failed', 'cancelled'].includes(job.status) && <button className="quiet-button" disabled={submitting} onClick={() => action('cancel')}>{tr('Cancel job', 'Cancelar pedido', 'Cancelar pedido')}</button>}{job?.status === 'awaiting_approval'
     // The plan waits for approval: the main button approves it instead of starting a second request.

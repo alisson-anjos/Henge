@@ -7,6 +7,19 @@ This log starts with the 2026-10-28 updates; earlier commits remain in the Git h
 Render and RunPod have been updated; each entry records those states separately. Test results are described with
 their scope; CPU tests do not replace generation with the real models.
 
+## 2026-10-30
+
+### Default sampling: DMAD at 8 steps; New resets the settings
+
+- The default turbo is DMAD at 8 steps, CFG 1, sampler Auto, in every mode including the Sharpness first pass; the
+  bridge applies the same default to jobs without a turbo (assistant, MCP).
+- Saved browser settings move once to this default: earlier defaults and experiments (Pika with er_sde at 4 steps)
+  stayed in browsers and were reused by every generation. Choices made afterwards are kept.
+- **New** now also returns the generation settings to their defaults (mode and language stay); it used to keep them.
+- Models used lists Molmo2 (describes the guide video) when it runs locally or on the backend worker.
+- **Component:** UI/bridge. **Tests:** Playwright: new browser, a saved Pika/er_sde/4-step setting, a later manual
+  choice, the Sharpness preset, and New after a custom setting.
+
 ## 2026-10-29
 
 ### Molmo2 on the Serverless worker; assistant keeps the original guide

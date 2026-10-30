@@ -44,6 +44,7 @@ PIKA=SAMPLING['pika']
 # Default turbo for new jobs. Graphs of older jobs that never stored a turbo keep building with DMD 8-step, so a
 # Retry reproduces them.
 DEFAULT_TURBO='dmad4'
+DEFAULT_STEPS=8
 TURBOS[PIKA['turbo']]={'label':'Pika H3 Flex · 6-step (experimental stack)','lora':'henge/pika_h3_flex_ref2va_v1_avg_rank_55_bf16.safetensors','steps':PIKA['steps']}
 
 # LoRA files keep their published filenames under loras/henge/. Installs from before 2026-10-27 used short names;

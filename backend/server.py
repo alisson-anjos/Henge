@@ -1383,7 +1383,7 @@ def health():
     # Refiner latent upscalers the backend has (the native loader lists latent_upscale_models).
     listed=set(comfy_choices(info,'LatentUpscaleModelLoader','model_name'))
     upscalers['refiner_upscalers']={key:unknown or name in listed for key,name in workflows.REGENERATE_UPSCALERS.items()}
-    return {'model_install_active':MODEL_INSTALL.active(),'temporal_windows_ready':'HengeH3PureWindows' in info,'regenerate':regenerate,'upscalers':upscalers,'bases':bases,'turbos':turbos,'samplers':list(workflows.SAMPLERS),'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'model_install_active':MODEL_INSTALL.active(),'molmo':molmo_pointing.location(),'temporal_windows_ready':'HengeH3PureWindows' in info,'regenerate':regenerate,'upscalers':upscalers,'bases':bases,'turbos':turbos,'samplers':list(workflows.SAMPLERS),'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/updates')
 def updates():
@@ -1570,7 +1570,7 @@ async def create_job(request:Request):
         if 'turbo' not in options and options.get('base','h3')=='h3':
             known_loras();installed=workflows.INSTALLED.get('LoraLoaderModelOnly')
             default=workflows.DEFAULT_TURBO if installed and workflows.lora_installed(TURBOS[workflows.DEFAULT_TURBO]['lora'],installed) else 'dmd8'
-            options['turbo']=default;options.setdefault('steps',TURBOS[default]['steps'])
+            options['turbo']=default;options.setdefault('steps',workflows.DEFAULT_STEPS)
         # Sharpness defaults to pure temporal windows when the caller (assistant, MCP, API) does not choose and the
         # worker supports them; an explicit setting, including off, is kept.
         if r.get('mode')=='sharpness' and 'temporal_windows' not in options:
