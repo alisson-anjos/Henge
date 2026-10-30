@@ -25,7 +25,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            1
+            2
           ]
         }
       ],
@@ -39,49 +39,6 @@
       "widgets_values_named": {
         "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
         "weight_dtype": "default"
-      }
-    },
-    {
-      "id": 2,
-      "type": "LoraLoaderModelOnly",
-      "title": "Training adapter V2 — strength 1",
-      "pos": [
-        0,
-        160
-      ],
-      "size": [
-        340,
-        136
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "model",
-          "type": "MODEL",
-          "link": 1
-        }
-      ],
-      "outputs": [
-        {
-          "name": "MODEL",
-          "type": "MODEL",
-          "links": [
-            2
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoraLoaderModelOnly"
-      },
-      "widgets_values": [
-        "minimax_h3_ref2va_training_adapter_v2.safetensors",
-        1.0
-      ],
-      "widgets_values_named": {
-        "lora_name": "minimax_h3_ref2va_training_adapter_v2.safetensors",
-        "strength_model": 1.0
       }
     },
     {
@@ -1317,16 +1274,8 @@
   ],
   "links": [
     [
+      2,
       1,
-      1,
-      0,
-      2,
-      0,
-      "MODEL"
-    ],
-    [
-      2,
-      2,
       0,
       3,
       0,

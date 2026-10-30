@@ -45,7 +45,6 @@ frame counts; TARA uses the BFS model patch. The native examples do not require 
 | Base | `minimax_h3_ref2va_pruned_int8_convrot.safetensors` — [Comfy-Org H3](https://huggingface.co/Comfy-Org/MiniMax-H3/tree/main) |
 | H3 text encoder | `qwen3vl_32b_minimax_h3_int8_convrot.safetensors` — Comfy-Org H3 |
 | Video VAE | `minimax_h3_video_vae_fp16.safetensors` — Comfy-Org H3 |
-| Training adapter V2 | `minimax_h3_ref2va_training_adapter_v2.safetensors` — [ostris](https://huggingface.co/ostris/minimax_h3_training_adapter) |
 | Turbo | `minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors` — [drbaph](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/tree/main/experimental) |
 | Guide Latents task | `minimax_h3_motion_transfer_v1.0_ref2va.safetensors` — [BFS LoRAs](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/tree/main/loras) |
 | TARA task | `minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors` — BFS LoRAs |
@@ -53,8 +52,8 @@ frame counts; TARA uses the BFS model patch. The native examples do not require 
 
 Place base weights in `models/diffusion_models`, encoders in `models/text_encoders`, VAE in `models/vae`,
 and LoRAs in `models/loras`. Select the installed name if files live in a subfolder. The encoder used for
-prompt writing is separate from H3's own text encoder. Load training adapter V2, turbo and task LoRA at
-strength 1. The examples use DMD 8-step, Euler/simple, CFG 1. Do not stack a second copy of a component
+prompt writing is separate from H3's own text encoder. Load the turbo and the task LoRA at strength 1; the
+training adapter the LoRAs were trained over only counters distillation during training and is not loaded. The examples use DMD 8-step, Euler/simple, CFG 1. Do not stack a second copy of a component
 that is already merged into your chosen weights.
 
 ## Native workflow

@@ -63,7 +63,7 @@ in [docs/REFERENCES.md](docs/REFERENCES.md).
 | Mode | What it does | Recipe |
 |---|---|---|
 | Character Swap | Replace the person in a video with a character picture | Character Swap v1.1 LoRA + turbo; v1.1 one-line `body_swap:` prompt; reference background removed (BiRefNet, #808080, 0.5 MP) |
-| Motion Transfer | Drive people, objects or vehicles with the guide's performance | Two trained LoRAs: Guide Latents and Motion Transfer TARA v1.0, each stacked on training adapter V2; use the matching method |
+| Motion Transfer | Drive people, objects or vehicles with the guide's performance | Two trained LoRAs: Guide Latents and Motion Transfer TARA v1.0, loaded after the turbo (no training adapter at inference); use the matching method |
 | Head Swap | Replace only the head with a face picture | Head Swap v1.0 r32 + turbo; published `head_swap:` template |
 | Sharpness / Upscale | Enhance an upload or an existing Henge result | Little More Sharpness first, then **Open-H3 Refiner + LMS** by default at 1080p/2K; H3 latent upscale, NVIDIA VSR and no upscale are alternatives. 4K requires an alternative method |
 

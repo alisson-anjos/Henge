@@ -4,13 +4,13 @@ Only branches selected in a validated plan are added: unused loaders never execu
 import json,math
 from pathlib import Path
 MODELS={
- 'motion':{'label':'Motion Transfer v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True},
+ 'motion':{'label':'Motion Transfer v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors','adapter':None,'clip_context':True},
  # Motion Transfer TARA v1.0: the LoRA trained for TARA; the studio switches to the TARA method with it.
- 'motion_tara':{'label':'Motion Transfer TARA v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True,'method':'tara'},
+ 'motion_tara':{'label':'Motion Transfer TARA v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors','adapter':None,'clip_context':True,'method':'tara'},
  # Motion Transfer Combined (for testing): Motion Transfer v1.0 x1.0 + TARA v1.0 x0.3, rank concat then per-module SVD keeping 95% /
  # 99% of the Frobenius energy (tools/henge_session_20261025/merge_fro.py); for Guide Latents and TARA.
- 'motion_mix_dyn95':{'label':'Motion Transfer Combined · dyn95 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True},
- 'motion_mix_dyn99':{'label':'Motion Transfer Combined · dyn99 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors','adapter':'henge/minimax_h3_ref2va_training_adapter_v2.safetensors','clip_context':True},
+ 'motion_mix_dyn95':{'label':'Motion Transfer Combined · dyn95 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors','adapter':None,'clip_context':True},
+ 'motion_mix_dyn99':{'label':'Motion Transfer Combined · dyn99 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors','adapter':None,'clip_context':True},
  # First-frame propagate: Alissonerdx VFX Edit FFP (r128) merged with SolarRenderer control at 0.5 (Frobenius dyn99 / dyn95).
  # The whole source is the guide; an optional edited first frame enters as a native image reference (prompt: vfx_edit:).
  'motion_ffp':{'label':'Motion Transfer FFP · dyn99','task':'motion','lora':'henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
@@ -157,11 +157,13 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         # No speed LoRA: the task LoRA loads straight onto the base.
         del g['2'];g['3']['inputs']['model']=['1',0]
     if not model.get('turbo') and not model['adapter']:
-        # The adapter is merged into the task LoRA: the speed LoRA (if any) loads straight onto the base.
+        # No adapter at inference: the speed LoRA (if any) loads straight onto the base, then the task LoRA. Motion LoRAs
+        # were trained over ostris' training adapter, which only counters the distillation while training; generation
+        # runs without it, with the turbo providing the speed.
         if TURBOS[turbo]['lora']:g['2']['inputs']['lora_name']=TURBOS[turbo]['lora']
         else:del g['2'];g['3']['inputs']['model']=['1',0]
     elif not model.get('turbo') and TURBOS[turbo]['lora']:
-        # Motion keeps training adapter V2 (what its LoRAs were trained on) and stacks the speed LoRA on it.
+        # A profile that does name an adapter keeps it under the speed LoRA (none of the built-in profiles does now).
         g['25']=node('LoraLoaderModelOnly',model=['2',0],lora_name=TURBOS[turbo]['lora'],strength_model=1.);g['3']['inputs']['model']=['25',0]
     if conditioning_mode=='tara':
         g['21']=node('BFSMiniMaxH3NativeTemporal',model=['4',0],motion_video_index=1,strength=2.,window_seconds=.2,falloff_seconds=.25,max_penalty=6.,attention_backend='comfy kitchen (experimental)' if attention=='comfy kitchen attention' else 'flash partitions (no compile)',

@@ -112,10 +112,10 @@ def test_package_rejects_inputs_outside_staging(tmp_path,monkeypatch):
 
 def test_readme_links_public_model_names_and_explains_dependencies():
     import server
-    g=shot('guide');g['2']={'class_type':'LoraLoaderModelOnly','inputs':{'lora_name':'henge/training_adapter_v2.safetensors'}}
+    g=shot('guide');g['2']={'class_type':'LoraLoaderModelOnly','inputs':{'lora_name':'henge/motion_tara_4500.safetensors'}}
     out,_,notes=workflow_export.portable_graph(g,'p_')
     readme=server.workflow_readme({'id':'a'*32},'h3_segment_000',out,notes)
-    assert 'minimax_h3_ref2va_training_adapter_v2.safetensors' in readme
+    assert 'minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors' in readme
     assert '[download](https://huggingface.co/' in readme
     assert 'Model weights are not included' in readme
 

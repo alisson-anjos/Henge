@@ -15,15 +15,14 @@ class PikaSamplingTests(unittest.TestCase):
         return h3_graph('guide.mp4',['reference.png'],'motion_transfer: reference',512,288,22,22,
                         profile,42,steps,'original',[],'human',0,turbo='pika6',**options)
 
-    def test_six_step_workflow_schedule_and_separate_training_adapter(self):
+    def test_six_step_workflow_schedule_without_training_adapter(self):
         graph=self.graph()
         self.assertEqual(graph['12']['inputs']['sampler_name'],'lcm')
         self.assertEqual(graph['13']['class_type'],'ManualSigmas')
         self.assertEqual([float(s) for s in graph['13']['inputs']['sigmas'].split(',')],
                          [1.,.972973,.923077,.8,.571429,.333333,0.])
-        self.assertIn('training_adapter_v2',graph['2']['inputs']['lora_name'])
-        self.assertEqual(graph['25']['inputs']['lora_name'],TURBOS['pika6']['lora'])
-        self.assertEqual(graph['3']['inputs']['model'],['25',0])
+        self.assertEqual(graph['2']['inputs']['lora_name'],TURBOS['pika6']['lora'])
+        self.assertNotIn('25',graph);self.assertEqual(graph['3']['inputs']['model'],['2',0])
         self.assertEqual(graph['4']['inputs']['shift_video'],12.)
         self.assertEqual(graph['4']['inputs']['shift_audio'],3.)
 

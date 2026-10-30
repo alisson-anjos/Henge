@@ -27,7 +27,6 @@ Download the exact files below. The last column is relative to ComfyUI.
 | [H3 video VAE FP16](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors) | `models/vae/minimax_h3_video_vae_fp16.safetensors` |
 | [Character Swap v1.1](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors) | `models/loras/henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors` |
 | [Character profile's 8-step DMD adapter](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/resolve/main/experimental/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors) | `models/loras/henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors` |
-| [Motion profiles' training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors) | `models/loras/henge/minimax_h3_ref2va_training_adapter_v2.safetensors` |
 | [H3 audio VAE](https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors), optional for audio conditioning | `models/vae/minimax_h3_audio_vae_fp32.safetensors` |
 
 H3 conditioning uses the 32B H3 encoder even when a smaller VLM is used for prompt
@@ -47,11 +46,10 @@ profiles in brackets).
 | Head Swap v1.0 (`headswap`) | [`minimax_h3_head_swap_v1.0_r32.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_head_swap_v1.0_r32.safetensors) |
 | Little More Sharpness v1.0 (`sharpness`) | [`minimax_h3_lms_v1.0_r64.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_lms_v1.0_r64.safetensors) |
 
-**Training adapter V2 with the motion LoRAs.** The Motion Transfer LoRAs were trained on top of
-[ostris' training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter) kept frozen. They will usually
-work without it, but loading the adapter first (strength 1) and the motion LoRA after it reproduces the training
-conditions, which is what Henge does; compare both on your own clips. Do not load a file that already merges the
-adapter (for example an exact Motion Transfer v1.0 + V2 merge) together with the adapter again.
+**No training adapter at inference.** The Motion Transfer LoRAs were trained on top of
+[ostris' training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter), which counters the
+distillation of the base while training. Generation runs without it: base, turbo LoRA, then the task LoRA. Henge and
+the published workflows no longer load it, and the downloads no longer include it.
 
 Models already in your ComfyUI are reused as they are: under an older short name (for example `character_v1_1`,
 `training_adapter_v2`) or in another subfolder (for example `vae/minimax/…`). The bridge finds them by name and

@@ -9,6 +9,15 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-30
 
+### Motion Transfer runs without the training adapter
+
+- The Motion Transfer LoRAs were trained over ostris' training adapter V2, which only counters the base model's
+  distillation while training. Generation no longer loads it: Henge's Motion profiles, the seven published Motion
+  workflows and the default downloads drop it (base, turbo, task LoRA). Tested by hand without the adapter for a long
+  time; the extra file only added load time and VRAM.
+- **Component:** UI/bridge (graphs), workflows, model manifest, docs. **Tests:** Motion graphs without the adapter, with
+  and without a turbo; workflow link integrity after removing the node.
+
 ### Models on another drive (extra_model_paths.yaml)
 
 - With `COMFY_ROOT` set, Henge only looked in `COMFY_ROOT/models` and reported models kept on another drive (mapped

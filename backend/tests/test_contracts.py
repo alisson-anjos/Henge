@@ -202,14 +202,15 @@ class WorkflowContracts(unittest.TestCase):
   g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,'motion',42,8,'original',[],'human',0)
   self.assertNotIn('VAELoader',[v['class_type'] for k,v in g.items() if k=='19']);self.assertNotIn('20',g)
   self.assertFalse(any(v['class_type']=='TextEncodeFibo2' for v in g.values()))
- def test_motion_profiles_load_adapter_v2_before_lora(self):
+ def test_motion_profiles_run_without_the_training_adapter(self):
   for profile in ['motion','motion_mix_dyn95']:
    g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0)
-   # adapter V2 -> turbo (default dmd8) -> motion LoRA
-   self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_ref2va_training_adapter_v2.safetensors')
-   self.assertEqual(g['25']['inputs'],{'model':['2',0],'lora_name':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','strength_model':1.})
-   self.assertEqual(g['3']['inputs']['model'],['25',0])
-   self.assertEqual(h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0,turbo='none')['3']['inputs']['model'],['2',0])
+   # No training adapter at inference: turbo (default dmd8) -> motion LoRA; without a turbo the LoRA sits on the base.
+   self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors')
+   self.assertNotIn('25',g);self.assertEqual(g['3']['inputs']['model'],['2',0])
+   self.assertFalse(any('training_adapter' in str(n['inputs'].get('lora_name','')) for n in g.values()))
+   bare=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0,turbo='none')
+   self.assertNotIn('2',bare);self.assertEqual(bare['3']['inputs']['model'],['1',0])
  def test_fixed_recipe_modes_pick_profile_and_picture_count(self):
   for mode,slots,profile in [('headswap',[1],'headswap'),('sharpness',[],'sharpness')]:
    r={**self.request(),'mode':mode,'prompt':''};options={'profile':'motion','conditioning_mode':'tara'}
@@ -265,7 +266,7 @@ class WorkflowContracts(unittest.TestCase):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0,turbo='none',base='omniref')
   self.assertEqual(g['1']['inputs']['unet_name'],'fasth3_omniref_8step_pruned_int8_convrot.safetensors');self.assertNotIn('2',g);self.assertEqual(g['3']['inputs']['model'],['1',0])
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion',1,8,'original',[],'human',0,turbo='none',base='omniref')
-  self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_ref2va_training_adapter_v2.safetensors')
+  self.assertNotIn('2',g);self.assertEqual(g['3']['inputs']['model'],['1',0])
  def test_cfg_adds_zeroed_negative(self):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,30,'original',[],'human',0,turbo='none',cfg=4)
   self.assertEqual(g['24']['class_type'],'ConditioningZeroOut');self.assertEqual(g['10']['inputs']['negative'],['24',0]);self.assertEqual(g['10']['inputs']['cfg'],4.)

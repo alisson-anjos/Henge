@@ -24,7 +24,7 @@ Comfy workflow's manual sigmas are:
 
 The published Comfy workflow and the original Pika inference package have different sampling implementations.
 Matching this Comfy preset is not a claim of reproducing the original package. Stacking Pika with Henge's task
-LoRAs, training adapter, TARA, masks or temporal windows needs generation/quality comparisons.
+LoRAs, TARA, masks or temporal windows needs generation/quality comparisons.
 
 ## Download and availability
 

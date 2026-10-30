@@ -6,22 +6,11 @@
       "weight_dtype": "default"
     }
   },
-  "2": {
-    "class_type": "LoraLoaderModelOnly",
-    "inputs": {
-      "model": [
-        "1",
-        0
-      ],
-      "lora_name": "henge/training_adapter_v2.safetensors",
-      "strength_model": 1.0
-    }
-  },
   "3": {
     "class_type": "LoraLoaderModelOnly",
     "inputs": {
       "model": [
-        "2",
+        "1",
         0
       ],
       "lora_name": "henge/motion_8000.safetensors",

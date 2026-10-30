@@ -186,17 +186,6 @@
       ]
     },
     {
-      "id": "motion_adapter",
-      "url": "https://huggingface.co/ostris/minimax_h3_training_adapter/resolve/main/minimax_h3_ref2va_training_adapter_v2.safetensors",
-      "destination": "loras/henge/minimax_h3_ref2va_training_adapter_v2.safetensors",
-      "profiles": [
-        "motion_transfer",
-        "motion_transfer_tara",
-        "solar"
-      ],
-      "note": "Loaded before the Motion Transfer LoRAs (they were trained on it, frozen). Same sha256 as ostris/minimax_h3_training_adapter v2."
-    },
-    {
       "id": "motion_transfer_v1",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_ref2va.safetensors",
       "destination": "loras/henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors",

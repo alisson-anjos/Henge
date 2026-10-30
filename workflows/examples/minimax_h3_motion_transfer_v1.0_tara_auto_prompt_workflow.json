@@ -22,7 +22,7 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      1
+      43
      ]
     }
    ],
@@ -78,7 +78,7 @@
     1.0
    ],
    "widgets_values_named": {
-    "lora_name": "motion10500_plus_training_adapter_v2_exact.safetensors",
+    "lora_name": "minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors",
     "strength_model": 1.0
    }
   },
@@ -1473,60 +1473,9 @@
    },
    "widgets_values": [],
    "widgets_values_named": {}
-  },
-  {
-   "id": 33,
-   "type": "LoraLoaderModelOnly",
-   "pos": [
-    0,
-    40
-   ],
-   "size": [
-    360,
-    180
-   ],
-   "flags": {},
-   "order": 1,
-   "mode": 0,
-   "inputs": [
-    {
-     "name": "model",
-     "type": "MODEL",
-     "link": 1
-    }
-   ],
-   "outputs": [
-    {
-     "name": "MODEL",
-     "type": "MODEL",
-     "links": [
-      43
-     ]
-    }
-   ],
-   "title": "Training adapter V2 (frozen during training)",
-   "properties": {
-    "Node name for S&R": "LoraLoaderModelOnly"
-   },
-   "widgets_values": [
-    "minimax_h3_ref2va_training_adapter_v2.safetensors",
-    1.0
-   ],
-   "widgets_values_named": {
-    "lora_name": "motion10500_plus_training_adapter_v2_exact.safetensors",
-    "strength_model": 1.0
-   }
   }
  ],
  "links": [
-  [
-   1,
-   1,
-   0,
-   33,
-   0,
-   "MODEL"
-  ],
   [
    2,
    2,
@@ -1857,7 +1806,7 @@
   ],
   [
    43,
-   33,
+   1,
    0,
    2,
    0,
