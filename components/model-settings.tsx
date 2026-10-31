@@ -50,7 +50,7 @@ export default function ModelSettings({lang}:{lang:Language}) {
         {state?.message&&state.status==='failed'&&<small className="validation">{state.message}</small>}
       </div>}
       <small className="muted">{tr('The catalog follows GitHub updates. Installing weights does not update code or nodes; a new model may also require an application or worker update.','O catálogo acompanha as atualizações do GitHub. Instalar pesos não atualiza código ou nodes; um modelo novo também pode exigir atualização do aplicativo ou worker.','El catálogo sigue las actualizaciones de GitHub. Instalar pesos no actualiza código ni nodos; un modelo nuevo también puede necesitar actualizar la aplicación o el worker.')}</small>
-      {selected==='turbo_pika6'&&<small className="muted">{tr('Pika uses the MiniMax H3 Community License, not MIT.','Pika usa a MiniMax H3 Community License, não MIT.','Pika usa la MiniMax H3 Community License, no MIT.')}</small>}
+      {['turbo_pika6','turbo_pika6_kijai'].includes(selected)&&<small className="muted">{tr('Pika uses the MiniMax H3 Community License, not MIT.','Pika usa a MiniMax H3 Community License, não MIT.','Pika usa la MiniMax H3 Community License, no MIT.')}</small>}
     </>}{error&&<p className="validation" role="alert">{error}</p>}
   </section>;
 }

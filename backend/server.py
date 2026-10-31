@@ -225,7 +225,7 @@ def validate_request(r,options,slots):
     if options.get('base','h3') not in BASES:raise ValueError('Unknown base model')
     if options.get('turbo','dmd8') not in TURBOS:raise ValueError('Unknown turbo LoRA')
     if options.get('sampler_name','auto') not in workflows.SAMPLERS:raise ValueError('Unknown H3 sampler')
-    if options.get('turbo')==workflows.PIKA['turbo']:
+    if options.get('turbo') in workflows.PIKA['turbos']:
         options.setdefault('steps',workflows.PIKA['steps'])
         if options.get('base','h3')!='h3':raise ValueError('Pika H3 Flex Ref2VA requires the H3 Ref2VA base')
     if options.get('attention','comfy kitchen attention') not in ['comfy kitchen attention','pytorch attention']:raise ValueError('Unknown attention backend')
@@ -1439,7 +1439,7 @@ def model_catalog_state():
         except (ValueError,KeyError):available=False
         try:present=(item['destination'].rsplit('/',1)[-1] in names) if remote else bool(LOCAL_MODELS and model_installer.installed(LOCAL_MODELS,item))
         except ValueError:present=False;available=False
-        items.append({'id':item['id'],'label':'Pika H3 Flex · Ref2VA' if item['id']=='turbo_pika6' else item.get('label') or item['destination'].rsplit('/',1)[-1],
+        items.append({'id':item['id'],'label':item.get('label') or item['destination'].rsplit('/',1)[-1],
                       'installed':present,'installable':available,'profiles':item.get('profiles',[])})
     return {'provider':'runpod' if remote else 'local' if COMFY and not REMOTE else 'remote',
             'ready':ready,'generation_active':bool(active_jobs()),'models':items,'installation':MODEL_INSTALL.public(),

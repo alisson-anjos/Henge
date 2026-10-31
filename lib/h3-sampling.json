@@ -2,6 +2,7 @@
   "samplers": ["auto", "euler", "lcm", "heun", "dpmpp_2m", "dpmpp_2m_sde", "er_sde"],
   "pika": {
     "turbo": "pika6",
+    "turbos": ["pika6", "pika6_kijai"],
     "steps": 6,
     "sampler": "lcm",
     "sigmas": [1.0, 0.972973, 0.923077, 0.8, 0.571429, 0.333333, 0.0]

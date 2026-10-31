@@ -47,7 +47,7 @@ def selected(manifest,model_id):
     by_id={item['id']:item for item in manifest['models']}
     if model_id not in by_id:raise ValueError('Model is not in this catalog; refresh Models')
     ids=[model_id]
-    if model_id=='turbo_pika6':ids+=['pika_license','pika_notice','pika_upstream_license']
+    if model_id in ('turbo_pika6','turbo_pika6_kijai'):ids+=['pika_license','pika_notice','pika_upstream_license']
     return [by_id[key] for key in ids]
 
 

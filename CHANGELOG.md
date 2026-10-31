@@ -9,6 +9,20 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-31
 
+### Offer official and Kijai Pika Ref2VA adapters
+
+- Pika now downloads and selects the official full-rank Comfy BF16 adapter from Pika-Labs/Pika-H3-Flex,
+  pinned to revision `0ddf55ad7067ca1e76812253bd7b4600df87f759` with the official SHA256 checksum.
+  The reduced adapter remains a separate selection explicitly labeled Kijai (`pika6_kijai`).
+  Both use the Pika sampling preset, with independent installation detection and no file alias.
+- **Components:** download manifest, workflow model selection, model availability and documentation.
+  Existing official files are reused; installations containing only the reduced adapter must install the
+  approximately 1.96 GB official file. Sampling settings are unchanged.
+- **Validation:** 18 CPU tests passed for Pika sampling/download contracts, model installation, requirements
+  and workflow export; TypeScript `tsc --noEmit` and `git diff --check` passed. No GPU generation validated.
+- **Release:** code published on `main` as `v2026.10.31.2`; the tag triggers the Docker image build.
+  Image publication and deployment are pending.
+
 ### Match BFS planner Mask only segmentation
 
 - Mask only now regenerates the per-frame SAM silhouette, grown by Expand, on the full frame, matching

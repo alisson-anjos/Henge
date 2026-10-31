@@ -13,7 +13,7 @@ ROOT=Path(__file__).resolve().parents[2]
 class PikaSamplingTests(unittest.TestCase):
     def graph(self, profile='motion', steps=6, **options):
         return h3_graph('guide.mp4',['reference.png'],'motion_transfer: reference',512,288,22,22,
-                        profile,42,steps,'original',[],'human',0,turbo='pika6',**options)
+                        profile,42,steps,'original',[],'human',0,turbo=options.pop('turbo','pika6'),**options)
 
     def test_six_step_workflow_schedule_without_training_adapter(self):
         graph=self.graph()
@@ -25,6 +25,14 @@ class PikaSamplingTests(unittest.TestCase):
         self.assertNotIn('25',graph);self.assertEqual(graph['3']['inputs']['model'],['2',0])
         self.assertEqual(graph['4']['inputs']['shift_video'],12.)
         self.assertEqual(graph['4']['inputs']['shift_audio'],3.)
+
+    def test_kijai_selection_keeps_pika_sampling_and_its_own_file(self):
+        graph=self.graph(turbo='pika6_kijai')
+        self.assertEqual(graph['12']['inputs']['sampler_name'],'lcm')
+        self.assertEqual(graph['13']['class_type'],'ManualSigmas')
+        self.assertEqual(graph['2']['inputs']['lora_name'],TURBOS['pika6_kijai']['lora'])
+        self.assertNotEqual(TURBOS['pika6']['lora'],TURBOS['pika6_kijai']['lora'])
+        self.assertIn('Kijai',TURBOS['pika6_kijai']['label'])
 
     def test_six_step_sigmas_take_no_model_when_tara_or_windows_patch_it(self):
         # A Pika 6-step job with TARA or pure windows failed: "ManualSigmas.execute() got an unexpected keyword
@@ -93,3 +101,11 @@ class PikaSamplingTests(unittest.TestCase):
             self.assertTrue({'turbo_pika6','pika_license','pika_notice','pika_upstream_license'} <= set(selected))
             self.assertEqual(selected['turbo_pika6']['destination'],'loras/'+TURBOS['pika6']['lora'])
             self.assertRegex(selected['turbo_pika6']['revision'],r'^[0-9a-f]{40}$')
+            self.assertEqual(selected['turbo_pika6']['repo_id'],'Pika-Labs/Pika-H3-Flex')
+            self.assertEqual(selected['turbo_pika6']['filename'],
+                             'comfy/loras/pika_h3_flex_ref2va_comfy_bf16.safetensors')
+            self.assertEqual(selected['turbo_pika6']['sha256'],
+                             'e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1')
+        aliases=json.loads((ROOT/'backend/legacy_loras.json').read_text())
+        self.assertNotIn(TURBOS['pika6']['lora'],aliases)
+        self.assertNotIn(TURBOS['pika6']['lora'],aliases.values())

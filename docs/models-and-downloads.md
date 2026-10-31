@@ -143,8 +143,8 @@ result download retains its original resolution.
 
 The Ref2VA Comfy adapter is included in normal downloads through the `common` profile, with a pinned upstream
 revision and license/notice files. It is an optional turbo choice, not a new default turbo. Install it under
-`models/loras/henge/pika_h3_flex_ref2va_v1_avg_rank_55_bf16.safetensors` (Kijai's 553 MB reduced copy; an existing
-full `pika_h3_flex_ref2va_comfy_bf16.safetensors` is still used); `--profiles pika` can top up an existing models
+`models/loras/henge/pika_h3_flex_ref2va_comfy_bf16.safetensors` (the official full-rank Pika-Labs BF16 adapter,
+approximately 1.96 GB); `--profiles pika` can top up an existing models
 folder. Serverless needs a volume top-up through a pod, not just a worker environment change.
 See [Pika sampling, step overrides and deployment](pika-h3-flex.md).
 
