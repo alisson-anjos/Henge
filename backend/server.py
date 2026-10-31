@@ -217,7 +217,7 @@ def validate_request(r,options,slots):
     if windows.get('enabled') and (r.get('processing',{}).get('mode')=='causal' or regional.get('enabled')):raise ValueError('Pure temporal windows cannot be combined with Causal or regional attention')
     mask=options.get('mask') or {}
     if not isinstance(mask,dict) or set(mask)-{'threshold','shape','padding','expand','fill_holes','temporal_expand','blockify','invert','strength'}:raise ValueError('Invalid latent mask settings')
-    if mask.get('shape','box') not in ['box','silhouette']:raise ValueError('Unknown mask shape')
+    if mask.get('shape','silhouette') not in ['box','silhouette']:raise ValueError('Unknown mask shape')
     clamp_float(mask.get('threshold',.5),.05,.95,'mask threshold');clamp_float(mask.get('padding',.15),0,1,'mask padding');clamp_float(mask.get('expand',16),0,128,'mask expand')
     clamp_float(mask.get('temporal_expand',2),0,24,'mask temporal expand');clamp_float(mask.get('blockify',0),0,64,'mask blockify');clamp_float(mask.get('strength',1.),0,1,'mask strength')
     for key in ('fill_holes','invert'):

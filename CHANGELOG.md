@@ -9,6 +9,20 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-31
 
+### Match BFS planner Mask only segmentation
+
+- Mask only now regenerates the per-frame SAM silhouette, grown by Expand, on the full frame, matching
+  the BFS planner's `generation_mask` / `grow_blur` behavior. It no longer replaces the segmentation with
+  a fixed bounding box around the subject's travel. Preview and generation use the same mask path.
+- Removed box/margin controls from the mask settings and approval preview. Legacy `shape: box` and
+  padding values remain accepted for saved requests, but use the silhouette too. Increase Expand when
+  a replacement needs more room. Molmo pointing, cache, subject bindings and point tracking are unchanged.
+- **Components:** ComfyUI mask preparation, studio controls, request validation.
+- **Validation:** 95 CPU tests passed, one existing test skipped, covering mask movement/expansion,
+  legacy box settings, point tracking, Molmo backend/cache/pointing, bindings, contracts and workflow export.
+  TypeScript `tsc --noEmit` and `git diff --check` passed. No live SAM/H3 generation validated for this change.
+- **Release:** prepared for `v2026.10.31.1`; Docker image publication and deployment pending.
+
 ### Keep the point-prompted mask before mask-only refinement
 
 - Explicit subject marks use one SAM point-decoder pass. SAM3_Detect's next refinement pass omits the point prompt;

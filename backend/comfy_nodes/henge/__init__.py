@@ -179,8 +179,7 @@ class HengeGuide:
             return {**tracking,'result':(blur_guide(images,spec,selected),empty,attention_regions)}
         if representation=='mask':
             # Latent mask: keep the source pixels; only the region of the selected subjects is regenerated.
-            # Like the BFS Shot Planner, the region is one box around the subjects' whole travel in this segment
-            # (+15% margin), so a replacement with a different silhouette (hair, clothing, build) has room.
+            # BFS Mask only keeps the per-frame segmentation on the full frame, grown by expand.
             del sam,clip;mm.unload_all_models();mm.soft_empty_cache()
             # Held props (guitar, microphone...) stay as in the source instead of being regenerated with the person.
             region=mask_region(shape_mask(selected,spec),spec)
@@ -351,7 +350,7 @@ def draw_labels(result,chosen,masks):
         frames[f]=np.asarray(im)
     return torch.from_numpy(frames).to(result.dtype)/255
 
-DEFAULT_MASK={'threshold':.5,'shape':'box','padding':.15,'expand':16,'fill_holes':True,'temporal_expand':2,'blockify':0,'invert':False,'strength':1.}
+DEFAULT_MASK={'threshold':.5,'shape':'silhouette','padding':.15,'expand':16,'fill_holes':True,'temporal_expand':2,'blockify':0,'invert':False,'strength':1.}
 
 def shape_mask(masks,spec):
     """invert -> fill holes -> temporal expand -> blockify on [N,H,W] masks (BFS Shot Planner shape_mask)."""
@@ -372,16 +371,16 @@ def shape_mask(masks,spec):
     return x>.5
 
 def mask_region(mask,spec):
-    """Region to regenerate: one padded box over the union of every frame (BFS Shot Planner default) or the
-    silhouette grown by `expand` px."""
-    padding,expand=float(spec['padding']),int(spec['expand'])
-    if not bool(mask.any()):return mask.float()
-    if spec['shape']=='silhouette':
-        k=2*expand+1;return torch.nn.functional.max_pool2d(mask.float()[:,None],k,1,expand)[:,0]
-    union=mask.any(0);ys,xs=torch.nonzero(union,as_tuple=True);H,W=union.shape
-    x0,x1,y0,y1=int(xs.min()),int(xs.max())+1,int(ys.min()),int(ys.max())+1;px,py=int((x1-x0)*padding),int((y1-y0)*padding)
-    region=torch.zeros_like(mask,dtype=torch.float32);region[:,max(0,y0-py):min(H,y1+py),max(0,x0-px):min(W,x1+px)]=1
-    return region
+    """BFS Mask only: grow the per-frame SAM silhouette without a crop or bounding box.
+    Legacy shape/padding settings remain accepted, but never turn the segmentation into a box.
+    """
+    expand=int(spec['expand'])
+    x=mask.float()[:,None]
+    if expand>0:
+        k=2*expand+1
+        x=torch.nn.functional.max_pool2d(x,(1,k),1,(0,expand))
+        x=torch.nn.functional.max_pool2d(x,(k,1),1,(expand,0))
+    return x[:,0]
 
 # H3 video latent step k covers these source frames (first step 1, then 4): same grid as BFS latent_mask.
 FRAME_PER_TOKEN=(1,4,4,4,4)
