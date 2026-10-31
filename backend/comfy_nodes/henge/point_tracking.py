@@ -19,7 +19,8 @@ def track_marks(images, model, subjects, segment_start, bounds, detect, track, u
                 fw,fh=anchor['frame_width'],anchor['frame_height'];scale=min(w/fw,h/fh)
                 x=min(w-1,max(0,round(anchor['x']*fw*scale+(w-fw*scale)/2)))
                 y=min(h-1,max(0,round(anchor['y']*fh*scale+(h-fh*scale)/2)))
-                found=detect(model=model,image=images[k:k+1],positive_coords=json.dumps([{'x':x,'y':y}]),refine_iterations=2,individual_masks=True)[0].cpu()>.5
+                # SAM3_Detect's extra refinement drops the point prompt. On small subjects it can erase a valid seed.
+                found=detect(model=model,image=images[k:k+1],positive_coords=json.dumps([{'x':x,'y':y}]),refine_iterations=1,individual_masks=True)[0].cpu()>.5
                 candidates=[m for m in found if bool(m[y,x])]
                 if not candidates:continue
                 seed=max(candidates,key=lambda m:int(m.sum())).float()[None]

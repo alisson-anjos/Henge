@@ -7,6 +7,19 @@ This log starts with the 2026-10-28 updates; earlier commits remain in the Git h
 Render and RunPod have been updated; each entry records those states separately. Test results are described with
 their scope; CPU tests do not replace generation with the real models.
 
+## 2026-10-31
+
+### Keep the point-prompted mask before mask-only refinement
+
+- Explicit subject marks use one SAM point-decoder pass. SAM3_Detect's next refinement pass omits the point prompt;
+  on a reproduced input it erased a valid initial mask completely, leaving no seed for video tracking.
+- **Component:** ComfyUI point tracking. **Validation:** a live GPU comparison at 800×480 produced a nonempty mask
+  containing the marked point with one pass and an entirely empty mask with two passes. A separate 362-frame
+  tracking graph seeded with the one-pass mask completed. CPU checks: 29 passed, one existing test skipped.
+- **Release:** `v2026.10.31`; image build and deployment pending. No complete H3 generation validated.
+- **Deployment:** the previous `v2026.10.30.1` image was published and selected for the Serverless worker template;
+  old workers were drained with no queued or running jobs. That image still contains the two-pass refinement.
+
 ## 2026-10-30
 
 ### Explicit subject marks seed SAM segmentation

@@ -17,6 +17,7 @@ def test_point_seeds_bidirectional_tracking_without_crossing_cuts():
     images[:,0,0,0]=torch.arange(8)
     calls=[]
     def detect(**kw):
+        assert kw['refine_iterations']==1, 'Mask-only refinement can erase the point segmentation'
         # Letterboxing an original 16x8 frame into 16x16 adds four pixels above it.
         assert json.loads(kw['positive_coords'])==[{'x':4,'y':8}]
         assert int(kw['image'][0,0,0,0])==3
