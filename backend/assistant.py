@@ -48,6 +48,17 @@ when every subject being replaced is a person; otherwise only Motion Transfer TA
 chosen studio mode and, for Motion Transfer TARA, the matching profile and method. If cancelled, stop preparing that edit and do not generate. Never treat the preselected studio
 mode or the assistant's earlier guess as the user's choice. Do not ask again after the user chooses.
 
+Editing what the clip itself shows — a style or look change ("make it claymation", "anime style", "at night", "snowing"),
+adding, removing or changing something in the scene (a jacket, a car, fire in his hands), or any other edit that keeps
+the same performance: recommend **Motion Transfer / Edit Anything v1.0** every time, not the replacement LoRAs. Configure
+it yourself: set_mode 'motion', set_options {"profile":"motion_mix_dyn99"} and set_first_frame, which selects that
+model and marks the Picture as the video's first frame. Give set_first_frame `time` + `instruction` to edit a guide
+frame with the installed image editor, or `picture` when the user already attached the edited frame. The edited frame
+becomes the first frame and its changes propagate through the whole clip while the guide keeps the motion, timing and
+camera; the line explaining the Picture's role is added to the prompt automatically, so do not write it yourself. Use
+TARA / Character Swap only when the user is replacing who or what appears. If no image editor is installed, say so and
+ask the user to use the "Choose and edit a frame" card in Motion Transfer, or attach a frame they edited elsewhere.
+
 Guide representation (how marked people reach the model):
 - original: the default. The video goes in as it is. Use this for ordinary swaps or motion transfer, including vehicles and objects. Multiple subjects may need marks to disambiguate reference assignments.
 - 2d: each marked person is tracked and tinted with its color; mark_opacity 0.35 keeps the face and expression visible, 1 is a solid color. Best for keeping several people apart (swap, motion).
@@ -98,6 +109,8 @@ STUDIO_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'all_people': {'type': 'boolean', 'description': 'True only after verifying every subject to replace is a person'}, 'question': {'type': 'string', 'description': "Short question in the user's language"}}, 'required': ['all_people', 'question'], 'additionalProperties': False}},
     {'name': 'set_mode', 'description': 'Switch the studio mode.',
      'input_schema': {'type': 'object', 'properties': {'mode': {'type': 'string', 'enum': ['swap', 'motion', 'headswap', 'sharpness']}}, 'required': ['mode'], 'additionalProperties': False}},
+    {'name': 'set_first_frame', 'description': "Set the video's edited First Frame and select Motion Transfer / Edit Anything v1.0 (motion + profile motion_mix_dyn99): the model for editing what the clip shows (style, adding, removing or changing something) while the guide keeps the motion, timing and camera. Use it for those requests instead of the replacement models. Either picture=<attached Picture slot> for a frame that is already edited, or time=<seconds> + instruction=<what to change in that frame>, which edits that guide frame with the installed FLUX Klein editor and attaches the result as a new Picture. It also switches the studio to Motion Transfer; the prompt line explaining the Picture is added by the backend.",
+     'input_schema': {'type': 'object', 'properties': {'picture': {'type': 'integer', 'description': 'Slot of an attached Picture holding the edited first frame'}, 'time': {'type': 'number', 'description': 'Time in seconds, inside the selected interval, of the guide frame to edit'}, 'instruction': {'type': 'string', 'description': 'What to change in that frame (the edit request)'}}, 'additionalProperties': False}},
     {'name': 'set_prompt', 'description': 'Replace the request text in the prompt editor. Use @Picture1, @Picture2 for the pictures.',
      'input_schema': {'type': 'object', 'properties': {'text': {'type': 'string'}}, 'required': ['text'], 'additionalProperties': False}},
     {'name': 'mark_subject', 'description': 'Mark a performer at a time where find_people ran: give person (its number) or, if find_people missed them, x and y (0-1 of the frame) on their body; SAM segments from that point. One subject per performer: marking again with the same picture_slots (or with subject) adds a mark to that subject, e.g. the same person after a camera cut. Mark every performer at every moment they appear after a cut.',

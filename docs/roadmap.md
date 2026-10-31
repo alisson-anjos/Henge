@@ -3,7 +3,7 @@
 ## Done
 
 - Four modes on MiniMax H3, each with its own trained LoRA: Character Swap v1.1, Motion Transfer v1.0 / TARA v1.0 /
-  Combined, Head Swap v1.0 and Little More Sharpness (2K/4K with the H3 latent upscaler or NVIDIA RTX VSR).
+  Edit Anything v1.0, Head Swap v1.0 and Little More Sharpness (2K/4K with the H3 latent upscaler or NVIDIA RTX VSR).
 - Guide Latents and TARA-H3; the guide shown to the text encoder can be Latents + CLIP or latents only.
 - Unlimited length: shots at camera cuts or fixed length, context frames between shots, redo one shot.
 - Subject guidance with SAM 3.1 (tracked scene by scene across cuts): 2D color marks, 3D body, latent mask.

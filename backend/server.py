@@ -15,7 +15,7 @@ import moving_plate
 import app_updates
 import model_installer
 from model_installs import InstallManager
-from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts
+from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements,comfy_listed
 from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
@@ -162,7 +162,8 @@ def validate_request(r,options,slots):
     if not isinstance(r,dict) or r.get('mode') not in MODES or not isinstance(r.get('prompt'),str) or len(r['prompt'])>16000:raise ValueError('Provide a valid direction and prompt')
     profile,low,high=MODES[r['mode']]
     # API and MCP calls may omit the model: each mode gets its own default instead of Motion Transfer for everything.
-    if not options.get('profile'):options['profile']={'swap':'character','motion':'motion'}.get(r['mode'],options.get('profile'))
+    # An attached First Frame defaults to the Edit model: it is the one trained to propagate that frame through the clip.
+    if not options.get('profile'):options['profile']={'swap':'character','motion':FFP_PROFILE if isinstance(r.get('first_frame_slot'),int) else 'motion'}.get(r['mode'],options.get('profile'))
     if r['mode'] in FIXED_RECIPE:
         # Fixed-recipe modes build their own prompt; the profile is implied by the mode.
         r['prompt']=r['prompt'] or r['mode'];options['profile']=profile;options['enhance_prompt']=True
@@ -354,7 +355,11 @@ EDIT_OPS={'replace':'Replace {what} with {target}.','remove':'Remove {what} and 
 def edit_instruction(op,what,target,refs):
     text=EDIT_OPS.get(op,'{target}').format(what=what or 'the marked part',target=target or what or '')
     if refs:text+=' '+' '.join(f'Use image {i} as the reference for its look.' for i in range(2,refs+2))
-    return text+' Keep everything else exactly the same: composition, poses, camera angle, framing, lighting and style.'
+    # An edited first frame that moved the camera or the performer fights the guide latents, so the lock is spelled out
+    # (camera, framing, placement, size, outline, pose, facing) rather than summarised.
+    return text+(' Keep everything else exactly the same: identical camera, framing, perspective and composition, every'
+                 ' object, prop and character in the same place, at the same size, with the same outline, pose and facing,'
+                 ' pixel-aligned with the reference, plus the same lighting and style. Change only what was asked for.')
 
 def masked_region(frame,mask,margin=.25,minimum=512):
     """The box around the painted pixels, grown by `margin` and to at least `minimum` px a side (clamped to the frame)."""
@@ -1594,18 +1599,25 @@ async def create_job(request:Request):
         r=json.loads(str(form.get('direction','{}')));options=json.loads(str(form.get('options','{}')))
         pictures={int(k.split('_')[1]):v for k,v in form.items() if re.fullmatch(r'picture_\d+',k)}
         if len(pictures)>11:raise ValueError('Attach up to 11 reference images')
-        # New jobs without a turbo get the default one, stored with the job, when the backend lists its file; otherwise
-        # DMD 8-step, so a job does not fail on a model that was never installed. A distilled base such as OmniRef keeps none.
+        # Motion Transfer defaults: an attached First Frame selects Motion Transfer / Edit Anything v1.0, the model that carries the
+        # edit through the whole clip; otherwise the TARA model and method when the worker has the TARA node.
+        if r.get('mode')=='motion' and 'profile' not in options:
+            if isinstance(r.get('first_frame_slot'),int):options['profile']=FFP_PROFILE
+            else:
+                options['profile']='motion_tara'
+                try:tara='BFSMiniMaxH3NativeTemporal' in comfy_info()
+                except Exception:tara=False
+                if tara:options.setdefault('conditioning_mode','tara')
+        # New jobs without a turbo get the one their model asks for (`turbo_default`, e.g. a model whose merge already
+        # carries a step-distillation adapter), otherwise the standard 4-step turbo; both only when the backend lists
+        # the file, else DMD 8-step, so a job does not fail on a model that was never installed. A distilled base such
+        # as OmniRef keeps none.
         if 'turbo' not in options and options.get('base','h3')=='h3':
             known_loras();installed=workflows.INSTALLED.get('LoraLoaderModelOnly')
-            default=workflows.DEFAULT_TURBO if installed and workflows.lora_installed(TURBOS[workflows.DEFAULT_TURBO]['lora'],installed) else 'dmd8'
-            options['turbo']=default;options.setdefault('steps',workflows.DEFAULT_STEPS)
-        # Motion Transfer defaults to the TARA model with the TARA method when the worker has the TARA node.
-        if r.get('mode')=='motion' and 'profile' not in options:
-            options['profile']='motion_tara'
-            try:tara='BFSMiniMaxH3NativeTemporal' in comfy_info()
-            except Exception:tara=False
-            if tara:options.setdefault('conditioning_mode','tara')
+            wanted=[MODELS.get(options.get('profile',''),{}).get('turbo_default'),workflows.DEFAULT_TURBO]
+            default=next((t for t in wanted if t in TURBOS and installed and workflows.lora_installed(TURBOS[t]['lora'],installed)),'dmd8')
+            options['turbo']=default
+            options.setdefault('steps',workflows.DEFAULT_STEPS if default==workflows.DEFAULT_TURBO else TURBOS[default]['steps'])
         # Sharpness defaults to pure temporal windows when the caller (assistant, MCP, API) does not choose and the
         # worker supports them; an explicit setting, including off, is kept.
         if r.get('mode')=='sharpness' and 'temporal_windows' not in options:
@@ -1779,6 +1791,18 @@ def frame_edit_image(jid:str):
     job=load(jid);path=INPUT/'henge'/jid/'edited.png'
     if (job.get('request') or {}).get('mode')!='frame_edit' or not path.is_file():raise HTTPException(404,'Unknown frame edit')
     return FileResponse(path,media_type='image/png')
+
+@app.delete('/frame-edits')
+def clear_frame_edits():
+    """Clear the recent edits the First Frame modal offers: their records and edited pictures. Clearing the generation
+    history keeps them, so this is the way to free that space on purpose."""
+    deleted=[]
+    for f in JOBS.glob('*/job.json'):
+        try:job=json.loads(f.read_text())
+        except (OSError,ValueError):continue
+        if (job.get('request') or {}).get('mode')=='frame_edit':
+            delete_job_files(job.get('id') or f.parent.name);deleted.append(f.parent.name)
+    return {'deleted':deleted}
 
 @app.post('/jobs/{jid}/retry')
 def retry(jid:str):

@@ -209,22 +209,6 @@
       ]
     },
     {
-      "id": "motion_transfer_combined_dyn99",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors",
-      "destination": "loras/henge/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors",
-      "profiles": [
-        "motion_transfer"
-      ]
-    },
-    {
-      "id": "motion_transfer_combined_dyn95",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors",
-      "destination": "loras/henge/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors",
-      "profiles": [
-        "motion_transfer"
-      ]
-    },
-    {
       "id": "motion_transfer_tara_v1",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors",
       "destination": "loras/henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors",
@@ -233,33 +217,14 @@
       ]
     },
     {
-      "id": "solar_control_dyn95",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/solarrenderer_control_fro_dyn95.safetensors",
-      "destination": "loras/henge/solarrenderer_control_fro_dyn95.safetensors",
-      "profiles": [
-        "solar",
-        "experimental"
-      ],
-      "note": "Experimental. SolarRenderer control alone, dynamic rank keeping 95% of the Frobenius energy (105 MB); ComfyUI H3 keys."
-    },
-    {
-      "id": "solar_control_dyn99",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/solarrenderer_control_fro_dyn99.safetensors",
-      "destination": "loras/henge/solarrenderer_control_fro_dyn99.safetensors",
-      "profiles": [
-        "solar",
-        "experimental"
-      ],
-      "note": "Experimental. SolarRenderer control alone, dynamic rank keeping 99% of the Frobenius energy (757 MB); ComfyUI H3 keys."
-    },
-    {
       "id": "turbo_solar4",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_4step_comfy.safetensors",
       "destination": "loras/henge/solarrenderer_4step_comfy.safetensors",
       "profiles": [
-        "solar"
+        "solar",
+        "ffp"
       ],
-      "note": "Optional turbo LoRA (4 steps): SolarRenderer 4-step converted to ComfyUI H3 keys."
+      "note": "Turbo LoRA (4 steps): SolarRenderer 4-step converted to ComfyUI H3 keys. An optional speed LoRA, selectable in Advanced > Turbo LoRA; the First Frame model does not need it, it runs on the standard DMAD 4-step turbo."
     },
     {
       "id": "klein3_text_encoder",
@@ -348,20 +313,13 @@
     },
     {
       "id": "ffp",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
-      "destination": "loras/henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors",
+      "destination": "loras/henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors",
+      "sha256": "4c38bb2685af503e890bbae70a0aaa7cfc0241d98166771f637b726f57a09ee8",
       "profiles": [
         "ffp"
       ],
-      "note": "First-frame propagate: VFX Edit FFP r128 x1.0 + SolarRenderer control x0.5, Frobenius dyn99 (220 MB)."
-    },
-    {
-      "id": "ffp_dyn95",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/experimental/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
-      "destination": "loras/henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors",
-      "profiles": [
-        "ffp"
-      ]
+      "note": "Motion Transfer / Edit Anything v1.0 (220 MB): the VFX Edit first-frame LoRA (rank 128) x1.0 + SolarRenderer control x0.5, rank concat with per-module SVD keeping 99% of the Frobenius energy. The studio selects it whenever a First Frame is attached; it runs on the standard DMAD 4-step turbo."
     },
     {
       "id": "sharpness",

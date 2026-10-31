@@ -1,8 +1,7 @@
 {
  "henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors": "henge/motion_10500.safetensors",
  "henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors": "henge/motion_tara_4500.safetensors",
- "henge/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors": "henge/motion_10500_tara03_fro_dyn95.safetensors",
- "henge/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors": "henge/motion_10500_tara03_fro_dyn99.safetensors",
+ "henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors": "henge/vfx_ffp_solar05_fro_dyn99.safetensors",
  "henge/minimax_h3_ref2va_training_adapter_v2.safetensors": "henge/training_adapter_v2.safetensors",
  "henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors": "henge/character_v1_1.safetensors",
  "henge/minimax_h3_head_swap_v1.0_r32.safetensors": "henge/head_swap_v1_0_r32.safetensors",
@@ -17,6 +16,5 @@
  "henge/minimax_h3_motion_transfer_v1.0_adapter_v2_solar05.safetensors": "henge/motion10500_plus_adapter_v2_solar05.safetensors",
  "henge/solarrenderer_control_comfy.safetensors": "henge/solar_control.safetensors",
  "henge/solarrenderer_4step_comfy.safetensors": "henge/turbo_solar_4step.safetensors",
- "henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors": "henge/vfx_ffp_solar05_fro_dyn99.safetensors",
- "henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors": "henge/vfx_ffp_solar05_fro_dyn95.safetensors"
+ "henge/minimax_h3_motion_transfer_ffp_v1.0_solar05_dyn99.safetensors": "henge/vfx_ffp_solar05_fro_dyn99.safetensors"
 }

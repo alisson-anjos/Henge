@@ -10,6 +10,8 @@ import VideoTrimModal, {type ClipRange} from './video-trim-modal';
 import {COMMUNITY, type CommunityPreset} from '../lib/community';
 import FirstFrameModal, {coverFit} from './first-frame-modal';
 const FIRST_FRAME_KEY = 'henge-first-frame';
+// The model a First Frame uses: the studio selects it as soon as an edited frame is attached.
+const EDIT_MODEL = 'motion_mix_dyn99';
 import GenerationPanel, {type GenerationJob, type PanelControls, versionQuery} from './generation-panel';
 import AssistantPanel, {type StudioCall, type StudioController, type StudioResult} from './assistant-panel';
 import {annotated, captureFrame, drawGrid, drawPoint, thumbnail} from '../lib/frame-capture';
@@ -91,6 +93,9 @@ export default function Studio() {
   const [editSlot, setEditSlot] = useState<number | null>(null);
   const [frameModal, setFrameModal] = useState(false);
   const [requestedProfile, setRequestedProfile] = useState<string | null>(null);
+  // Which model the model picker currently holds. The panel owns that state; the studio needs it to show the right
+  // prompt tips, because an edit is prompted differently from a straight Motion Transfer.
+  const [panelProfile, setPanelProfile] = useState<string | null>(null);
   const [editingVideo, setEditingVideo] = useState(false);
   const [subjects, setSubjects] = useState<SubjectBinding[]>([]);
   const [guideRepresentation, setGuideRepresentation] = useState<GuideRepresentation>('original');
@@ -238,6 +243,24 @@ export default function Studio() {
   const fixedRecipe = isFixedRecipe(mode);
   const maxPictures = mode === 'headswap' ? 1 : mode === 'sharpness' ? 0 : MAX_PICTURES;
   const activePictures = pictures.filter(p => p.slot <= maxPictures);
+  // Editing is what Motion Transfer / Edit Anything does: the First Frame already fixes how the video starts, so the
+  // prompt states the change and what must survive it, and never describes the character all over again.
+  const editMode = mode === 'motion' && (firstFrameSlot !== null || panelProfile === EDIT_MODEL);
+  // Plain Motion Transfer is prompted the other way round: name the picture, say what to copy from the guide video.
+  const promptTips = editMode
+    ? [
+      // Published VFX Edit prompting: one English sentence, the change first, then what has to survive it. Henge adds
+      // the `vfx_edit:` trigger and names the First Frame itself.
+      {label: tr('fire in his hands', 'fogo nas mãos dele', 'fuego en sus manos'), text: "Add fire effects to the man's hands while preserving his identity, pose, motion, clothing, framing, lighting and background."},
+      {label: tr('turn it into claymation', 'transformar em massinha', 'convertirlo en plastilina'), text: 'Turn the whole scene into claymation while preserving the performer, his pose, motion, clothing, framing, lighting and the background layout.'},
+      {label: tr('remove the car behind him', 'remover o carro atrás dele', 'quitar el coche detrás'), text: 'Remove the car behind the man while preserving his identity, pose, motion, clothing, framing, lighting and the rest of the background.'},
+    ]
+    : [
+      // The trained summary sentence, kept to one line: the Improve tab expands it into the six-part H3 caption.
+      {label: tr('copy the motion', 'copiar o movimento', 'copiar el movimiento'), text: 'The target video follows the frame-by-frame structure and motion of @Video1: the same performance, timing and camera.'},
+      {label: tr('change the setting', 'mudar o cenário', 'cambiar el escenario'), text: 'The target video follows the frame-by-frame structure and motion of @Video1, set in a rain-soaked neon street at night.'},
+      {label: tr('restyle it', 'mudar o estilo', 'cambiar el estilo'), text: 'The target video follows the frame-by-frame structure and motion of @Video1, rendered as claymation with the same framing.'},
+    ];
   const busy = working;
 
   useEffect(() => () => {
@@ -409,6 +432,34 @@ export default function Studio() {
       case 'set_mode': {
         const m = String(input.mode) as Mode; if (!['swap', 'motion', 'headswap', 'sharpness'].includes(m)) throw Error('Unknown mode');
         setMode(m); setKeepAudio(true); await settle(); return {text: `Mode is now ${m}.`};
+      }
+      // The First Frame of an edit: an attached Picture, or a guide frame edited here with the installed image editor.
+      // Either way the studio moves to Motion Transfer with Motion Transfer / Edit Anything v1.0, the model that carries the edit
+      // through the whole clip while the guide keeps the motion, timing and camera.
+      case 'set_first_frame': {
+        if (!c.video?.url) throw Error('Attach the guide video first');
+        let slot = Number(input.picture ?? 0);
+        if (input.picture !== undefined) {
+          if (!pictures.some(p => p.slot === slot)) throw Error(`Picture ${slot} is not attached. Attach it, or give time and instruction to edit a guide frame.`);
+        } else {
+          const t = inRange(num('time'));
+          const frame = await captureFrame(c.video.url, t);
+          const instruction = String(input.instruction ?? '').trim();
+          if (!instruction) throw Error('Give instruction (what changes in that frame) or picture (an attached Picture to use as it is)');
+          const body = new FormData();
+          body.set('frame', frame.blob, 'frame.png'); body.set('instruction', instruction); body.set('op', 'free');
+          const edited = await fetch('/api/backend/frame-edit', {method: 'POST', body});
+          if (!edited.ok) {const reply = await edited.json().catch(() => ({})); throw Error(reply.detail || `HTTP ${edited.status}`);}
+          const editId = edited.headers.get('x-henge-edit'); if (!editId) throw Error('The image editor returned no frame');
+          const file = await coverFit(`/api/backend/frame-edits/${editId}`, frame.width, frame.height);
+          slot = Array.from({length: maxPictures}, (_, i) => i + 1).find(i => !pictures.some(p => p.slot === i)) ?? 0;
+          if (!slot) throw Error('Every Picture slot is taken; remove one reference first');
+          setPictures(current => [...current, {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
+          try {localStorage.setItem(FIRST_FRAME_KEY, JSON.stringify({id: editId, width: frame.width, height: frame.height, slot, guide: guideSignature}));} catch {/* private mode */}
+        }
+        if (mode !== 'motion') setMode('motion');
+        setFirstFrameSlot(slot); setRequestedProfile(EDIT_MODEL); await settle();
+        return {text: `Picture ${slot} is the edited first frame and Motion Transfer / Edit Anything v1.0 is selected; it propagates that frame through the clip while the guide keeps the motion.`};
       }
       case 'set_prompt': setPrompt(String(input.text ?? '')); await settle(); return {text: 'Prompt updated.'};
       case 'mark_subject': {
@@ -648,9 +699,21 @@ export default function Studio() {
   function removePicture(slot: number) {
     const item = pictures.find(p => p.slot === slot);
     if (item) URL.revokeObjectURL(item.url);
-    setPictures(pictures.filter(p => p.slot !== slot));
+    // Picture indices must stay consecutive from Picture 1 — the backend refuses to renumber them silently, which is
+    // why removing an earlier reference used to leave the edited First Frame marked as Picture 3 and block rendering.
+    // Closing the gap renumbers everything that points at those pictures: the mark, subject bindings, prompt tags,
+    // recommended slots and the persisted first frame.
+    const shift = (n: number) => n > slot ? n - 1 : n;
+    setPictures(pictures.filter(p => p.slot !== slot).map(p => p.slot > slot ? {...p, slot: shift(p.slot)} : p));
+    setExpectedSlots(expectedSlots.map(shift).filter(n => n >= 1 && n <= maxPictures));
+    setBringSlots(bringSlots.map(b => ({...b, slot: shift(b.slot)})));
+    setSubjects(current => current.map(s => ({...s, picture_slots: s.picture_slots.flatMap(n => n === slot ? [] : [shift(n)])})));
+    setPrompt(prompt.replace(/@Picture(\d+)/g, (match, digits) => Number(digits) === slot ? '' : `@Picture${shift(Number(digits))}`).replace(/ {2,}/g, ' '));
     if (slot === firstFrameSlot) {setFirstFrameSlot(null); try {localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}}
-    setSubjects(current => current.map(s => ({...s, picture_slots: s.picture_slots.filter(n => n !== slot)})));
+    else if (firstFrameSlot) {
+      const moved = shift(firstFrameSlot); setFirstFrameSlot(moved);
+      try {const saved = JSON.parse(localStorage.getItem(FIRST_FRAME_KEY) || 'null'); if (saved) localStorage.setItem(FIRST_FRAME_KEY, JSON.stringify({...saved, slot: moved}));} catch {/* private mode */}
+    }
   }
   async function readPrompt() {
     setTranslating(true);
@@ -729,10 +792,13 @@ export default function Studio() {
     let saved: {id: string; width: number; height: number; slot: number; guide: string} | null = null;
     try {saved = JSON.parse(localStorage.getItem(FIRST_FRAME_KEY) || 'null');} catch {/* private mode */}
     if (!saved || saved.guide !== guideSignature || pictures.some(p => p.slot === saved!.slot)) return;
-    const {id, width, height, slot} = saved;
+    const {id, width, height, slot: storedSlot} = saved;
     coverFit(`/api/backend/frame-edits/${id}`, width, height).then(file => {
+      // A reload can find the stored index behind the pictures that are back; indices stay consecutive from Picture 1.
+      const slot = storedSlot <= pictures.length ? storedSlot : pictures.length + 1;
       setPictures(current => current.some(p => p.slot === slot) ? current : [...current, {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
-      setFirstFrameSlot(slot); setRequestedProfile('motion_ffp');
+      setFirstFrameSlot(slot); setRequestedProfile(EDIT_MODEL);
+      if (slot !== storedSlot) try {localStorage.setItem(FIRST_FRAME_KEY, JSON.stringify({...saved, slot}));} catch {/* private mode */}
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video?.url, guideSignature]);
@@ -742,6 +808,8 @@ export default function Studio() {
     setSubjects(readSubjectBindings(r.subject_guidance?.bindings)); setGuideRepresentation(r.subject_guidance && ['2d', '3d', 'mask'].includes(r.subject_guidance.representation) ? r.subject_guidance.representation : 'original'); if (typeof r.subject_guidance?.mark_opacity === 'number') setMarkOpacity(r.subject_guidance.mark_opacity); setGuideSignature(r.video?.source_signature || '');
     if (typeof r.project === 'string') setProject(r.project);
     setFirstFrameSlot(typeof r.first_frame_slot === 'number' ? r.first_frame_slot : null);
+    // A restored or imported direction that carries a First Frame uses the Edit model (the panel switches with it).
+    if (typeof r.first_frame_slot === 'number') setRequestedProfile(EDIT_MODEL);
     setPrompt(r.editor_prompt ?? r.prompt ?? ''); setAudioConditioning(r.audio_conditioning?.enabled === true);
     setKeepAudio(r.output_audio?.keep_source !== false);
     if (r.processing) {setShotSeconds(r.processing.requested_seconds_per_shot || 4.5); setTimelineFps(r.processing.timeline_fps || 24); setContextFrames(r.processing.context_frames || 22); if (r.processing.cut_mode) setCutMode(r.processing.cut_mode);}
@@ -829,14 +897,14 @@ export default function Studio() {
       const slot = firstFrameSlot ?? Array.from({length: maxPictures}, (_, i) => i + 1).find(i => !pictures.some(p => p.slot === i));
       if (!slot) {setNotice(tr('Remove a picture to make room for the first frame.', 'Remova uma Picture para abrir espaço para o primeiro quadro.', 'Quita una imagen para dejar espacio al primer fotograma.')); return;}
       setPictures(current => [...current.filter(p => {if (p.slot === slot) URL.revokeObjectURL(p.url); return p.slot !== slot;}), {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
-      setFirstFrameSlot(slot); setRequestedProfile('motion_ffp'); setFrameModal(false);
+      setFirstFrameSlot(slot); setRequestedProfile(EDIT_MODEL); setFrameModal(false);
       // FFP propagates from the clip's first frame: a later edited frame becomes the start of the interval.
       const moved = at !== undefined && video.range && at > video.range.start + .02 ? at : null;
       if (moved !== null) setVideo(v => v?.range ? {...v, range: {start: moved, end: v.range.end}} : v);
       // A frame edit lives on the bridge: remember it with this guide so a reload can bring it back.
       try {if (edit) localStorage.setItem(FIRST_FRAME_KEY, JSON.stringify({...edit, slot, guide: guideSignature})); else localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}
       if (moved !== null) {setNotice(tr(`Picture ${slot} is the edited frame; the interval now starts there (${moved.toFixed(2)} s), since the first-frame model propagates from the start.`, `A Imagem ${slot} é o quadro editado; o intervalo agora começa nele (${moved.toFixed(2)} s), porque o modelo propaga a partir do início.`, `La Imagen ${slot} es el fotograma editado; el intervalo ahora empieza en él (${moved.toFixed(2)} s), porque el modelo propaga desde el inicio.`)); return;}
-      setNotice(tr(`Picture ${slot} is the edited first frame. The First-frame propagate model is selected; describe the edit in the prompt.`, `A Imagem ${slot} é o primeiro quadro editado. O modelo First-frame propagate foi selecionado; descreva a edição no prompt.`, `La Imagen ${slot} es el primer fotograma editado. Se seleccionó el modelo First-frame propagate; describe la edición en el prompt.`));
+      setNotice(tr(`Picture ${slot} is the edited first frame. Motion Transfer / Edit Anything v1.0 is selected; describe the edit in the prompt.`, `A Imagem ${slot} é o primeiro quadro editado. Motion Transfer / Edit Anything v1.0 foi selecionado; descreva a edição no prompt.`, `La Imagen ${slot} es el primer fotograma editado. Se seleccionó Motion Transfer / Edit Anything v1.0; describe la edición en el prompt.`));
     }}/>}
     {editingVideo && video && <VideoTrimModal file={video.file} url={video.url} initial={video.range} onConfirm={(range, duration) => {setVideo(v => v ? {...v, range, duration} : v); setEditingVideo(false);}} onCancel={() => {if (!video.range) removeVideo(); setEditingVideo(false);}}/>}
     <header className="topbar">
@@ -891,7 +959,7 @@ export default function Studio() {
                 <li>{tr('Pick any frame of the guide, then replace, remove or add something, or paint the area, with FLUX Klein. You can also upload your own edited frame.', 'Escolha qualquer quadro do guia e substitua, remova ou adicione algo, ou pinte a área, com o FLUX Klein. Também dá para enviar o seu próprio quadro editado.', 'Elige cualquier fotograma de la guía y reemplaza, quita o añade algo, o pinta el área, con FLUX Klein. También puedes subir tu propio fotograma editado.')}</li>
                 <li>{tr('The video starts at that frame and the edit is carried through every frame after it.', 'O vídeo começa nesse quadro e a edição é levada para todos os quadros seguintes.', 'El vídeo empieza en ese fotograma y la edición se lleva a todos los siguientes.')}</li>
               </ul>
-              <small>{tr('Model: FFP LoRA (SolarRenderer merge, dyn99 or the lighter dyn95).', 'Modelo: LoRA FFP (merge com SolarRenderer, dyn99 ou o mais leve dyn95).', 'Modelo: LoRA FFP (mezcla con SolarRenderer, dyn99 o el más ligero dyn95).')}</small>
+              <small>{tr('Model: Motion Transfer / Edit Anything v1.0, the first-frame LoRA. The other Motion models ignore the frame.', 'Modelo: Motion Transfer / Edit Anything v1.0, a LoRA de primeiro quadro. Os outros modelos de movimento ignoram o quadro.', 'Modelo: Motion Transfer / Edit Anything v1.0, la LoRA de primer fotograma. Los demás modelos de movimiento ignoran el fotograma.')}</small>
               {firstFrameSlot && pictures.find(p => p.slot === firstFrameSlot) && <div className="ffp-current"><img src={pictures.find(p => p.slot === firstFrameSlot)!.url} alt=""/><span>{tr(`Picture ${firstFrameSlot} · edited frame`, `Imagem ${firstFrameSlot} · quadro editado`, `Imagen ${firstFrameSlot} · fotograma editado`)}</span></div>}
               <div className="ffp-actions"><button className="primary first-frame-button" onClick={() => setFrameModal(true)}><Icon name="image" size={14}/>{firstFrameSlot ? tr('Change the edited frame', 'Trocar o quadro editado', 'Cambiar el fotograma editado') : tr('Choose and edit a frame', 'Escolher e editar um quadro', 'Elegir y editar un fotograma')}</button>
               {firstFrameSlot && <button type="button" className="text-link" onClick={() => {setFirstFrameSlot(null); try {localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}}}>{tr('Don’t propagate', 'Não propagar', 'No propagar')}</button>}</div></details>}
@@ -955,7 +1023,7 @@ export default function Studio() {
               {mode === 'sharpness' && <pre className="native-preview">Enhance this video with sharp, crisp details while preserving a natural photorealistic appearance.</pre>}</div>}
             
             {mode === 'sharpness' && <div id="sharpness-controls"/>}
-            {!fixedRecipe && <div className="prompt-editor"><textarea ref={textarea} aria-label="Execution prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={mode === 'swap' ? t.phSwap : t.phMotion}/>{query && suggestions.length > 0 && <div className="mention-menu">{suggestions.map(tag => <button key={tag} onClick={() => insertTag(tag)}>{tag}</button>)}</div>}</div>}
+            {!fixedRecipe && <div className="prompt-editor"><textarea ref={textarea} aria-label="Execution prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={editMode ? t.phEdit : mode === 'swap' ? t.phSwap : t.phMotion}/>{query && suggestions.length > 0 && <div className="mention-menu">{suggestions.map(tag => <button key={tag} onClick={() => insertTag(tag)}>{tag}</button>)}</div>}{mode === 'motion' && <div className="prompt-tips"><div className="tip-examples">{promptTips.map(tip => <button type="button" key={tip.text} title={tip.text} onClick={() => setPrompt(tip.text)}>{tip.label}</button>)}</div><small className="tip-hint">{editMode ? t.editTips : t.motionTips}</small></div>}</div>}
             {!fixedRecipe && promptMode === 'auto' && <div className="auto-prompt-bar">
               {autoSource === null
                 ? <button type="button" className="primary" disabled={working || !prompt.trim()} onClick={autoPrompt}><Icon name="spark" size={14}/>{working ? tr('Writing…', 'Escrevendo…', 'Escribiendo…') : tr('Write the prompt now', 'Escrever o prompt agora', 'Escribir el prompt ahora')}</button>
@@ -968,7 +1036,7 @@ export default function Studio() {
             <div className="prompt-footer">{!fixedRecipe && <><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></>}<div className="prompt-generation-actions" id="prompt-generation-actions"/></div>
           </section>
           <input hidden ref={importSettingsInput} type="file" accept="application/json,.json" onChange={e => {importSettings(e.target.files?.[0]); e.target.value = '';}}/>
-          <GenerationPanel background={mode === 'swap' || mode === 'motion' ? background?.file || null : null} key={importRevision} onEnhanceChange={setEnhanceOn} registerControls={controls => {panelControls.current = controls;}} freshRevision={freshRevision} requestedProfile={requestedProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
+          <GenerationPanel background={mode === 'swap' || mode === 'motion' ? background?.file || null : null} key={importRevision} onEnhanceChange={setEnhanceOn} registerControls={controls => {panelControls.current = controls;}} freshRevision={freshRevision} requestedProfile={requestedProfile} onProfileChange={setPanelProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
           </section>
         </section>
 

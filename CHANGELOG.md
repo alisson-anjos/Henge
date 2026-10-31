@@ -9,6 +9,41 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-31
 
+### Surface the first-frame edit model as Motion Transfer / Edit Anything v1.0
+
+- The Motion model dropdown now offers exactly three models: **Motion Transfer v1.0**, **Motion Transfer TARA v1.0**
+  and **Motion Transfer / Edit Anything v1.0**. The dyn95/dyn99 comparison mixes, the older First Frame profile and the
+  SolarRenderer-only profiles are no longer offered, while their profile keys still resolve for saved jobs and shared
+  settings. The Edit model keeps the internal key `motion_mix_dyn99` and now points at
+  `minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors`, promoted from `loras/experimental/` in the Hugging Face
+  repository; the two combined mixes and the rest of `loras/experimental/` were deleted there.
+- Attaching a **First Frame** selects the Edit model: the studio, the backend request defaults and the assistant
+  (`set_first_frame`, which can also edit a guide frame with FLUX Klein first) all converge on it, and the model is
+  discovered through its `ffp` flag instead of a hard-coded name.
+- Turbo defaults are now per model: `DEFAULT_TURBO` is `dmad4`, and the Edit model declares `turbo_default`, so the
+  first-frame merge samples on **DMAD 4-step (Kijai)** like every other model instead of stacking SolarRenderer control
+  twice. SolarRenderer 4-step remains an optional speed LoRA under Advanced → Turbo LoRA, and the download manifest
+  keeps offering it with the First Frame model.
+- The prompt box now teaches the two prompt shapes: example sentences that drop straight in (copy the motion / change
+  the setting / restyle it, or, for an edit, the change first and then what must survive it), a first-frame-aware
+  placeholder, and a frame-editor instruction that locks camera, framing, placement, size, outline, pose and facing so
+  an edited frame does not fight the guide latents. `docs/motion-transfer.md` gained a *Writing the prompt* section
+  covering the one-line-plus-Improve flow and the `vfx_edit:` sentence form.
+- **Fix:** removing an earlier reference picture closed the gap everywhere — First Frame mark, subject bindings,
+  `@PictureN` tags in the prompt, recommended slots and the persisted first frame — instead of leaving the edited frame
+  marked as `Picture 3` and failing with “reference indices cannot be silently renumbered”.
+- **Recent edits** shown in the First Frame modal can be deleted: `DELETE /api/backend/frame-edits` removes the stored
+  frame-edit records, edited pictures and staged inputs without touching normal generations.
+- **Components:** model profiles and manifests, request defaults, studio model picker and prompt coaching, First Frame
+  modal, assistant tools, download manifest, legacy alias table, documentation and tests.
+- **Validation:** 236 CPU tests passed, 4 skipped; `tsc --noEmit` and `npm run build` passed; two Playwright tests pass
+  against the local stack — the health contract exposes exactly the three Motion models with the FFP flag and the
+  `dmad4` turbo default, and the picker offers them, follows an attached/uploaded First Frame to the Edit model, keeps a
+  manual choice, and switches the prompt coaching to the edit examples. CPU validation does not replace generation with
+  the real models.
+- **Release:** code published on `main` as `v2026.10.31.3`; the tag triggers the Docker image build.
+  Image publication and deployment are pending.
+
 ### Offer official and Kijai Pika Ref2VA adapters
 
 - Pika now downloads and selects the official full-rank Comfy BF16 adapter from Pika-Labs/Pika-H3-Flex,

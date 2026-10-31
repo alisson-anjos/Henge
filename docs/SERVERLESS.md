@@ -58,8 +58,8 @@ Choose the model profiles (comma list), as on a normal pod:
 |---|---|---|
 | `character` | Character Swap | base H3, text encoder, VAE, VLM planner; always needed |
 | `motion` (or `motion_transfer`, `motion_transfer_tara`) | Motion Transfer | public, BFS Motion Transfer license |
-| `solar` | Motion Transfer (Solar merges, experimental) | ~25 GB |
-| `ffp` | Motion Transfer FFP: propagate an edited first frame (VFX Edit FFP + SolarRenderer 0.5; dyn99 and the lighter dyn95). Part of `motion` | 0.3 GB |
+| `solar` | SolarRenderer 4-step turbo (ComfyUI H3 keys) | 5.9 GB; installed with `ffp` |
+| `ffp` | Motion Transfer / Edit Anything v1.0: the VFX Edit first-frame LoRA merged with SolarRenderer control — the model a First Frame selects | 0.2 GB LoRA, running on the standard 4-step turbo; part of `motion` |
 | `headswap` | Head Swap | |
 | `sharpness` | Sharpness (H3 + Little More Sharpness LoRA; 2K/4K with the H3 or NVIDIA RTX upscaler) | ~1 GB (LoRA + H3 latent upscaler) |
 | `regenerate` | Sharpness default: Ref2VA + DMAD + rank-16 refiner + LMS + native upscale | Optional install; top up the volume and update the worker; no FL2VA |

@@ -189,6 +189,14 @@ img{display:block;max-width:100%}
 .native-preview{font:11px/1.7 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;background:var(--n-111119);border-top:1px solid var(--line);padding:16px;margin:0;color:var(--accent)}
 .mention-menu{display:flex;gap:5px;flex-wrap:wrap;padding:0 15px 12px}
 .mention-menu button{padding:6px 9px;border:1px solid rgba(var(--accent-rgb),.35);background:rgba(var(--accent-rgb),.06);color:var(--accent);border-radius:6px;font-size:11px}
+/* Prompt coaching: example sentences that drop straight into the editor, plus the shape the prompt should take. */
+.prompt-tips{display:flex;flex-direction:column;gap:9px;padding:2px 18px 16px}
+.tip-examples{display:flex;gap:6px;flex-wrap:wrap}
+.tip-examples button{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 11px;border:1px solid var(--n-2a2a36);border-radius:999px;background:rgba(var(--accent-rgb),.05);color:var(--muted);font-size:10px;white-space:nowrap;transition:border-color .25s,color .25s,background .25s,transform .2s}
+.tip-examples button::before{content:'“';font-family:var(--mono);color:var(--accent);opacity:.6}
+.tip-examples button:hover{border-color:rgba(var(--accent-rgb),.55);background:rgba(var(--accent-rgb),.1);color:var(--accent);transform:translateY(-1px)}
+.tip-hint{color:var(--muted);font-size:10px;line-height:1.6;max-width:72ch}
+@media(max-width:700px){.prompt-tips{padding:0 15px 14px}.tip-examples button{min-height:26px;font-size:9px}}
 .auto-brief{padding:16px;border-bottom:1px solid var(--line);background:rgba(var(--accent-rgb),.025)}
 .auto-brief label{display:block;font-size:12px;font-weight:500;margin-bottom:9px}
 .auto-brief textarea{width:100%;background:var(--n-0a0a10);border:1px solid var(--n-2a2a36);border-radius:9px;min-height:85px;padding:10px;font-size:12px;resize:vertical;line-height:1.6}
@@ -517,6 +525,8 @@ img{display:block;max-width:100%}
 .recent-edits button{flex:none;width:64px;height:64px;padding:0;border:1px solid var(--n-2a2a36);border-radius:8px;overflow:hidden;background:var(--n-13131b)}
 .recent-edits button[aria-pressed=true]{border-color:var(--accent)}
 .recent-edits img{width:100%;height:100%;object-fit:cover}
+.recent-edits .recent-edits-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:0;overflow:visible}
+.recent-edits .recent-edits-head button{width:auto;height:auto;min-height:24px;padding:0;border:0;background:none}
 .shot-strip{display:flex;flex-direction:column;gap:6px;margin:8px 0}.shot-strip .label-row{align-items:center}.shot-strip .label-row .quiet-button{min-height:28px;font-size:11px;padding:0 10px}
 .shot-strip>.shot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
 .shot-strip figure{margin:0;display:flex;flex-direction:column;gap:3px}.shot-strip video{width:100%;aspect-ratio:9/16;object-fit:contain;background:var(--n-000000);border-radius:8px;border:1px solid var(--line)}

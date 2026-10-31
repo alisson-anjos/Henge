@@ -48,6 +48,8 @@ frame counts; TARA uses the BFS model patch. The native examples do not require 
 | Turbo | `minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors` — [drbaph](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/tree/main/experimental) |
 | Guide Latents task | `minimax_h3_motion_transfer_v1.0_ref2va.safetensors` — [BFS LoRAs](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/tree/main/loras) |
 | TARA task | `minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors` — BFS LoRAs |
+| Edit task (First Frame) | `minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors` — [BFS LoRAs](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/blob/main/loras/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors): the VFX Edit first-frame LoRA ×1.0 + SolarRenderer control ×0.5, rank concat with per-module SVD keeping 99% of the Frobenius energy |
+| Turbo for the Edit task | `solarrenderer/solarrenderer_4step_comfy.safetensors` — [BFS LoRAs](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/tree/main/loras/solarrenderer): SolarRenderer 4-step, ComfyUI H3 keys (5.9 GB) |
 | Planner prompt VLM | `qwen3.5_9b_w4a8_gptq.safetensors` — [Comfy-Org MOSS-Image](https://huggingface.co/Comfy-Org/MOSS-Image/tree/main/text_encoders); choose another compatible generation-capable VLM if preferred |
 
 Place base weights in `models/diffusion_models`, encoders in `models/text_encoders`, VAE in `models/vae`,
@@ -55,6 +57,67 @@ and LoRAs in `models/loras`. Select the installed name if files live in a subfol
 prompt writing is separate from H3's own text encoder. Load the turbo and the task LoRA at strength 1; the
 training adapter the LoRAs were trained over only counters distillation during training and is not loaded. The examples use DMD 8-step, Euler/simple, CFG 1. Do not stack a second copy of a component
 that is already merged into your chosen weights.
+
+## Motion Transfer / Edit Anything v1.0 and the First Frame
+
+**Motion Transfer / Edit Anything v1.0** is our first-frame model: the VFX Edit first-frame LoRA (rank 128, trained to carry a
+painted frame through a video) merged with SolarRenderer control at ×0.5 — rank concatenation, then a per-module SVD that
+keeps 99% of the Frobenius energy (`minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors`, 220 MB). It runs with Guide
+Latents and with TARA. The merge already carries SolarRenderer control, so it does not stack the SolarRenderer step-
+distillation turbo on top: it samples on the standard **DMAD 4-step** turbo (Kijai) like every other model, and any other
+turbo stays selectable under Advanced.
+
+Whenever a **First Frame** is attached — a picture of the clip edited in advance, by hand or with the FLUX Klein
+editor — the studio selects this model by default and explains the picture's role in the prompt
+(`<Picture N> is the edited first frame of the video: propagate its changes through the whole clip while keeping the
+original motion, timing and camera`). The source video stays the guide frame by frame, so the edit propagates instead
+of being re-invented per shot. Removing the First Frame leaves the model choice as it is; picking another model by hand
+is respected.
+
+The guide stays the frame-by-frame tracing reference and enters as latents only, without the guide's frames reaching the
+text encoder, so nothing of the original performer leaks back (see [conditioning paths](conditioning.md)).
+
+The comparison LoRAs used while tuning this model — the dyn95 mixes and SolarRenderer control alone, kept under
+`loras/experimental/` — were removed from the Hugging Face repository. A job rendered with them re-renders only where
+those files are still installed.
+
+## Writing the prompt
+
+The studio puts example sentences under the prompt box; clicking one drops it in, then **Improve** writes the full
+caption. Both forms exist because the two jobs are prompted differently.
+
+**Copying a performance** (Motion Transfer, Motion Transfer TARA). One English line saying what to take from the guide
+is enough — `Improve` expands it into the six-part H3 caption the model was trained on (`subject_definitions`,
+`summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, `non_diegetic_music`), and the plan shows
+that caption for review before rendering:
+
+```text
+The target video follows the frame-by-frame structure and motion of @Video1: the same performance, timing and camera.
+```
+
+Name the picture that performs (`@Picture1`), say what changes (setting, style, wardrobe) and what stays (identity,
+framing, camera path). With **Exact text** the same line is sent verbatim, so write it in the six-part form yourself in
+that case.
+
+**Changing the clip itself** (Motion Transfer / Edit Anything). A first-frame edit is prompted with one English
+sentence, the change first and then what has to survive it — no subject definitions, because the First Frame already
+says who and where:
+
+```text
+vfx_edit: Add fire effects to the man's hands while preserving his identity, pose, motion, clothing, framing,
+lighting and background.
+```
+
+Henge adds the `vfx_edit:` trigger if you leave it out, and appends the First Frame clause naming `<Picture N>`, so the
+sentence itself only carries the edit. Never ask to preserve the very thing being edited — a style change that says
+“keep the lighting and colours” fights itself.
+
+**The frame you edit is the strongest control there is.** Render starts from it and keeps its materials, colours and
+light, so the edit must keep the guide's camera, layout, character positions, poses and facing, and change only the
+look — Henge's frame editor states exactly that in its instruction, and an uploaded frame should follow the same rule.
+A frame that moved the camera or the performer fights the guide latents. The upstream
+[SolarRenderer prompt guide](https://github.com/Enderfga/SolarRenderer/blob/main/docs/prompts.md) documents the same
+six-part form and the same first-frame rules, and its captioning skill is worth borrowing when a clip is stubborn.
 
 ## Native workflow
 

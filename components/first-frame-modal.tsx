@@ -96,6 +96,16 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
     try {const blob = await (await fetch(edit.url)).blob(); setResult({blob, url: URL.createObjectURL(blob), edit: edit.id}); setInstruction(edit.instruction);}
     catch {setError(tr('Could not load that edit.', 'Não foi possível carregar essa edição.', 'No se pudo cargar esa edición.'));}
   }
+  // Clearing the generation history keeps frame edits (they can be reused later), so the modal needs its own Clear:
+  // it deletes the stored edits and the space they take on this ComfyUI.
+  async function clearEdits() {
+    setError('');
+    try {
+      const response = await fetch('/api/backend/frame-edits', {method: 'DELETE'});
+      if (!response.ok) throw new Error(String(response.status));
+      setEdits([]); setResult(current => current ? {...current, edit: undefined} : current);
+    } catch { setError(tr('Could not clear the recent edits.', 'Não foi possível limpar as edições recentes.', 'No se pudo limpiar las ediciones recientes.')); }
+  }
   async function use() {
     if (!frame || !result) return;
     onUse(await coverFit(result.url, frame.width, frame.height), result.edit ? {id: result.edit, width: frame.width, height: frame.height} : null, image ? undefined : at);
@@ -155,7 +165,7 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
           {editRefs.length > 0 && <small className="muted">{tr('Mention them in the edit as ', 'Cite-as na edição como ', 'Menciónalas en la edición como ')}{editRefs.map((r, i) => `image ${i + 2} (${r.label})`).join(', ')}{tr(', e.g. "his jacket from image 2".', ', p.ex. "a jaqueta da image 2".', ', p.ej. "su chaqueta de la image 2".')}</small>}
           <input hidden ref={refUpload} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e => {const files = Array.from(e.target.files ?? []); setExtraRefs(cur => [...cur, ...files.map(file => ({file, url: URL.createObjectURL(file)}))]); e.target.value = '';}}/></div>
       </> : <small className="muted">{tr('No image editor (FLUX.3 / FLUX.2 Klein) is installed on this ComfyUI; upload an edited frame instead.', 'Nenhum editor de imagem (FLUX.3 / FLUX.2 Klein) está instalado neste ComfyUI; envie um quadro já editado.', 'No hay editor de imagen (FLUX.3 / FLUX.2 Klein) en este ComfyUI; sube un fotograma editado.')}</small>}
-      {edits.length > 0 && <div className="recent-edits"><span className="eyebrow muted">{tr('Recent edits', 'Edições recentes', 'Ediciones recientes')}</span><div>{edits.map(e => <button key={e.id} title={e.instruction} aria-pressed={result?.edit === e.id} onClick={() => pick(e)}><img src={e.url} alt={e.instruction} loading="lazy"/></button>)}</div></div>}
+      {edits.length > 0 && <div className="recent-edits"><div className="recent-edits-head"><span className="eyebrow muted">{tr('Recent edits', 'Edições recentes', 'Ediciones recientes')}</span><button type="button" className="text-link" title={tr('Delete the stored frame edits', 'Apague as edições de quadro armazenadas', 'Elimina las ediciones de fotograma guardadas')} onClick={clearEdits}>{tr('Clear', 'Limpar', 'Limpiar')}</button></div><div>{edits.map(e => <button key={e.id} title={e.instruction} aria-pressed={result?.edit === e.id} onClick={() => pick(e)}><img src={e.url} alt={e.instruction} loading="lazy"/></button>)}</div></div>}
       {error && <p className="validation" role="alert">{error}</p>}
     </div>
     </div>

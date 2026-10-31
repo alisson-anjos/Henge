@@ -203,7 +203,7 @@ class WorkflowContracts(unittest.TestCase):
   self.assertNotIn('VAELoader',[v['class_type'] for k,v in g.items() if k=='19']);self.assertNotIn('20',g)
   self.assertFalse(any(v['class_type']=='TextEncodeFibo2' for v in g.values()))
  def test_motion_profiles_run_without_the_training_adapter(self):
-  for profile in ['motion','motion_mix_dyn95']:
+  for profile in ['motion','motion_mix_dyn99']:
    g=h3_graph('test.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0)
    # No training adapter at inference: turbo (default dmd8) -> motion LoRA; without a turbo the LoRA sits on the base.
    self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors')
@@ -235,13 +235,43 @@ class WorkflowContracts(unittest.TestCase):
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'sharpness','quality':'2160p'},{'profile':'sharpness','upscale_method':'ltx'},[])
  def test_first_frame_propagate(self):
   from edit_modes import ffp_prompt
-  validate_request({**self.request(),'mode':'motion','prompt':'Add rain to the scene.'},{'profile':'motion_ffp'},[])
+  import workflows
+  ffp=workflows.FFP_PROFILE
+  validate_request({**self.request(),'mode':'motion','prompt':'Add rain to the scene.'},{'profile':ffp},[])
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','prompt':'Add rain to the scene.'},{'profile':'motion'},[])
-  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','first_frame_slot':2},{'profile':'motion_ffp'},[1])
-  validate_request({**self.request(),'mode':'motion','first_frame_slot':1},{'profile':'motion_ffp'},[1])
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','first_frame_slot':2},{'profile':ffp},[1])
+  validate_request({**self.request(),'mode':'motion','first_frame_slot':1},{'profile':ffp},[1])
   self.assertEqual(ffp_prompt('Add rain.'),'vfx_edit: Add rain.');self.assertIn('<Picture 3> is the edited first frame',ffp_prompt('vfx_edit: Add rain.',3))
-  g=h3_graph('v.mp4',['f.png'],'vfx_edit: Add rain.',512,288,107,107,'motion_ffp',1,8,'original',[],'human',0)
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors');self.assertEqual(g['2']['inputs']['lora_name'],'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
+  # The merge carries its own SolarRenderer control, so it builds on the standard turbo and takes the guide as latents only.
+  g=h3_graph('v.mp4',['f.png'],'vfx_edit: Add rain.',512,288,107,107,ffp,1,4,'original',[],'human',0,turbo=workflows.MODELS[ffp]['turbo_default'])
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors');self.assertEqual(g['2']['inputs']['lora_name'],workflows.TURBOS[workflows.MODELS[ffp]['turbo_default']]['lora']);self.assertFalse(g['9']['inputs']['guide_context'])
+ def test_motion_model_list_and_first_frame_default(self):
+  import json,workflows
+  # The studio offers three Motion models: the two trained ones and the Edit merge. The superseded comparison LoRAs are
+  # gone from the collection entirely.
+  self.assertEqual([key for key,model in workflows.MODELS.items() if model.get('task')=='motion'],['motion','motion_tara','motion_mix_dyn99'])
+  self.assertFalse([key for key in ('motion_ffp','motion_ffp_dyn95','motion_mix_dyn95','motion_solar_dyn95','motion_solar_dyn99') if key in workflows.MODELS])
+  # An API/MCP call that attaches a First Frame gets the Edit model, which propagates it.
+  options={};validate_request({**self.request(),'mode':'motion','prompt':'Add rain to the scene.','first_frame_slot':1},options,[1])
+  self.assertEqual(options['profile'],workflows.FFP_PROFILE)
+  # Without a First Frame the plain Motion Transfer LoRA stays the default.
+  options={};validate_request({**self.request(),'mode':'motion','prompt':'Follow this performance.'},options,[1])
+  self.assertEqual(options['profile'],'motion')
+  # The Edit model declares the standard 4-step turbo and the LoRA ships under the same name the download manifest uses.
+  self.assertEqual(workflows.MODELS[workflows.FFP_PROFILE]['turbo_default'],workflows.DEFAULT_TURBO)
+  g=h3_graph('v.mp4',['f.png'],'vfx_edit: Add rain.',512,288,107,107,workflows.FFP_PROFILE,1,4,'original',[],'human',0,turbo=workflows.MODELS[workflows.FFP_PROFILE]['turbo_default'])
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors')
+  self.assertEqual(g['2']['inputs']['lora_name'],workflows.TURBOS[workflows.DEFAULT_TURBO]['lora'])
+  self.assertFalse(g['9']['inputs']['guide_context'])
+  manifest=json.loads((Path(__file__).resolve().parents[2]/'config/model-repos.example.json').read_text())
+  by_id={item['id']:item for item in manifest['models']}
+  self.assertEqual(by_id['ffp']['destination'],'loras/henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors')
+  # Installing the First Frame model also offers the optional SolarRenderer turbo.
+  self.assertIn('ffp',by_id['turbo_solar4']['profiles'])
+  self.assertEqual([item['id'] for item in manifest['models'] if 'Minimax-H3-ComfyUI/resolve/main/loras/experimental/' in item.get('url','')],[])
+  offered={item['destination'] for item in manifest['models']}
+  for key in ('motion','motion_tara',workflows.FFP_PROFILE):
+    self.assertIn('loras/'+workflows.MODELS[key]['lora'],offered)
  def test_tara_structure_guidance(self):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion',1,8,'original',[],'human',0,conditioning_mode='tara',structure_cfg=1.5)
   self.assertEqual((g['21']['inputs']['structure_guidance'],g['21']['inputs']['structure_sigma_min']),(1.5,0.))

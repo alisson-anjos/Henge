@@ -3,23 +3,23 @@ Only branches selected in a validated plan are added: unused loaders never execu
 """
 import json,math
 from pathlib import Path
+# The model an attached First Frame defaults to: Motion Transfer / Edit Anything v1.0 (the profile key predates the name and stays
+# so jobs and settings shared earlier keep resolving).
+FFP_PROFILE='motion_mix_dyn99'
+# Default turbo for new jobs, and for any model that does not declare a `turbo_default` of its own.
+DEFAULT_TURBO='dmad4'
 MODELS={
  'motion':{'label':'Motion Transfer v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors','adapter':None,'clip_context':True},
  # Motion Transfer TARA v1.0: the LoRA trained for TARA; the studio switches to the TARA method with it.
  'motion_tara':{'label':'Motion Transfer TARA v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors','adapter':None,'clip_context':True,'method':'tara'},
- # Motion Transfer Combined (for testing): Motion Transfer v1.0 x1.0 + TARA v1.0 x0.3, rank concat then per-module SVD keeping 95% /
- # 99% of the Frobenius energy (tools/henge_session_20261025/merge_fro.py); for Guide Latents and TARA.
- 'motion_mix_dyn95':{'label':'Motion Transfer Combined · dyn95 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn95.safetensors','adapter':None,'clip_context':True},
- 'motion_mix_dyn99':{'label':'Motion Transfer Combined · dyn99 (test)','task':'motion','lora':'henge/minimax_h3_motion_transfer_combined_v1.0_dyn99.safetensors','adapter':None,'clip_context':True},
- # First-frame propagate: Alissonerdx VFX Edit FFP (r128) merged with SolarRenderer control at 0.5 (Frobenius dyn99 / dyn95).
- # The whole source is the guide; an optional edited first frame enters as a native image reference (prompt: vfx_edit:).
- 'motion_ffp':{'label':'Motion Transfer FFP · dyn99','task':'motion','lora':'henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn99.safetensors','adapter':None,'clip_context':False,'ffp':True},
- # The same merge kept at 95% of the energy: a lighter LoRA, a little less of SolarRenderer's control.
- 'motion_ffp_dyn95':{'label':'Motion Transfer FFP · dyn95','task':'motion','lora':'henge/minimax_h3_vfx_edit_ffp_v1.0_solar05_dyn95.safetensors','adapter':None,'clip_context':False,'ffp':True},
- # SolarRenderer control alone (no Henge LoRA, `solar` profile), shrunk to a dynamic rank by Frobenius energy: the
- # baseline to compare our Motion Transfer against.
- 'motion_solar_dyn95':{'label':'SolarRenderer control · dyn95 (comparison)','task':'motion','lora':'henge/solarrenderer_control_fro_dyn95.safetensors','adapter':None,'clip_context':True},
- 'motion_solar_dyn99':{'label':'SolarRenderer control · dyn99 (comparison)','task':'motion','lora':'henge/solarrenderer_control_fro_dyn99.safetensors','adapter':None,'clip_context':True},
+ # Motion Transfer / Edit Anything v1.0 (the profile key stays motion_mix_dyn99 so jobs and settings shared earlier keep resolving):
+ # the VFX Edit first-frame LoRA (rank 128) merged with SolarRenderer control at x0.5 by rank concat + per-module SVD
+ # keeping 99% of the Frobenius energy. A First Frame enters as a native reference (prompt: vfx_edit:) and propagates
+ # through the clip while the guide keeps the motion; like the other first-frame modes it takes the guide as latents only,
+ # without CLIP, so nothing of the original performer leaks. It already carries SolarRenderer control, so it does not stack
+ # the SolarRenderer step-distillation LoRA: this LoRA runs on the standard DMAD 4-step turbo (Kijai). Runs with Guide
+ # Latents and with TARA.
+ 'motion_mix_dyn99':{'label':'Motion Transfer / Edit Anything v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors','adapter':None,'clip_context':False,'ffp':True,'turbo_default':DEFAULT_TURBO},
  'character':{'task':'swap','label':'Character Swap v1.1','lora':'henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
@@ -41,9 +41,7 @@ TURBOS={
 SAMPLING=json.loads((Path(__file__).resolve().parents[1]/'lib/h3-sampling.json').read_text())
 SAMPLERS=tuple(SAMPLING['samplers'])
 PIKA=SAMPLING['pika']
-# Default turbo for new jobs. Graphs of older jobs that never stored a turbo keep building with DMD 8-step, so a
-# Retry reproduces them.
-DEFAULT_TURBO='dmad4'
+# Graphs of older jobs that never stored a turbo keep building with DMD 8-step, so a Retry reproduces them.
 DEFAULT_STEPS=8
 TURBOS[PIKA['turbo']]={'label':'Pika H3 Flex · 6-step (Official)','lora':'henge/pika_h3_flex_ref2va_comfy_bf16.safetensors','steps':PIKA['steps']}
 
