@@ -1,7 +1,7 @@
 import {expect, test, type Page} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 
-/** The studio offers three Motion models, and a First Frame moves you to the edit one.
+/** The studio offers four Motion models, and a First Frame moves you to the edit one.
 
     HENGE_E2E_GUIDE=/path/to/clip.mp4 HENGE_E2E_BASE=http://127.0.0.1:8188 npx playwright test tests/e2e/motion-model-picker.spec.ts
 */
@@ -11,6 +11,7 @@ const MODELS = {
   motion: {label: 'Motion Transfer v1.0', file: 'minimax_h3_motion_transfer_v1.0_ref2va'},
   tara: {label: 'Motion Transfer TARA v1.0', file: 'minimax_h3_motion_transfer_tara_v1.0_ref2va'},
   edit: {label: 'Motion Transfer FFP v1.0', file: 'minimax_h3_motion_transfer_ffp_v1.0_ref2va'},
+  solar: {label: 'Motion Transfer SolarRenderer FFP v1.0', file: 'solar_control'},
 };
 // An edited opening frame (the editor's output shape): Picture 2 carries the edit the model must propagate.
 const EDITED_FRAME = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAaklEQVR4nGNgZ4AAOxYMBgZmEAwJYmBgZGRlAWJWhJwOILnNDST3PmBgYDzAwMDMwMDIwMyAhYMTBwcHB4uLi5uTkxMIBhgMDAwMDAwQwMDAwMDIyMjMzMzMwMDAwMDIyAgAABccCQb6UuYAAAAASUVORK5CYII=', 'base64');
@@ -74,15 +75,18 @@ async function uploadGuide(page: Page) {
   return false;
 }
 
-test('the backend offers exactly the three current Motion models', async ({request}) => {
+test('the backend offers exactly the four current Motion models', async ({request}) => {
   const health = await (await request.get(`${BASE}/api/backend/health`)).json();
   const motion = Object.entries(health.models).filter(([, m]: [string, any]) => m.task === 'motion' && !m.hidden);
-  expect(motion.map(([id]) => id)).toEqual(['motion', 'motion_tara', 'motion_mix_dyn99']);
+  expect(motion.map(([id]) => id)).toEqual(['motion', 'motion_tara', 'motion_mix_dyn99', 'motion_solar_ffp']);
   expect(Object.fromEntries(motion.map(([, m]: [string, any]) => [m.label, m.lora.split('/').pop()]))).toEqual({
     [MODELS.motion.label]: `${MODELS.motion.file}.safetensors`,
     [MODELS.tara.label]: `${MODELS.tara.file}.safetensors`,
     [MODELS.edit.label]: `${MODELS.edit.file}.safetensors`,
+    [MODELS.solar.label]: `${MODELS.solar.file}.safetensors`,
   });
+  // SolarRenderer FFP is only for a clip that starts from an edited frame.
+  expect(motion.find(([id]) => id === 'motion_solar_ffp')![1]).toMatchObject({first_frame_only: true});
   // The edit model is the one a First Frame drives, and it runs on the standard 4-step turbo.
   expect(motion.find(([id]) => id === 'motion_mix_dyn99')![1]).toMatchObject({ffp: true, turbo_default: 'dmad4'});
   // The old comparison/FFP/SolarRenderer variants are gone from the studio.
@@ -90,23 +94,23 @@ test('the backend offers exactly the three current Motion models', async ({reque
     expect(health.models[gone]).toBeUndefined();
 });
 
-test('the model picker offers the three models and follows the First Frame', async ({page}) => {
+test('the model picker offers the four models and follows the First Frame', async ({page}) => {
   test.setTimeout(900_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(String(error)));
   await openStudio(page);
   await enterMotion(page);
 
-  // The picker fills in once the health payload arrives; wait for the three current models rather than the fallback.
-  await expect.poll(async () => (await modelOptions(page)).length, {timeout: 30_000}).toBe(3);
-  expect(await modelOptions(page)).toEqual([MODELS.motion.label, MODELS.tara.label, MODELS.edit.label]);
+  // The picker fills in once the health payload arrives; wait for the four current models rather than the fallback.
+  await expect.poll(async () => (await modelOptions(page)).length, {timeout: 30_000}).toBe(4);
+  expect(await modelOptions(page)).toEqual([MODELS.motion.label, MODELS.tara.label, MODELS.edit.label, MODELS.solar.label]);
   // Each model carries tags on the picker itself: what it was trained for, and what it only handles by chance.
   await picker(page).click();
   const tags = await page.locator('.select-list li').evaluateAll(els => els.map(el => Array.from(el.querySelectorAll('.model-tag')).map(t => t.textContent)));
   await page.keyboard.press('Escape');
   // Character Swap is tagged `multi-reference · weaker` rather than "one reference": it does take more than one
   // picture, it was only trained with one.
-  expect(tags).toEqual([['multi-reference', 'FFP ✓'], ['multi-reference', 'FFP ⚠'], ['FFP ✓', 'multi-reference · weaker']]);
+  expect(tags).toEqual([['multi-reference', 'FFP ✓'], ['multi-reference', 'FFP ⚠'], ['FFP ✓', 'multi-reference · weaker'], ['first frame only']]);
   // The tag is explained, not just decorated: hovering the chip gives the reason.
   await picker(page).click();
   expect(await page.locator('.select-list li .model-tag').first().getAttribute('title')).toMatch(/reference pictures at once/);

@@ -174,6 +174,8 @@ def validate_request(r,options,slots):
     if r['mode']=='swap' and r.get('guide_first_frame'):low=0
     first=r.get('first_frame_slot')
     if first is not None and (not isinstance(first,int) or first not in slots):raise ValueError('The first frame must be one of the attached pictures')
+    # A first-frame-only model (Motion Transfer SolarRenderer FFP) does nothing without its edited frame.
+    if MODELS.get(options.get('profile'),{}).get('first_frame_only') and not isinstance(first,int):raise ValueError(f"{MODELS[options['profile']]['label']} needs a first frame: choose and edit a frame in the FFP card")
     if first is not None and r['mode']!='motion':raise ValueError('A first-frame Picture is a Motion Transfer option; Character Swap takes its first frame inside the guide')
     if r.get('first_frame_mode','latent') not in ('latent','reference'):raise ValueError('first_frame_mode must be latent or reference')
     if r.get('guide_first_frame') and r['mode']!='swap':raise ValueError('Replacing the guide\'s first frame is a Character Swap option')
@@ -857,11 +859,13 @@ def planning(job):
             plan['representation']='mask'
             if not job['options'].get('auto_approve'):job['plan']=plan;mask_preview(job)
         save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the facial details before generating.',step=None,step_total=None);return
-    if MODELS.get(job['options'].get('profile'),{}).get('ffp'):
-        # VFX Edit FFP is prompted with one English sentence after vfx_edit:, not the H3 six-section format.
+    ffp_model=MODELS.get(job['options'].get('profile'),{})
+    if ffp_model.get('ffp') or ffp_model.get('first_frame_only'):
+        # VFX Edit FFP is prompted with one English sentence after vfx_edit:, not the H3 six-section format; SolarRenderer
+        # FFP takes the same sentence without the trigger.
         first=r.get('first_frame_slot')
         sentence=ask(FFP_INSTRUCTION.format(request=r['prompt']),guide,'vlm_prompt',256) if job['options'].get('enhance_prompt',True) else r['prompt']
-        plan=fixed_plan('motion',ffp_prompt(sentence,first),'Edit the guide video as requested'+(f'; Picture {first} is the edited first frame to propagate.' if first else '.'))
+        plan=fixed_plan('motion',ffp_prompt(sentence,first,ffp_model.get('trigger','vfx_edit')),'Edit the guide video as requested'+(f'; Picture {first} is the edited first frame to propagate.' if first else '.'))
         plan['picture_roles']=[{'slot':s,'role':'style' if s==first else 'identity','description':'Edited first frame' if s==first else ''} for s in slots]
         save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the edit prompt before generating.',step=None,step_total=None);return
     evidence=prompt_pipeline(ask,r['prompt'],r['mode'],pictures,guide,metadata,job['options'].get('enhance_prompt',True),generate_audio=bool(r.get('output_audio',{}).get('generate')))
@@ -2357,7 +2361,8 @@ molmo_pointing.BEFORE_RUN=free_local_comfy
 
 # Molmo2 settings (settings center): which checkpoint, how long it stays loaded, image detail.
 MOLMO_SETTINGS=ROOT/'molmo.json'
-MOLMO_DEFAULTS={'enabled':True,'model_path':'','keep_warm_minutes':0,'image_quality':'accurate'}
+# Off until turned on in Settings -> Molmo2: it is an optional local model; the planner VLM covers the video otherwise.
+MOLMO_DEFAULTS={'enabled':False,'model_path':'','keep_warm_minutes':0,'image_quality':'accurate'}
 
 def molmo_settings():
     try:stored=json.loads(MOLMO_SETTINGS.read_text()) if MOLMO_SETTINGS.is_file() else {}

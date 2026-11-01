@@ -191,9 +191,11 @@ FFP_INSTRUCTION=("Rewrite this video edit request as ONE concise English sentenc
     "ask to preserve the very thing being changed. Keep every <Picture N> label exactly as written and do not invent others. Do not mention "
     "<Video 1>. Return only the sentence. Request: {request}")
 
-def ffp_prompt(sentence,first_frame=None):
-    """Published VFX Edit rules: start with vfx_edit:, one sentence; an attached first frame must be named and its role explained."""
-    text='vfx_edit: '+re.sub(r'^\s*(vfx_edit:)?\s*','',sentence.strip()).strip().strip('"').strip()
+def ffp_prompt(sentence,first_frame=None,trigger='vfx_edit'):
+    """Published VFX Edit rules: start with vfx_edit:, one sentence; an attached first frame must be named and its role explained.
+    trigger=None (SolarRenderer FFP) leaves the trigger out."""
+    body=re.sub(r'^\s*(vfx_edit:)?\s*','',sentence.strip()).strip().strip('"').strip()
+    text=f'{trigger}: {body}' if trigger else body
     if first_frame:text+=f' <Picture {first_frame}> is the edited first frame of the video: propagate its changes through the whole clip while keeping the original motion, timing and camera.'
     return text
 

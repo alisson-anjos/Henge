@@ -9,6 +9,23 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-01
 
+### Motion Transfer SolarRenderer FFP v1.0
+- New Motion model **Motion Transfer SolarRenderer FFP v1.0** (`motion_solar_ffp`): SolarRenderer control alone
+  (`solar_control.safetensors`, manifest `solar_control`, profiles `ffp`/`solar`; private dataset for now, needs
+  `HF_TOKEN`), only for a clip that starts from an edited first frame. Always listed in the picker with the tag
+  **first frame only**; Generate stays off (and the bridge refuses) until a First Frame is attached. Attaching a First
+  Frame still selects Motion Transfer FFP v1.0. The prompt is the FFP single sentence without the `vfx_edit:` trigger;
+  guide latents only (no CLIP context), standard DMAD 4-step turbo. The serverless volume already has the LoRA.
+- Validation: unit tests (model, validation, prompt, graph, tag wording), TypeScript; the Playwright picker test was
+  updated to four models but not run. Not yet rendered on a GPU.
+
+### Molmo2 is off by default; the frame editor reopens on the edited frame
+- **Molmo2 starts turned off** (`enabled: false` in the bridge defaults). It is an optional local model; the planner
+  VLM does the video analysis without it. Turn it on in Settings → Molmo2; a saved choice is kept. Note: an
+  installation that never saved this setting had it on and now has it off.
+- Reopening the first-frame editor (Character Swap or Motion) starts from the edited frame, so a second character can
+  be swapped on top of the first; the frame slider still goes back to the guide's own frames.
+
 ### BFS Body Swap edits the Character Swap first frame; a first frame needs no pictures
 - **BFS Body Swap V1.0 for Qwen-Image 2.1** (`Alissonerdx/BFS-Best-Face-Swap`, MIT) is a new frame editor,
   "BFS Body Swap (Qwen 2.1)", and the default of the Swap character edit when installed (manifest

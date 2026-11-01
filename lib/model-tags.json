@@ -19,6 +19,10 @@
   "ffp-works": {
    "tag": "FFP ⚠",
    "tip": "It takes an attached first frame, but it was not trained for FFP: it can change more of the clip than the frame you edited."
+  },
+  "ffp-only": {
+   "tag": "first frame only",
+   "tip": "Made only for a clip that starts from an edited first frame: it needs one, and the frame drives the whole look while the guide keeps the motion."
   }
  },
  "pt": {
@@ -41,6 +45,10 @@
   "ffp-works": {
    "tag": "FFP ⚠",
    "tip": "Aceita um primeiro quadro anexado, mas não foi treinado para FFP: pode mudar mais do clipe do que o quadro que você editou."
+  },
+  "ffp-only": {
+   "tag": "só com primeiro quadro",
+   "tip": "Feito só para um clipe que começa de um primeiro quadro editado: ele exige o quadro, que define o visual enquanto o guia mantém o movimento."
   }
  },
  "es": {
@@ -63,6 +71,10 @@
   "ffp-works": {
    "tag": "FFP ⚠",
    "tip": "Acepta un primer cuadro adjunto, pero no se entrenó para FFP: puede cambiar más del clip que el cuadro que editaste."
+  },
+  "ffp-only": {
+   "tag": "solo con primer fotograma",
+   "tip": "Hecho solo para un clip que empieza desde un primer fotograma editado: lo exige, y el fotograma define el aspecto mientras la guía mantiene el movimiento."
   }
  }
 }

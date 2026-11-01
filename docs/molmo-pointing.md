@@ -11,7 +11,8 @@ propose the marks that SAM tracks. It runs where it can:
   models volume, so it takes several minutes once; GPU time is billed per request. Keeping it warm and cancelling a
   running request apply only to the local mode.
 
-Settings → Molmo2 shows where it runs; turning it off there disables both.
+Molmo2 is **off by default**: turn it on in Settings → Molmo2, which also shows where it runs; turning it off there
+disables both.
 
 Two tools (studio assistant and MCP):
 

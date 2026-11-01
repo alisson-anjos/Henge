@@ -78,6 +78,7 @@ Not every Motion model was trained for that, so the model picker carries **tags*
 | **multi-reference** | takes several reference pictures at once, each with its own job: person, place, look | Motion Transfer v1.0, Motion Transfer TARA v1.0 |
 | **multi-reference · weaker** | trained with a single reference picture: it does take more than one, and how well they land is up to your prompt | Character Swap v1.1 |
 | **one reference** | it works from a single reference picture | Head Swap v1.0 |
+| **first frame only** | made only for a clip that starts from an edited first frame: it needs one | Motion Transfer SolarRenderer FFP v1.0 |
 
 **Motion Transfer FFP v1.0** is our first-frame model: the VFX Edit first-frame LoRA (rank 128, trained to carry a
 painted frame through a video) merged with SolarRenderer control at ×0.5 — rank concatenation, then a per-module SVD that
@@ -86,6 +87,13 @@ Latents and with TARA, and it is the model the studio picks by default when a Fi
 merge here that carries SolarRenderer control. The merge already carries that control, so it does not stack the SolarRenderer step-
 distillation turbo on top: it samples on the standard **DMAD 4-step** turbo (Kijai) like every other model, and any other
 turbo stays selectable under Advanced.
+
+**Motion Transfer SolarRenderer FFP v1.0** is SolarRenderer control on its own (`solar_control.safetensors`, the
+Enderfga/SolarRenderer control LoRA converted to ComfyUI H3 keys), without the VFX Edit LoRA. It is always listed but only
+for a clip that starts from an edited first frame: the studio and the bridge refuse to generate with it until a First
+Frame is attached, and attaching one still selects Motion Transfer FFP v1.0 by default. Its prompt is the same single
+sentence without the `vfx_edit:` trigger; guide latents only, standard DMAD 4-step turbo. Its weights are still in a
+private dataset (`HF_TOKEN`).
 
 Motion Transfer TARA can also take a First Frame, and it often tracks it well — it is the multi-subject model, and it is
 multi-reference like Motion Transfer — but it was trained for binding several subjects, not for FFP: the clip can come out

@@ -323,11 +323,27 @@ class WorkflowContracts(unittest.TestCase):
         self.assertIn(tag,wording[language],f'{language} has no wording for the {tag} tag')
         self.assertTrue(wording[language][tag]['tag'] and wording[language][tag]['tip'])
 
+ def test_solarrenderer_ffp_needs_a_first_frame(self):
+  import workflows
+  from edit_modes import ffp_prompt
+  m=workflows.MODELS['motion_solar_ffp']
+  self.assertEqual(m['label'],'Motion Transfer SolarRenderer FFP v1.0');self.assertEqual(m['lora'],'henge/solar_control.safetensors')
+  self.assertTrue(m['first_frame_only']);self.assertFalse(m.get('ffp'));self.assertEqual(m['tags'],['ffp-only'])
+  # Always offered, but it cannot run without its edited frame; with one it is a normal choice.
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','prompt':'Add rain.'},{'profile':'motion_solar_ffp'},[1])
+  validate_request({**self.request(),'mode':'motion','prompt':'Add rain.','first_frame_slot':1},{'profile':'motion_solar_ffp'},[1])
+  # A First Frame still defaults to Motion Transfer FFP v1.0, not to this one.
+  options={};validate_request({**self.request(),'mode':'motion','prompt':'Add rain.','first_frame_slot':1},options,[1]);self.assertEqual(options['profile'],workflows.FFP_PROFILE)
+  # Its prompt is the FFP sentence without the VFX Edit trigger.
+  self.assertEqual(ffp_prompt('Add rain.',None,None),'Add rain.');self.assertTrue(ffp_prompt('vfx_edit: Add rain.',2,None).startswith('Add rain. <Picture 2> is the edited first frame'))
+  g=h3_graph('v.mp4',['f.png'],'Add rain.',512,288,107,107,'motion_solar_ffp',1,4,'original',[],'human',0,turbo=m['turbo_default'])
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solar_control.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
+
  def test_motion_model_list_and_first_frame_default(self):
   import json,workflows
   # The studio offers three Motion models: the two trained ones and the Edit merge. The superseded comparison LoRAs are
   # gone from the collection entirely.
-  self.assertEqual([key for key,model in workflows.MODELS.items() if model.get('task')=='motion'],['motion','motion_tara','motion_mix_dyn99'])
+  self.assertEqual([key for key,model in workflows.MODELS.items() if model.get('task')=='motion'],['motion','motion_tara','motion_mix_dyn99','motion_solar_ffp'])
   self.assertFalse([key for key in ('motion_ffp','motion_ffp_dyn95','motion_mix_dyn95','motion_solar_dyn95','motion_solar_dyn99') if key in workflows.MODELS])
   # An API/MCP call that attaches a First Frame gets the Edit model, which propagates it.
   options={};validate_request({**self.request(),'mode':'motion','prompt':'Add rain to the scene.','first_frame_slot':1},options,[1])

@@ -24,6 +24,12 @@ MODELS={
  # Latents and with TARA.
  'motion_mix_dyn99':{'label':'Motion Transfer FFP v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors','adapter':None,'clip_context':False,'ffp':True,'turbo_default':DEFAULT_TURBO,
    'tags':['ffp-strong','multi-ref-weak']},
+ # Motion Transfer SolarRenderer FFP v1.0: SolarRenderer control alone (Enderfga/SolarRenderer, converted to ComfyUI H3
+ # keys), only for a clip that starts from an edited first frame: the frame is required, it is not the default model of
+ # a First Frame (Motion Transfer FFP v1.0 is). Guide latents only (no CLIP context), standard 4-step turbo, a plain
+ # one-sentence prompt (no vfx_edit: trigger; SolarRenderer was not trained on it).
+ 'motion_solar_ffp':{'label':'Motion Transfer SolarRenderer FFP v1.0','task':'motion','lora':'henge/solar_control.safetensors','adapter':None,'clip_context':False,'first_frame_only':True,'trigger':None,'turbo_default':DEFAULT_TURBO,
+   'tags':['ffp-only']},
  'character':{'task':'swap','label':'Character Swap v1.1','tags':['multi-ref-weak'],'lora':'henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.

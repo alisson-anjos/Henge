@@ -251,7 +251,7 @@ export default function Studio() {
   // The prompt changes with the model, so the examples follow whichever one the panel currently has selected.
   // An attached First Frame means editing no matter what was picked before, and the edit model is the one that
   // defaults to it.
-  const editMode = mode === 'motion' && (firstFrameSlot !== null || panelProfile === EDIT_MODEL);
+  const editMode = mode === 'motion' && (firstFrameSlot !== null || panelProfile === EDIT_MODEL || panelProfile === 'motion_solar_ffp');
   const tipModel = mode === 'motion' ? (editMode ? EDIT_MODEL : panelProfile || 'motion') : null;
   const promptTips = tipModel === EDIT_MODEL ? [
     // Published VFX Edit prompting: one English sentence, the change first, then what has to survive it. Henge adds
@@ -1031,7 +1031,7 @@ export default function Studio() {
       const slot = editSlot; setEditSlot(null);
       setPictures(current => current.map(p => p.slot === slot ? (URL.revokeObjectURL(p.url), {slot, file: new File([file], `picture_${slot}_edited.png`, {type: 'image/png'}), url: URL.createObjectURL(file)}) : p));
     }}/>}
-    {frameModal && video?.range && <FirstFrameModal videoUrl={video.url} start={video.range.start} end={video.range.end} pictures={pictures.filter(p => p.slot !== firstFrameSlot)} swap={mode === 'swap'} lang={lang} onClose={() => setFrameModal(false)} onUse={(file, edit, at) => {
+    {frameModal && video?.range && <FirstFrameModal videoUrl={video.url} start={video.range.start} end={video.range.end} pictures={pictures.filter(p => p.slot !== firstFrameSlot)} swap={mode === 'swap'} edited={mode === 'swap' ? swapFirstFrame?.file : pictures.find(p => p.slot === firstFrameSlot)?.file} lang={lang} onClose={() => setFrameModal(false)} onUse={(file, edit, at) => {
       if (mode === 'swap') {
         // Character Swap: the frame goes into the guide, the Pictures stay the character references.
         setSwapFirstFrame(current => {if (current) URL.revokeObjectURL(current.url); return {file, url: URL.createObjectURL(file)};}); setFrameModal(false);

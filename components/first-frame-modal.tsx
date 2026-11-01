@@ -23,7 +23,7 @@ export async function coverFit(src: string, width: number, height: number): Prom
  * mask to edit only that area; Replace, Remove, Add or a free instruction. The result is cropped and resized to the frame's
  * exact size so it can be propagated (Motion Transfer · first-frame propagate). `swap` (Character Swap) opens the Swap
  * character edit instead: the performer in the frame becomes the chosen character Picture, keeping pose and scene. */
-export default function FirstFrameModal({videoUrl, start, end, image, pictures, swap = false, lang, onUse, onClose}: {videoUrl?: string; start?: number; end?: number; image?: File; pictures: Picture[]; swap?: boolean; lang: Language; onUse: (file: File, edit: {id: string; width: number; height: number} | null, at?: number) => void; onClose: () => void}) {
+export default function FirstFrameModal({videoUrl, start, end, image, edited, pictures, swap = false, lang, onUse, onClose}: {videoUrl?: string; start?: number; end?: number; image?: File; edited?: File; pictures: Picture[]; swap?: boolean; lang: Language; onUse: (file: File, edit: {id: string; width: number; height: number} | null, at?: number) => void; onClose: () => void}) {
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const dialog = useRef<HTMLDialogElement>(null), upload = useRef<HTMLInputElement>(null);
   const [frame, setFrame] = useState<Image & {width: number; height: number} | null>(null);
@@ -86,7 +86,15 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
     const video = document.createElement('video'); player.current = video;
     video.muted = true; video.preload = 'auto'; video.src = videoUrl ?? '';
     video.onloadedmetadata = () => {video.currentTime = Math.min((start ?? 0) + .001, Math.max(0, video.duration - .05));};
+    // Reopened with an edited first frame: start from that edit (to keep editing it, e.g. swap a second character);
+    // picking another time on the slider goes back to the guide's own frames.
+    let reopen = !!edited;
     video.onseeked = () => {
+      if (reopen && edited) {
+        reopen = false;
+        load(URL.createObjectURL(edited)).then(im => setFrame({blob: edited, url: im.src, width: im.naturalWidth, height: im.naturalHeight})).catch(() => setError(tr('Could not read the edited frame.', 'Não foi possível ler o quadro editado.', 'No se pudo leer el fotograma editado.')));
+        return;
+      }
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
       canvas.getContext('2d')?.drawImage(video, 0, 0);
@@ -95,7 +103,7 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
     video.onerror = () => setError(tr('Could not read the guide video.', 'Não foi possível ler o vídeo guia.', 'No se pudo leer el vídeo guía.'));
     return () => {clearTimeout(timer); video.removeAttribute('src'); video.load();};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoUrl, start, image]);
+  }, [videoUrl, start, image, edited]);
   useEffect(() => () => {if (frame) URL.revokeObjectURL(frame.url);}, [frame]);
   // Another frame: its old segments no longer line up, so they are dropped until Segment runs again.
   useEffect(() => {setSegments(null); setHover(0); setPicked(0);}, [frame]);

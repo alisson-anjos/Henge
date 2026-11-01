@@ -378,6 +378,16 @@
       "note": "Motion Transfer FFP v1.0 (220 MB): the VFX Edit first-frame LoRA (rank 128) x1.0 + SolarRenderer control x0.5, rank concat with per-module SVD keeping 99% of the Frobenius energy. The studio selects it whenever a First Frame is attached; it runs on the standard DMAD 4-step turbo."
     },
     {
+      "id": "solar_control",
+      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/solar_control.safetensors",
+      "destination": "loras/henge/solar_control.safetensors",
+      "profiles": [
+        "ffp",
+        "solar"
+      ],
+      "note": "Motion Transfer SolarRenderer FFP v1.0: the SolarRenderer control LoRA (Enderfga/SolarRenderer) converted to ComfyUI H3 keys, used alone for clips that start from an edited first frame. Private dataset for now: needs HF_TOKEN."
+    },
+    {
       "id": "sharpness",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_lms_v1.0_r64.safetensors",
       "destination": "loras/henge/minimax_h3_lms_v1.0_r64.safetensors",

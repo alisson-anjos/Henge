@@ -30,8 +30,15 @@ class PointNormalizationTests(unittest.TestCase):
         for query,start,end in [('',0,1),('x',-1,1),('x',2,1),('x',0,31),('x',0,float('nan'))]:
             with self.assertRaises(ValueError):molmo_pointing.validate_request(query,start,end)
 
+    def test_molmo2_is_off_by_default(self):
+        import server
+        with patch.object(server,'MOLMO_SETTINGS',Path(tempfile.mkdtemp())/'missing.json'):
+            self.assertFalse(server.molmo_settings()['enabled'])
+            with patch.object(molmo_pointing,'SETTINGS',server.molmo_settings):self.assertIsNone(molmo_pointing.location())
+
     def test_missing_local_configuration_does_not_download(self):
-        with patch.dict(os.environ,{},clear=True),patch.object(molmo_pointing.subprocess,'run') as run:
+        # Turned on (it is off by default) but with no local checkpoint: an error, never a download.
+        with patch.dict(os.environ,{},clear=True),patch.object(molmo_pointing,'SETTINGS',lambda:{'enabled':True}),patch.object(molmo_pointing.subprocess,'run') as run:
             with self.assertRaisesRegex(ValueError,'not configured'):
                 molmo_pointing.point_video('video','person',0,1,'.')
             run.assert_not_called()
@@ -57,7 +64,7 @@ class MolmoCancellationTests(unittest.TestCase):
             def execute(args,**kwargs):
                 Path(args[args.index('--output')+1]).write_text(json.dumps(payload))
                 return SimpleNamespace(communicate=lambda timeout:('', ''),returncode=0)
-            with patch.dict(os.environ,{'HENGE_MOLMO_PYTHON':str(python),'HENGE_MOLMO_MODEL':str(model)}),patch.object(molmo_pointing.subprocess,'Popen',side_effect=execute) as run,patch.object(molmo_pointing,'point_previews',return_value=['preview']):
+            with patch.dict(os.environ,{'HENGE_MOLMO_PYTHON':str(python),'HENGE_MOLMO_MODEL':str(model)}),patch.object(molmo_pointing,'SETTINGS',lambda:{'enabled':True}),patch.object(molmo_pointing.subprocess,'Popen',side_effect=execute) as run,patch.object(molmo_pointing,'point_previews',return_value=['preview']):
                 result=molmo_pointing.point_video('video','person',0,1,root)
             self.assertEqual(result['points'],payload['points'])
             self.assertEqual(result['previews'],['preview'])

@@ -56,7 +56,9 @@ model and marks the Picture as the video's first frame. Give set_first_frame `ti
 frame with the installed image editor, or `picture` when the user already attached the edited frame. The edited frame
 becomes the first frame and its changes propagate through the whole clip while the guide keeps the motion, timing and
 camera; the line explaining the Picture's role is added to the prompt automatically, so do not write it yourself. Use
-TARA / Character Swap only when the user is replacing who or what appears. If no image editor is installed, say so and
+Motion Transfer SolarRenderer FFP v1.0
+(profile motion_solar_ffp, SolarRenderer control alone) is an alternative for the same first-frame edits when the user asks
+for it; it refuses to run without a First Frame. TARA / Character Swap only when the user is replacing who or what appears. If no image editor is installed, say so and
 ask the user to use the "Choose and edit a frame" card in Motion Transfer, or attach a frame they edited elsewhere.
 
 Character Swap First Frame (optional, offer it): the user can start the swap from a guide frame where the characters are
