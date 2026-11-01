@@ -65,11 +65,13 @@ Choose the model profiles (comma list), as on a normal pod:
 | `regenerate` | Sharpness default: Ref2VA + DMAD + rank-16 refiner + LMS + native upscale | Optional install; top up the volume and update the worker; no FL2VA |
 | `audio` | Generated audio and audio conditioning (H3 audio VAE) | ~0.3 GB |
 | `omniref` | OmniRef base | +22 GB |
-| `klein` | First-frame edits with FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0): replace, remove or add, optionally only in a painted area; also used for reference preparation | ~12 GB |
-| `klein3` | Optional: FLUX.3 [image klein], used instead of FLUX.2 [klein] when installed. **Gated**: accept the FLUX Kommunity License at [black-forest-labs/flux-3-image-klein-comfy](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN` | ~5 GB |
+| `fibo` | **Default image editor**: FIBO 2.0 edit turbo (Bria, int8). First-frame and reference edits — replace, remove or add, optionally only in a painted area. `TextEncodeFibo2` is a core ComfyUI node, no custom node pack | ~14 GB |
+| `qwen21` | Optional editor: Qwen-Image 2.1, the strongest instruction following of the three. Pick it in the First Frame modal. The 7.3 GB Turbo checkpoint is optional: the 335 MB 5-step LoRA reaches the same short schedule on the full checkpoint | ~17 GB |
+| `klein` | Optional alternative editor: FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0), 4 steps | ~12 GB |
+| `klein3` | Optional alternative editor: FLUX.3 [image klein]. **Gated**: accept the FLUX Kommunity License at [black-forest-labs/flux-3-image-klein-comfy](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN` | ~5 GB |
 | `sam2d`, `sam3d` | Subject marks: SAM 3.1 tracking (2D colors, Mask, the assistant's find people) and SAM 3D Body + MoGe (3D) | ~4 GB |
 
-The default profiles (excluding optional additions such as `regenerate` and `klein3`) need roughly 125–135 GB: create the volume with 180 GB (`VOLUME_GB=180`).
+The default profiles (excluding optional additions such as `regenerate`, `qwen21` and `klein3`) need roughly 127–137 GB: create the volume with 180 GB (`VOLUME_GB=180`).
 
 ### Option A: script
 
@@ -237,7 +239,7 @@ accepts requests signed with your API key, and that key lives only in the bridge
 Every stage of a job is one request to the endpoint:
 
 1. **Plan**: the VLM describes the pictures and writes the prompt (one request per question).
-2. **Reference preparation**: background removal, and FLUX Klein when enabled.
+2. **Reference preparation**: background removal, and the image editor (FIBO 2.0 by default) when enabled.
 3. **Each shot**: one H3 render. The bridge cuts the guide into shots, sends each one with its
    references, and joins the results.
 

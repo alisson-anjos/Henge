@@ -231,17 +231,64 @@
       "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/text_encoders/qwen3vl_4b_int8_convrot.safetensors",
       "destination": "text_encoders/qwen3vl_4b_int8_convrot.safetensors",
       "profiles": [
+        "fibo",
         "klein3"
-      ]
+      ],
+      "note": "Qwen3-VL 4B encoder, shared by the default FIBO 2.0 editor and by FLUX.3 [image klein]."
+    },
+    {
+      "id": "fibo_diffusion_models",
+      "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors",
+      "destination": "diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors",
+      "profiles": [
+        "fibo"
+      ],
+      "note": "FIBO 2.0 edit turbo (briaai, int8): Henge's default image editor for first-frame and reference edits. It edits the frame it is given instead of re-drawing it, which is what the First Frame model needs. 4 steps."
     },
     {
       "id": "flux_image_vae",
       "url": "https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/vae/flux2-vae.safetensors",
       "destination": "vae/flux2-vae.safetensors",
       "profiles": [
+        "fibo",
         "klein",
         "klein3"
+      ],
+      "note": "FLUX.2 VAE, shared by FIBO 2.0 and both FLUX Klein editors."
+    },
+    {
+      "id": "qwen21_diffusion_models",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+      "destination": "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+      "profiles": [
+        "qwen21"
+      ],
+      "note": "Optional Qwen-Image 2.1 Turbo (Qwen, int8): the strongest instruction-following editor, selectable in the First Frame modal. 8 steps. The plain (non-distilled) checkpoint works too and runs at 24 steps."
+    },
+    {
+      "id": "qwen21_text_encoder",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_int8_convrot.safetensors",
+      "destination": "text_encoders/qwen3vl_8b_int8_convrot.safetensors",
+      "profiles": [
+        "qwen21"
       ]
+    },
+    {
+      "id": "qwen21_vae",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors",
+      "destination": "vae/qwen_image_2.1_vae_bf16.safetensors",
+      "profiles": [
+        "qwen21"
+      ]
+    },
+    {
+      "id": "qwen21_turbo_lora",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/loras/p_q_image_2.1_5_steps_v0.1_comfyui_bf16.safetensors",
+      "destination": "loras/henge/p_q_image_2.1_5_steps_v0.1_comfyui_bf16.safetensors",
+      "profiles": [
+        "qwen21"
+      ],
+      "note": "5-step turbo LoRA (335 MB) for the plain Qwen-Image 2.1 checkpoint: with it Henge runs 5 steps at CFG 1 instead of 24, so the fast edit does not need the 7.3 GB Turbo checkpoint."
     },
     {
       "id": "klein_diffusion_models",
@@ -267,7 +314,7 @@
       "profiles": [
         "klein3"
       ],
-      "note": "Optional FLUX.3 [image klein] (Black Forest Labs, FLUX Kommunity License). Gated: accept the license at https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy and set HF_TOKEN. Used before FLUX.2 [klein] when installed."
+      "note": "Optional FLUX.3 [image klein] (Black Forest Labs, FLUX Kommunity License). Gated: accept the license at https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy and set HF_TOKEN. Last choice: it samples an empty latent at about a megapixel, so it re-draws the frame instead of editing it."
     },
     {
       "id": "sam31",

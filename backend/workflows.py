@@ -291,8 +291,13 @@ def full_refiner_graph(video,guide,prompt,width,height,output_width,output_heigh
     return {key:value for key,value in g.items() if key in keep}
 
 
+# FIBO 2.0 edit turbo (briaai, repackaged by Comfy-Org): the default frame editor. TextEncodeFibo2 is a core Comfy
+# node, its own latent output is the size the input was cropped for, and the pictures become reference latents of the
+# positive AND the negative, which is why the frame survives the edit instead of being regenerated. Graph matches
+# Comfy-Org's image_fibo2_edit_turbo_pe template: 4 steps, CFG 1, euler/simple.
+FIBO={'unet':'fibo2_edit_turbo_int8_convrot.safetensors','clip':'qwen3vl_4b_int8_convrot.safetensors','vae':'flux2-vae.safetensors'}
 def fibo_graph(image,refs,instruction,seed):
-    g={'1':node('UNETLoader',unet_name='fibo2_edit_turbo_int8_convrot.safetensors',weight_dtype='default'),'2':node('CLIPLoader',clip_name='qwen3vl_4b_int8_convrot.safetensors',type='fibo2',device='default'),'3':node('VAELoader',vae_name='flux2-vae.safetensors'),'4':node('LoadImage',image=image),'5':node('TextEncodeFibo2',clip=['2',0],vae=['3',0],prompt=instruction,negative_prompt='',width=0,height=0,batch_size=1,**{'images.image_1':['4',0]}),'6':node('KSampler',model=['1',0],positive=['5',0],negative=['5',1],latent_image=['5',2],seed=seed,steps=4,cfg=1.,sampler_name='euler',scheduler='simple',denoise=1.),'7':node('VAEDecode',samples=['6',0],vae=['3',0]),'8':node('SaveImage',images=['7',0],filename_prefix=image.rsplit('.',1)[0]+'_fibo')}
+    g={'1':node('UNETLoader',unet_name=FIBO['unet'],weight_dtype='default'),'2':node('CLIPLoader',clip_name=FIBO['clip'],type='fibo2',device='default'),'3':node('VAELoader',vae_name=FIBO['vae']),'4':node('LoadImage',image=image),'5':node('TextEncodeFibo2',clip=['2',0],vae=['3',0],prompt=instruction,negative_prompt='',width=0,height=0,batch_size=1,**{'images.image_1':['4',0]}),'6':node('KSampler',model=['1',0],positive=['5',0],negative=['5',1],latent_image=['5',2],seed=seed,steps=4,cfg=1.,sampler_name='euler',scheduler='simple',denoise=1.),'7':node('VAEDecode',samples=['6',0],vae=['3',0]),'8':node('SaveImage',images=['7',0],filename_prefix=image.rsplit('.',1)[0]+'_fibo')}
     for i,p in enumerate(refs,2):g[str(20+i)]=node('LoadImage',image=p);g['5']['inputs'][f'images.image_{i}']=[str(20+i),0]
     return g
 
@@ -332,6 +337,28 @@ def klein3_graph(image,refs,instruction,seed,steps=16,prefix=None):
        '31':node('KSampler',model=['2',0],positive=['20',0],negative=['20',1],latent_image=['30',0],seed=seed,steps=steps,cfg=1.,sampler_name='euler',scheduler='simple',denoise=1.),
        '32':node('VAEDecode',samples=['31',0],vae=['4',0]),'33':node('SaveImage',images=['32',0],filename_prefix=prefix or image.rsplit('.',1)[0]+'_klein3')}
     for i,r in enumerate(refs,1):g[f'4{i}']=node('LoadImage',image=r);g['20']['inputs'][f'images.image{i}']=[f'4{i}',0]
+    return g
+
+# Qwen-Image 2.1 (Qwen, repackaged by Comfy-Org): optional editor, much better instruction following than FLUX Klein.
+# TextEncodeQwenImage21 feeds the pictures to the Qwen3-VL tower AND as VAE reference latents, and returns a latent at
+# the FIRST picture's size: resolution=0 keeps the frame's own size instead of cropping it to about 1 megapixel, which
+# is what keeps the edit pixel-aligned with the guide. The Turbo checkpoint is the default: 8 steps at CFG 1 on
+# deis_2m/simple; the 5-step LoRA does the same on the full checkpoint when only that one is installed, and only the
+# non-distilled build alone falls back to 24 steps and CFG 2.5 on euler/simple.
+QWEN21={'unet':'qwen_image_2.1_turbo_int8_convrot.safetensors','base':'qwen_image_2.1_int8_convrot.safetensors',
+        'clip':'qwen3vl_8b_int8_convrot.safetensors','vae':'qwen_image_2.1_vae_bf16.safetensors',
+        'turbo':'henge/p_q_image_2.1_5_steps_v0.1_comfyui_bf16.safetensors'}
+def qwen21_graph(image,refs,instruction,seed,unet=None,lora='',steps=None,cfg=None,prefix=None):
+    unet=unet or QWEN21['unet'];quick=unet==QWEN21['unet'] or bool(lora)
+    steps=steps or (5 if lora else 8 if unet==QWEN21['unet'] else 24);cfg=cfg if cfg is not None else (1. if quick else 2.5)
+    g={'1':node('UNETLoader',unet_name=unet,weight_dtype='default'),'2':node('CLIPLoader',clip_name=QWEN21['clip'],type='qwen_image',device='default'),
+       '3':node('VAELoader',vae_name=QWEN21['vae']),'10':node('LoadImage',image=image),
+       '5':node('TextEncodeQwenImage21',clip=['2',0],prompt=instruction,negative_prompt='',vae=['3',0],resolution=0,**{'images.image_1':['10',0]}),
+       '6':node('KSampler',model=['9',0] if lora else ['1',0],positive=['5',0],negative=['5',1],latent_image=['5',2],seed=seed,steps=steps,cfg=cfg,
+                sampler_name='deis_2m' if quick else 'euler',scheduler='simple',denoise=1.),
+       '7':node('VAEDecode',samples=['6',0],vae=['3',0]),'8':node('SaveImage',images=['7',0],filename_prefix=prefix or image.rsplit('.',1)[0]+'_qwen21')}
+    for i,r in enumerate(refs,2):g[str(20+i)]=node('LoadImage',image=r);g['5']['inputs'][f'images.image_{i}']=[str(20+i),0]
+    if lora:g['9']=node('LoraLoaderModelOnly',model=['1',0],lora_name=lora,strength_model=1.)
     return g
 
 def subject_looks_graph(looks):

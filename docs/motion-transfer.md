@@ -67,8 +67,9 @@ Latents and with TARA. The merge already carries SolarRenderer control, so it do
 distillation turbo on top: it samples on the standard **DMAD 4-step** turbo (Kijai) like every other model, and any other
 turbo stays selectable under Advanced.
 
-Whenever a **First Frame** is attached — a picture of the clip edited in advance, by hand or with the FLUX Klein
-editor — the studio selects this model by default and explains the picture's role in the prompt
+Whenever a **First Frame** is attached — a picture of the clip edited in advance, by hand or with the frame editor
+(FIBO 2.0 by default, Qwen-Image 2.1 Turbo or FLUX Klein if installed) — the studio selects this model by default and
+explains the picture's role in the prompt
 (`<Picture N> is the edited first frame of the video: propagate its changes through the whole clip while keeping the
 original motion, timing and camera`). The source video stays the guide frame by frame, so the edit propagates instead
 of being re-invented per shot. Removing the First Frame leaves the model choice as it is; picking another model by hand

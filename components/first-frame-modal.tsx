@@ -27,7 +27,9 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
   const [frame, setFrame] = useState<Image & {width: number; height: number} | null>(null);
   const [result, setResult] = useState<Image & {edit?: string} | null>(null);
   const [edits, setEdits] = useState<Edit[]>([]);
-  const [editor, setEditor] = useState<'klein3' | 'klein' | null>(null);
+  const [editor, setEditor] = useState<string | null>(null);
+  // Editors this ComfyUI can run, in the order the backend prefers them. The modal lets you pick one per edit.
+  const [editors, setEditors] = useState<string[]>([]);
   const editorName = frameEditorName(editor, tr('Image editor', 'Editor de imagem', 'Editor de imagen'));
   const [op, setOp] = useState<'replace' | 'remove' | 'add' | 'free'>('replace');
   const [what, setWhat] = useState('');
@@ -36,7 +38,7 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
   const [erase, setErase] = useState(false);
   const [painted, setPainted] = useState(false);
   const [instruction, setInstruction] = useState('');
-  // References for the edit (FLUX Klein reads several images): any of the studio's Pictures, plus images uploaded only for
+  // References for the edit (every editor reads several images): any of the studio's Pictures, plus images uploaded only for
   // this edit. They reach the editor as image 2, image 3... in this order.
   const [refSlots, setRefSlots] = useState<number[]>([]);
   const [extraRefs, setExtraRefs] = useState<{file: File; url: string}[]>([]);
@@ -53,7 +55,12 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
     dialog.current?.showModal();
     // ComfyUI can take a while to list its nodes (very large models folder): ask again until the editor is known.
     let tries = 0, timer: ReturnType<typeof setTimeout> | undefined;
-    const ask = () => fetch('/api/backend/health').then(r => r.json()).then(h => {const e = h.frame_editor === 'klein3' || h.frame_editor === 'klein' ? h.frame_editor : null; setEditor(e); if (!e && ++tries < 12) timer = setTimeout(ask, 10000);}).catch(() => {});
+    const ask = () => fetch('/api/backend/health').then(r => r.json()).then(h => {
+      const ready = (Array.isArray(h.frame_editors) ? h.frame_editors : []).filter((e: {installed?: boolean}) => e && e.installed).map((e: {id: string}) => String(e.id));
+      const chosen = typeof h.frame_editor === 'string' ? h.frame_editor : null;
+      setEditors(ready); setEditor(chosen || ready[0] || null);
+      if (!chosen && !ready.length && ++tries < 12) timer = setTimeout(ask, 10000);
+    }).catch(() => {});
     ask();
     fetch('/api/backend/frame-edits').then(r => r.json()).then(rows => {if (Array.isArray(rows)) setEdits(rows);}).catch(() => {});
     if (image) {
@@ -83,6 +90,7 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
     try {
       const body = new FormData();
       body.set('frame', frame.blob, 'frame.png'); body.set('instruction', instruction.trim()); body.set('op', op); body.set('what', what.trim());
+      if (editor) body.set('editor', editor);
       if (painted && paint.current) {const mask = await new Promise<Blob | null>(r => paint.current!.toBlob(r, 'image/png')); if (mask) body.set('mask', mask, 'mask.png');}
       editRefs.forEach((r, i) => body.append(`picture_${String(i + 1).padStart(2, '0')}`, r.file, r.file.name));
       const response = await fetch('/api/backend/frame-edit', {method: 'POST', body});
@@ -151,6 +159,9 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
       <small>{tr('Pick the frame where the subject is clearest. Generation starts at the frame you edit.', 'Escolha o quadro em que o assunto aparece melhor. A geração começa no quadro que você editar.', 'Elige el fotograma donde el sujeto se ve mejor. La generación empieza en el fotograma que edites.')}</small></label>}
     <div className="first-frame-controls">
       {editor ? <>
+        {editors.length > 1 && <div className="edit-editors"><span className="eyebrow muted">{tr('Image editor', 'Editor de imagem', 'Editor de imagen')}</span>
+          <div>{editors.map(id => <button key={id} type="button" aria-pressed={editor === id} className={editor === id ? 'chosen' : ''} onClick={() => setEditor(id)}>{frameEditorName(id, id)}</button>)}</div>
+          <small className="muted">{tr('FIBO 2.0 edits the frame it is given, so pose, camera and composition stay; Qwen-Image 2.1 follows instructions best. Both respect the painted area.', 'O FIBO 2.0 edita o quadro que recebe, então pose, câmera e composição continuam; o Qwen-Image 2.1 segue instruções melhor. Os dois respeitam a área pintada.', 'FIBO 2.0 edita el fotograma que recibe, así que pose, cámara y composición se mantienen; Qwen-Image 2.1 sigue mejor las instrucciones. Los dos respetan el área pintada.')}</small></div>}
         <div className="edit-ops" role="group" aria-label={tr('Edit', 'Edição', 'Edición')}>{ops.map(([k, label]) => <button key={k} type="button" aria-pressed={op === k} className={op === k ? 'chosen' : ''} onClick={() => setOp(k)}>{label}</button>)}</div>
         <div className="paint-tools"><span className="muted">{tr('Paint over the frame to edit only that area (optional).', 'Pinte sobre o quadro para editar só essa área (opcional).', 'Pinta sobre el fotograma para editar solo esa área (opcional).')}</span>
           <label>{tr('Brush', 'Pincel', 'Pincel')}<input type="range" min="8" max="160" value={brush} onChange={e => setBrush(Number(e.target.value))}/></label>
@@ -164,7 +175,7 @@ export default function FirstFrameModal({videoUrl, start, end, image, pictures, 
             {editRefs.length < 12 && <button type="button" className="edit-ref-add" onClick={() => refUpload.current?.click()}>+<span>{tr('Upload', 'Enviar', 'Subir')}</span></button>}</div>
           {editRefs.length > 0 && <small className="muted">{tr('Mention them in the edit as ', 'Cite-as na edição como ', 'Menciónalas en la edición como ')}{editRefs.map((r, i) => `image ${i + 2} (${r.label})`).join(', ')}{tr(', e.g. "his jacket from image 2".', ', p.ex. "a jaqueta da image 2".', ', p.ej. "su chaqueta de la image 2".')}</small>}
           <input hidden ref={refUpload} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e => {const files = Array.from(e.target.files ?? []); setExtraRefs(cur => [...cur, ...files.map(file => ({file, url: URL.createObjectURL(file)}))]); e.target.value = '';}}/></div>
-      </> : <small className="muted">{tr('No image editor (FLUX.3 / FLUX.2 Klein) is installed on this ComfyUI; upload an edited frame instead.', 'Nenhum editor de imagem (FLUX.3 / FLUX.2 Klein) está instalado neste ComfyUI; envie um quadro já editado.', 'No hay editor de imagen (FLUX.3 / FLUX.2 Klein) en este ComfyUI; sube un fotograma editado.')}</small>}
+      </> : <small className="muted">{tr('No image editor (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein) is installed on this ComfyUI; upload an edited frame instead.', 'Nenhum editor de imagem (FIBO 2.0, Qwen-Image 2.1 ou FLUX Klein) está instalado neste ComfyUI; envie um quadro já editado.', 'No hay editor de imagen (FIBO 2.0, Qwen-Image 2.1 o FLUX Klein) en este ComfyUI; sube un fotograma editado.')}</small>}
       {edits.length > 0 && <div className="recent-edits"><div className="recent-edits-head"><span className="eyebrow muted">{tr('Recent edits', 'Edições recentes', 'Ediciones recientes')}</span><button type="button" className="text-link" title={tr('Delete the stored frame edits', 'Apague as edições de quadro armazenadas', 'Elimina las ediciones de fotograma guardadas')} onClick={clearEdits}>{tr('Clear', 'Limpar', 'Limpiar')}</button></div><div>{edits.map(e => <button key={e.id} title={e.instruction} aria-pressed={result?.edit === e.id} onClick={() => pick(e)}><img src={e.url} alt={e.instruction} loading="lazy"/></button>)}</div></div>}
       {error && <p className="validation" role="alert">{error}</p>}
     </div>

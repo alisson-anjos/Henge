@@ -42,7 +42,12 @@ Everything Henge builds on, in one place. Exact downloadable weights, destinatio
   [lightx2v](https://huggingface.co/lightx2v/Minimax-h3-Turbo),
   [Pika H3 Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex) (Ref2VA Comfy adapter and six-step workflow).
 - FastH3 OmniRef — [FastVideo](https://huggingface.co/FastVideo/FastH3-Omni-Comfy).
-- SAM 3.1 and SAM 3D Body (Meta), BiRefNet, MoGe 2, FIBO (Bria), NVIDIA RTX Video Super Resolution (`nvidia-vfx`).
+- SAM 3.1 and SAM 3D Body (Meta), BiRefNet, MoGe 2, NVIDIA RTX Video Super Resolution (`nvidia-vfx`).
+- **Image editors**: FIBO 2.0 edit turbo (default) — [briaai/Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo),
+  repackaged by [Comfy-Org/Fibo-2.0](https://huggingface.co/Comfy-Org/Fibo-2.0); optional Qwen-Image 2.1 Turbo —
+  [Qwen/Qwen-Image-2.1-Turbo](https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo) via
+  [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1); optional FLUX.2 / FLUX.3 [klein]
+  (Black Forest Labs). `TextEncodeFibo2` and `TextEncodeQwenImage21` are core ComfyUI nodes.
 - TAEH3 (live previews only) is derived from madebyollin's temporal autoencoder work.
 
 ## Software

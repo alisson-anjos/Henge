@@ -15,7 +15,7 @@ import moving_plate
 import app_updates
 import model_installer
 from model_installs import InstallManager
-from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
+from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements,comfy_listed
 from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
@@ -342,12 +342,71 @@ def klein3_available(info=None):
     return 'ReferenceMultiLatent' in info and KLEIN3['unet'] in comfy_choices(info,'UNETLoader','unet_name') \
         and KLEIN3['clip'] in comfy_choices(info,'CLIPLoader','clip_name')
 
-def frame_editor(info=None):
-    """Which image editor edits frames and pictures: FLUX.3 [image klein] when its optional download is there, else
-    FLUX.2 [klein] 4B (the default), else none."""
+def fibo_available(info=None):
+    """FIBO 2.0 edit turbo: the core TextEncodeFibo2 node plus its model, text encoder and VAE."""
     try:info=comfy_info() if info is None else info
-    except Exception:return None
-    return 'klein3' if klein3_available(info) else 'klein' if klein_available(info) else None
+    except Exception:return False
+    return 'TextEncodeFibo2' in info and FIBO['unet'] in comfy_choices(info,'UNETLoader','unet_name') \
+        and FIBO['clip'] in comfy_choices(info,'CLIPLoader','clip_name')
+
+def qwen21_available(info=None):
+    """Qwen-Image 2.1 (Turbo preferred, the plain build works too), its Qwen3-VL 8B encoder and its VAE."""
+    try:info=comfy_info() if info is None else info
+    except Exception:return False
+    listed=comfy_choices(info,'UNETLoader','unet_name')
+    return 'TextEncodeQwenImage21' in info and any(m in listed for m in (QWEN21['unet'],QWEN21['base'])) \
+        and QWEN21['clip'] in comfy_choices(info,'CLIPLoader','clip_name') and QWEN21['vae'] in comfy_choices(info,'VAELoader','vae_name')
+
+def qwen21_model(info=None):
+    """Which Qwen-Image 2.1 checkpoint to load: the Turbo build when installed (8 steps), else the plain one."""
+    try:info=comfy_info() if info is None else info
+    except Exception:return QWEN21['unet']
+    listed=comfy_choices(info,'UNETLoader','unet_name')
+    return next((m for m in (QWEN21['unet'],QWEN21['base']) if m in listed),QWEN21['unet'])
+def qwen21_lora(info=None):
+    """The 5-step turbo LoRA. The full checkpoint plus this LoRA runs the same short, CFG 1 schedule as the 7.3 GB
+    Turbo checkpoint, so the fast edit does not depend on downloading that one."""
+    return QWEN21['turbo'] if qwen21_model(info)==QWEN21['base'] and lora_installed(QWEN21['turbo']) else ''
+
+# Editors Henge knows, in the order it prefers them. FIBO 2.0 first: TextEncodeFibo2 samples the latent of the frame
+# itself and conditions positive AND negative on it, so the composition and the performer survive the edit. FLUX.3
+# [image klein] is last: it resizes the frame to about a megapixel and samples an empty latent, so it re-draws the
+# shot instead of editing it, and the First Frame model then propagates every difference through the whole clip.
+EDITORS=(('fibo','FIBO 2.0 edit turbo'),('qwen21','Qwen-Image 2.1 Turbo'),('klein','FLUX.2 [klein] 4B'),('klein3','FLUX.3 [image klein]'))
+EDITOR_GRAPHS={'fibo':fibo_graph,'klein':klein_graph,'klein3':klein3_graph,'qwen21':qwen21_graph}
+
+def editor_order(info=None):
+    """Editor keys in the order Henge prefers them, with HENGE_FRAME_EDITOR moved to the front."""
+    order=[key for key,_ in EDITORS]
+    forced=os.environ.get('HENGE_FRAME_EDITOR','').strip().lower()
+    if forced in order:order.remove(forced);order.insert(0,forced)
+    return order
+
+def frame_editors(info=None):
+    """Installed editors as [(key,label)] in preference order. HENGE_FRAME_EDITOR=fibo|qwen21|klein|klein3 moves one
+    editor to the front without changing what the picker offers."""
+    try:info=comfy_info() if info is None else info
+    except Exception:return []
+    ready={'fibo':fibo_available(info),'qwen21':qwen21_available(info),'klein':klein_available(info),'klein3':klein3_available(info)}
+    labels=dict(EDITORS)
+    return [(key,labels[key]) for key in editor_order(info) if ready[key]]
+
+def frame_editor_choices(info=None, assume=False):
+    """Every editor the studio can ask for, with whether this ComfyUI has it (the picker greys out the rest).
+    `assume=True` is for serverless workers, which list their models only after their first job: until then the studio
+    offers the editors the image was built with instead of hiding the frame edit."""
+    ready=dict(frame_editors(info))
+    return [{'id':key,'label':labels,'installed':True if assume else bool(ready.get(key))} for key,labels in EDITORS]
+
+def frame_editor(info=None):
+    """Which image editor edits frames and pictures: FIBO 2.0 when installed, then Qwen-Image 2.1, then FLUX Klein."""
+    return (frame_editors(info) or [(None,None)])[0][0]
+
+def editor_graph(editor,image,refs,instruction,seed,info=None):
+    """Build the edit graph for one editor, picking the Qwen-Image 2.1 checkpoint that is actually on disk."""
+    build=EDITOR_GRAPHS.get(editor)
+    if build is None:raise ValueError('Frame editing needs an image editor (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein)')
+    return build(image,refs,instruction,seed,**({'unet':qwen21_model(info),'lora':qwen21_lora(info)} if editor=='qwen21' else {}))
 
 # First-frame edit instructions per operation; the painted area (when given) is the only part that changes.
 EDIT_OPS={'replace':'Replace {what} with {target}.','remove':'Remove {what} and fill the space naturally with what would be behind it.',
@@ -795,17 +854,17 @@ def adapt_request(job):
 def adapt_prepare(job,runner,regenerate=False):
     """The prepared reference for a job (FLUX Klein), from the cache when the same pictures (and instruction) were prepared before.
     `runner` is the job whose status the ComfyUI run reports to. Copies it to the job's input and preview."""
-    build={'klein3':klein3_graph,'klein':klein_graph}.get(frame_editor())
-    if build is None:raise ValueError('Reference adaptation requires FLUX.3 or FLUX.2 Klein')
+    editor=frame_editor()
+    if editor not in EDITOR_GRAPHS:raise ValueError('Reference adaptation needs an image editor (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein)')
     req=adapt_request(job);inp=INPUT/'henge'/job['id'];inp.mkdir(parents=True,exist_ok=True);ADAPT_CACHE.mkdir(parents=True,exist_ok=True)
     cached=ADAPT_CACHE/f"{req['key']}.png"
     if regenerate or not cached.is_file():
         seed=int(time.time())%2**31 if regenerate else int(job['options'].get('seed',42))
         frame=inp/'adapt_source.png';run(['ffmpeg','-v','error','-ss',str(job['request']['video']['start_seconds']),'-i',str(INPUT/job['assets']['video']),'-frames:v','1','-threads','1','-y',str(frame)])
         frame=frame.relative_to(INPUT).as_posix()
-        # The same editor as the edit modal: FLUX.3 / FLUX.2 [klein] when installed.
-        if req['figure']:graph=build(req['selected'][0],req['selected'][1:]+[frame],req['instruction'],seed)
-        else:graph=build(frame,req['selected'],req['instruction'],seed)
+        # The same editor as the edit modal: FIBO 2.0 first, then Qwen-Image 2.1, then FLUX Klein.
+        if req['figure']:graph=editor_graph(editor,req['selected'][0],req['selected'][1:]+[frame],req['instruction'],seed)
+        else:graph=editor_graph(editor,frame,req['selected'],req['instruction'],seed)
         made=image_from_output(execute_graph(runner,graph,'reference_edit'),inp/'adapt_new.png');shutil.move(made,cached)
     prepared=inp/'adapt_prepared.png';shutil.copyfile(cached,prepared);shutil.copyfile(cached,job_path(job['id'])/'adapted_preview.png')
     # During generation `job` is the live record; on the approval screen it was read before the long edit run.
@@ -1417,7 +1476,7 @@ def health():
     # Refiner latent upscalers the backend has (the native loader lists latent_upscale_models).
     listed=set(comfy_choices(info,'LatentUpscaleModelLoader','model_name'))
     upscalers['refiner_upscalers']={key:unknown or name in listed for key,name in workflows.REGENERATE_UPSCALERS.items()}
-    return {'model_install_active':MODEL_INSTALL.active(),'molmo':molmo_pointing.location(),'temporal_windows_ready':'HengeH3PureWindows' in info,'regenerate':regenerate,'upscalers':upscalers,'bases':bases,'turbos':turbos,'samplers':list(workflows.SAMPLERS),'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)),'frame_editor':frame_editor(info) if info else None,'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
+    return {'model_install_active':MODEL_INSTALL.active(),'molmo':molmo_pointing.location(),'temporal_windows_ready':'HengeH3PureWindows' in info,'regenerate':regenerate,'upscalers':upscalers,'bases':bases,'turbos':turbos,'samplers':list(workflows.SAMPLERS),'requirements':requirements,'setup':{**setup,'ready':online and setup['all_ready']},'online':online,'comfy_url':'runpod serverless' if isinstance(REMOTE,RunPodBackend) else f'comfy api {REMOTE.base}' if REMOTE else URL,'provider':connection_config()['provider'],'training_busy':training_busy(),'tara_ready':unknown or 'BFSMiniMaxH3NativeTemporal' in info,'prompt_pipeline_version':1,'models':models,'editor_ready':bool(frame_editor(info)) or unknown,'frame_editor':frame_editor(info) if info else editor_order()[0] if unknown else None,'frame_editors':frame_editor_choices(info) if info else frame_editor_choices({}, assume=True) if unknown else [],'guides':['original','2d','3d','mask'],'planner':'assistant' if assistant_planner() else 'external' if os.environ.get('VLM_CHAT_URL') else 'local_comfy','likeness_filter':likeness_filter(),'offline_reason':'' if online else (getattr(REMOTE,'offline_reason','') if REMOTE else 'ComfyUI does not answer'),'message':'GPU reserved for training' if training_busy() else 'Ready'}
 
 @app.get('/updates')
 def updates():
@@ -1670,7 +1729,7 @@ async def preparation(jid:str,request:Request):
         job=load(jid)
         if job['status']!='awaiting_approval':raise HTTPException(409,'Reference preparation can only change before approval')
         plan=dict(job['plan']);enabled=body['enabled']
-        if enabled and not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FLUX.3 / FLUX.2 Klein), not installed on this ComfyUI')
+        if enabled and not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein), not installed on this ComfyUI')
         if enabled and (not plan.get('adapt_picture_slots') or not plan.get('adapt_instruction','').strip()):raise HTTPException(400,'The analysis did not provide a reference preparation instruction')
         plan['adapt_reference']=enabled
         options={**job['options'],'adapt':'on' if enabled else 'off'}
@@ -1726,13 +1785,16 @@ async def convert_gif(request:Request):
 
 @app.post('/frame-edit')
 async def frame_edit(request:Request):
-    """Frame or picture edit (the edit modal): FLUX.3 / FLUX.2 [klein] when installed; returns the edited PNG.
-    Optional `mask` (white = paint): only that area is edited, on a crop around it, and pasted back with a soft edge, so
-    the rest of the frame stays pixel-exact. `op` is replace, remove, add or free (`what` = the part, `instruction` = the
-    new content or the whole request). Runs as a hidden job so it uses the same ComfyUI or serverless path as generation."""
-    editor=frame_editor()
-    if not editor:raise HTTPException(409,'No image editor is installed on this ComfyUI (FLUX.3 / FLUX.2 Klein)')
-    form=await request.form(max_files=13,max_fields=6,max_part_size=32*1024*1024)
+    """Frame or picture edit (the edit modal): FIBO 2.0 edit turbo, Qwen-Image 2.1 or FLUX Klein, whichever this
+    ComfyUI has; returns the edited PNG. `editor` picks one of the installed editors. Optional `mask` (white = paint):
+    only that area is edited, on a crop around it, and pasted back with a soft edge, so the rest of the frame stays
+    pixel-exact. `op` is replace, remove, add or free (`what` = the part, `instruction` = the new content or the whole
+    request). Runs as a hidden job so it uses the same ComfyUI or serverless path as generation."""
+    installed=dict(frame_editors())
+    if not installed:raise HTTPException(409,'No image editor is installed on this ComfyUI (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein)')
+    form=await request.form(max_files=13,max_fields=8,max_part_size=32*1024*1024)
+    editor=str(form.get('editor') or '').strip() or next(iter(installed))
+    if editor not in installed:raise HTTPException(400,'This ComfyUI does not have that image editor')
     op=str(form.get('op') or 'free');what=str(form.get('what') or '').strip()[:400];instruction=str(form.get('instruction') or '').strip()
     if op not in EDIT_OPS:raise HTTPException(400,'Unknown edit')
     if (op in ('free','add') and not instruction) or (op=='replace' and not (what or form.get('mask')) ) or len(instruction)>4000:raise HTTPException(400,'Describe the edit')
@@ -1759,9 +1821,7 @@ async def frame_edit(request:Request):
     job={'id':jid,'created':time.time(),'status':'running','stage':'frame_edit','progress':0,'request':{'mode':'frame_edit','instruction':instruction or what,'op':op,'editor':editor,'masked':bool(region)},'options':{},'message':'Editing the frame'};save(job)
     try:
         seed=int(time.time())%2**31
-        if editor=='klein3':graph=klein3_graph(staged[0],staged[1:],text,seed)
-        elif editor=='klein':graph=klein_graph(staged[0],staged[1:],text,seed)
-        else:raise ValueError('Frame editing requires FLUX.3 or FLUX.2 Klein')
+        graph=editor_graph(editor,staged[0],staged[1:],text,seed)
         outputs=await asyncio.to_thread(execute_graph,job,graph,'frame_edit')
         edited=await asyncio.to_thread(image_from_output,outputs,inp/'edited_raw.png')
         with Image.open(edited) as out:
@@ -1874,7 +1934,7 @@ async def regenerate_adapted(jid:str,request:Request):
         job=load(jid)
         if job['status']!='awaiting_approval':raise HTTPException(409,'The adapted reference can only change while the plan awaits approval')
         if not (job.get('plan') or {}).get('adapt_reference'):raise HTTPException(409,'This job does not adapt the reference')
-        if not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FLUX.3 / FLUX.2 Klein), not installed on this ComfyUI')
+        if not frame_editor():raise HTTPException(409,'Reference adaptation needs an image editor (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein), not installed on this ComfyUI')
         if instruction is not None:
             options={**job['options'],'adapt_instruction':instruction.strip()}
             if not instruction.strip() or instruction.strip()==adapt_request({**job,'options':{**job['options'],'adapt_instruction':''}})['default_instruction']:options.pop('adapt_instruction')

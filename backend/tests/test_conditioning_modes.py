@@ -71,6 +71,7 @@ class PreparationChoice(unittest.TestCase):
   from fastapi.testclient import TestClient
   import server
   job={'id':'b'*32,'status':'awaiting_approval','options':{'adapt':'auto'},'plan':{'adapt_reference':False,'prompt':'p','adapt_picture_slots':[1],'adapt_instruction':'Prepare upright dog'}}
-  self.assertIsNone(server.frame_editor({'TextEncodeFibo2':{},'UNETLoader':{'input':{'required':{'unet_name':[['fibo2_edit_turbo_int8_convrot.safetensors']]}}}}))
+  # FIBO 2.0 is Henge's default editor again: node plus model and encoder is all it needs.
+  self.assertEqual(server.frame_editor({'TextEncodeFibo2':{},'UNETLoader':{'input':{'required':{'unet_name':[['fibo2_edit_turbo_int8_convrot.safetensors']]}}},'CLIPLoader':{'input':{'required':{'clip_name':[['qwen3vl_4b_int8_convrot.safetensors']]}}}}),'fibo')
   with patch.object(server,'load',return_value=job),patch.object(server,'save'),patch.object(server,'frame_editor',return_value=None):
    self.assertEqual(TestClient(server.app).post('/jobs/'+job['id']+'/preparation',json={'enabled':True}).status_code,409)

@@ -76,16 +76,20 @@ off Enhance prompt preserves the user's text.
 
 ## Automatic reference preparation (optional)
 
-Reference preparation uses the available FLUX Klein editor: FLUX.3 Klein when installed,
-otherwise FLUX.2 Klein. It can prepare an upright, human-compatible animal reference while
+Reference preparation and frame edits use one installed image editor: **FIBO 2.0 edit turbo** by default, which samples
+the latent of the frame it is given, so the camera, the performer and the composition survive the edit. **Qwen-Image
+2.1 Turbo** and **FLUX Klein** are alternatives you pick in the First Frame modal. It can prepare an upright, human-compatible animal reference while
 preserving its identity. Normal human-to-human swaps do not require adaptation just because
 of hair, wardrobe, makeup or skin colour. Review the plan and choose **Adapt reference** or
 **Use original image**; the uploaded original is retained.
 
-The `klein` and optional `klein3` profiles in `config/model-repos.example.json` list the
-required model, encoder and shared FLUX VAE. FIBO is no longer automatically selected or
-downloaded as an editor. Some shared encoder/VAE files keep their existing hosting URLs;
-they do not activate FIBO inference.
+The `fibo` profile lists the FIBO 2.0 model, its Qwen3-VL 4B encoder and the shared FLUX VAE. `qwen21` (optional) adds
+Qwen-Image 2.1 with its Qwen3-VL 8B encoder and its own VAE; `klein` and `klein3` stay available as alternative FLUX
+editors. In `qwen21`, Henge loads the 7.3 GB Turbo checkpoint when it is installed; the 335 MB
+`p_q_image_2.1_5_steps_v0.1_comfyui_bf16.safetensors` LoRA gives the full checkpoint the same 5 steps at CFG 1, so a
+disk that cannot fit the Turbo build still gets the fast edit. `TextEncodeFibo2` and `TextEncodeQwenImage21` are core
+ComfyUI nodes: no custom node pack is needed. Set `HENGE_FRAME_EDITOR=fibo|qwen21|klein|klein3` to change the order the
+studio starts from.
 
 Preparation is an appearance/pose aid, not temporal skeletal retargeting or a quality guarantee.
 

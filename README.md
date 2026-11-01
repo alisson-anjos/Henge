@@ -102,8 +102,8 @@ and 2K, not 4K. It requires the `regenerate` weights and native ComfyUI upscaler
 [setup and limits](docs/open-h3-regenerate.md).
 
 **Audio and scene controls.** Keep the source audio, generate audio with H3, or enable guide-audio conditioning.
-An optional **New background** picture follows the guide camera (moving plate). **FLUX Klein** can prepare references
-or edit frames; available editors depend on the installed profiles.
+An optional **New background** picture follows the guide camera (moving plate). Frames and pictures are edited by
+**FIBO 2.0 edit turbo**; **Qwen-Image 2.1** and **FLUX Klein** are optional editors you pick in the First Frame modal.
 
 ## How to run Henge
 
@@ -126,10 +126,12 @@ Storage depends on the profiles; the pod examples allocate a 180 GB volume. The 
 these weights or a GPU. [Models and download links](docs/models-and-downloads.md). The Motion Transfer LoRAs — v1.0, TARA v1.0 and
 the Motion Transfer / Edit Anything v1.0 first-frame model, a merge with SolarRenderer control — are public in [Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI) (BFS Motion Transfer license).
 **Downloading the default model profiles needs no Hugging Face token.** RunPod Serverless still requires your
-RunPod API key and endpoint ID in the bridge configuration. For model downloads, the exception is the optional `klein3`
-profile (FLUX.3 [image klein]), which is gated by Black Forest Labs: accept its license on
-[Hugging Face](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN`. Without it, the
-default FLUX.2 [klein] 4B (Apache-2.0) edits frames and pictures.
+RunPod API key and endpoint ID in the bridge configuration. The default editor `fibo` (FIBO 2.0 edit turbo, Bria) and
+the optional `qwen21` (Qwen-Image 2.1 Turbo) are public. The gated exception is the optional `klein3` profile
+(FLUX.3 [image klein]): accept its license on
+[Hugging Face](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN`. FLUX.3 is the
+last editor in Henge's order: it resizes the frame to about a megapixel and samples an empty latent, so it re-draws the
+shot instead of editing it, and a First Frame model then repeats that difference through the whole clip.
 
 ### A. Local, with your own ComfyUI
 
@@ -152,7 +154,7 @@ You need a working ComfyUI (PyTorch with CUDA 13, NVIDIA driver 580+), Node.js 2
    ```sh
    /path/to/comfy/python scripts/download_models.py \
      --manifest config/model-repos.example.json --models-dir /path/to/ComfyUI/models \
-     --profiles character,motion,headswap,sharpness,regenerate,klein,sam2d,audio
+     --profiles character,motion,headswap,sharpness,regenerate,fibo,sam2d,audio
    ```
 
    No token needed. Models you already have in ComfyUI are reused, even under another name or subfolder.

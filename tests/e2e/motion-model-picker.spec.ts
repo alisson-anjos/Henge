@@ -56,6 +56,10 @@ async function enterMotion(page: Page) {
 async function uploadGuide(page: Page) {
   if (!GUIDE) return false;
   await page.locator('[data-testid=guide-input]').setInputFiles(GUIDE);
+  // Uploading a guide opens the interval picker, and the studio only offers the First Frame once a range is confirmed.
+  const trim = page.locator('.trim-overlay');
+  await expect(trim).toBeVisible({timeout: 30_000});
+  await trim.getByRole('button', {name: /Use full video|Usar o vídeo inteiro|Usar video completo/}).click();
   // The trimmed guide lives client-side; the bridge needs only a couple of seconds to probe and extract it.
   for (let i = 0; i < 25; i++) {
     if (await page.locator('.ffp-card').count()) return true;
@@ -81,7 +85,7 @@ test('the backend offers exactly the three current Motion models', async ({reque
 });
 
 test('the model picker offers the three models and follows the First Frame', async ({page}) => {
-  test.setTimeout(180_000);
+  test.setTimeout(900_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(String(error)));
   await openStudio(page);
@@ -97,23 +101,22 @@ test('the model picker offers the three models and follows the First Frame', asy
   await expect(page.locator('.prompt-tips button').first()).toHaveText(/copy the motion|copiar o movimento|copiar el movimiento/);
 
   if (!await uploadGuide(page)) {expect(true, 'no guide clip: skipping the First Frame checks').toBeTruthy(); return;}
-  await page.locator('.ffp-card button:not(.ffp-pick)').first().click();
-  await expect(page.locator('.ffp-card.is-picked')).toHaveCount(1);
-  await expect(picker(page).locator('.select-value')).toHaveText(MODELS.edit.label);
-  await expect(turboValue(page)).toContainText('DMAD 4-step');
-  // Now the tips switch to edit prompting: the change first, then what must survive it.
-  await expect(page.locator('.prompt-tips button').first()).toHaveText(/fire in his hands|fogo nas mãos dele|fuego en sus manos/);
-
+  // The First Frame card starts collapsed: open it, then ask for the frame editor.
+  await page.locator('.ffp-card summary').click();
+  await expect(page.locator('.ffp-card .first-frame-button')).toBeVisible();
+  await page.locator('.ffp-card .first-frame-button').click();
   const modal = page.locator('.first-frame-modal');
   await expect(modal).toBeVisible();
+  // The modal names the image editors this backend has, in the order it prefers them: FIBO 2.0 keeps the frame.
+  await expect(modal.locator('.edit-editors button').first()).toHaveText(/FIBO 2\.0/);
+  const what = modal.getByLabel(/What do you replace|O que você vai substituir|Qué reemplazas/);
+  if (await what.count()) await what.fill('the hoodie');
+  await modal.getByLabel(/With what|Pelo quê|Por qué/).fill('a luminous blue jacket');
   const edit = modal.getByRole('button', {name: /Edit with|Editar com|Editar con/});
   if (await edit.count() && await edit.isEnabled()) {
     // The frame editor is installed: edit the opening frame in place, the way the model wants it.
-    const what = modal.getByLabel(/What do you replace|O que você vai substituir|Qué reemplazas/);
-    if (await what.count()) await what.fill('the hoodie');
-    await modal.getByLabel(/With what|Pelo quê|Por qué/).fill('a luminous blue jacket');
     await edit.click();
-    await expect(modal.getByAltText('Edited frame')).toBeVisible({timeout: 180_000});
+    await expect(modal.locator('figure img')).toBeVisible({timeout: 420_000});
   } else {
     // No editor on this machine: bring one in, which is the other supported route.
     const chooser = page.waitForEvent('filechooser');
@@ -121,8 +124,12 @@ test('the model picker offers the three models and follows the First Frame', asy
     (await chooser).setFiles({name: 'edited-frame.png', mimeType: 'image/png', buffer: EDITED_FRAME});
   }
   await modal.getByRole('button', {name: /Use as first frame|Usar como primeiro quadro|Usar como primer fotograma/}).click();
-  await expect(page.locator('.ffp-card.is-picked')).toHaveCount(1);
+  // Attaching that frame is the edit workflow: the studio moves to the first-frame model on the standard turbo, and the
+  // coaching switches to "the change first, then what has to survive it".
+  await expect(page.locator('.ffp-card .ffp-current')).toBeVisible();
   await expect(picker(page).locator('.select-value')).toHaveText(MODELS.edit.label);
+  await expect(turboValue(page)).toContainText('DMAD 4-step');
+  await expect(page.locator('.prompt-tips button').first()).toHaveText(/fire in his hands|fogo nas mãos dele|fuego en sus manos/);
 
   // A deliberate model choice survives re-renders.
   await chooseModel(page, MODELS.tara.label);

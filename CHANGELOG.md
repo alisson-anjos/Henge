@@ -7,6 +7,41 @@ This log starts with the 2026-10-28 updates; earlier commits remain in the Git h
 Render and RunPod have been updated; each entry records those states separately. Test results are described with
 their scope; CPU tests do not replace generation with the real models.
 
+## 2026-11-01
+
+### Put FIBO 2.0 back as the image editor, with Qwen-Image 2.1 as an optional fast one
+
+- Frame and picture edits use **FIBO 2.0 edit turbo** by default again. **Qwen-Image 2.1** is an optional editor you
+  pick per edit in the First Frame modal, and **FLUX.2 [klein]** / **FLUX.3 [image klein]** stay as fallbacks with
+  FLUX.3 last. `HENGE_FRAME_EDITOR=fibo|qwen21|klein|klein3` moves one editor to the front.
+- Why FLUX.3 stopped being the default: its graph feeds the frame in as multi-reference conditioning
+  (`ReferenceMultiLatent` at about one megapixel) and samples an **empty** latent at `denoise=1`, so it re-draws the
+  shot instead of editing it, and the first-frame model carries that re-drawing through every later frame. FIBO 2.0
+  (`TextEncodeFibo2`) samples the latent of the frame it is given and conditions positive *and* negative on it, and
+  Qwen-Image 2.1 (`TextEncodeQwenImage21`) returns a latent at the first reference's size — Henge passes
+  `resolution=0`, so the result keeps the guide frame's own size and stays pixel aligned.
+- Editors are now a registry (`frame_editors()`, `frame_editor_choices()`, `EDITOR_GRAPHS`): `/frame-edit` accepts an
+  `editor` field and rejects one this ComfyUI does not have, the hidden frame-edit job records which editor produced
+  it, the reference-adaptation cache key changes with the editor, and `/health` reports the default plus every editor
+  with its install state. A serverless worker that has not listed its files yet assumes the editors of its image
+  instead of hiding the frame edit.
+- Qwen-Image 2.1 speed: the 7.3 GB **Turbo** checkpoint is used when installed (8 steps, CFG 1, `deis_2m`/`simple`);
+  otherwise the 335 MB `p_q_image_2.1_5_steps_v0.1_comfyui_bf16.safetensors` LoRA puts the full checkpoint on the same
+  5-step CFG 1 schedule, and only an install with neither samples 24 steps at CFG 2.5. The `qwen21` download profile
+  carries the checkpoint, its Qwen3-VL 8B encoder, its VAE and that LoRA; the default profiles now ship `fibo` in
+  place of `klein`.
+- The First Frame modal names the installed editors as chips and says what each is good at, instead of assuming FLUX
+  Klein everywhere.
+- **Components:** editor registry and graphs, request defaults, adaptation cache, download manifest and profiles,
+  First Frame modal, studio copy, health contract, RunPod/serverless tables and model documentation.
+- **Validation:** 241 CPU tests passed, 4 skipped; `tsc --noEmit` and `npm run build` passed; two Playwright tests
+  pass against the local stack, and that run now performs a real FIBO 2.0 frame edit through the backend and uses the
+  result as the first frame. Both editor graphs also ran on a real ComfyUI (1276×718 guide frame: FIBO 2.0 in 57 s,
+  Qwen-Image 2.1 with the 5-step LoRA in 49 s). Per-edit visual quality on your own clips still needs a look in the
+  interface.
+- **Release:** code published on `main` as `v2026.11.01`; the tag triggers the Docker image build.
+  Image publication and deployment are pending.
+
 ## 2026-10-31
 
 ### Surface the first-frame edit model as Motion Transfer / Edit Anything v1.0
