@@ -187,8 +187,8 @@ TARA node is registered; it is not proof a GPU kernel was benchmarked.
 
 1. Select Character Swap or Motion Transfer, then attach a guide and references.
 2. Select model/method in the sidebar. Character Swap uses v1.1; motion offers
-   Motion Transfer v1.0, Motion Transfer TARA v1.0 and Motion Transfer / Edit Anything v1.0 when installed — attaching a
-   First Frame selects Edit Anything v1.0 for you. Both tasks can
+   Motion Transfer v1.0, Motion Transfer TARA v1.0 and Motion Transfer FFP v1.0 when installed — attaching a
+   First Frame selects Motion Transfer FFP v1.0 for you. Both tasks can
    select Guide Latents or TARA; Guide remains the default.
 3. Write the requested edit. Click **Generate** beside the prompt to analyze it,
    review the plan and approve generation. Anatomy adaptation is explained and

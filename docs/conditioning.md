@@ -8,7 +8,7 @@ path changes.
 | Path | Guide in native conditioning | Guide seen by the VLM (Qwen-VL text encoder) | In Henge |
 | --- | --- | --- | --- |
 | 1. Native Reference | Yes, as a native video reference | Yes (2 fps) | Not offered on its own; TARA builds on it |
-| 2. Add Guide | No: VAE latents added with Add Guide | No | Character Swap, Head Swap, Sharpness, Motion Transfer / Edit Anything v1.0 (the First Frame model) |
+| 2. Add Guide | No: VAE latents added with Add Guide | No | Character Swap, Head Swap, Sharpness, Motion Transfer FFP v1.0 (the First Frame model) |
 | 3. Add Guide + CLIP | No: VAE latents added with Add Guide | Yes, frames sampled at the CLIP fps setting | Motion Transfer v1.0 and Motion Transfer TARA v1.0 (default Guide Latents method) |
 | 4. TARA-H3 (experimental) | Yes, native video reference with temporally aligned attention | Depends on the reference setup | Motion Transfer → Method → TARA |
 
@@ -25,7 +25,7 @@ In plain words:
 
 **In the studio** (Settings → *Guide for the text encoder*, shown with Guide Latents in every mode): **Latents +
 CLIP** (path 3, the default), **Latents only** (path 2) or **Auto** (each model's default: path 3 for Motion Transfer
-v1.0 and TARA v1.0, path 2 for Character Swap, Head Swap, Sharpness and Motion Transfer / Edit Anything v1.0). Use *Latents only* when the replaced
+v1.0 and TARA v1.0, path 2 for Character Swap, Head Swap, Sharpness and Motion Transfer FFP v1.0). Use *Latents only* when the replaced
 person's clothes or hair leak into the result. API and MCP jobs that omit `guide_clip` get `auto`.
 
 Code: `HengeH3Conditioning` (`backend/comfy_nodes/henge/__init__.py`) builds paths 2 and 3; `guide_context` turns the

@@ -44,7 +44,7 @@ ComfyUI and where, and whether they have a RunPod account (if not, give them htt
 | **C. Local UI + RunPod Serverless** | no suitable GPU, occasional use, pay per second | RunPod account, `runpodctl`; Docker or Node+Python locally |
 
 Models are about 125 GB with every profile; fewer profiles download less (step A2). No model needs a Hugging Face
-token: the Henge LoRAs — Motion Transfer v1.0, TARA v1.0 and Edit Anything v1.0 (the First Frame model) — are public.
+token: the Henge LoRAs — Motion Transfer v1.0, TARA v1.0 and Motion Transfer FFP v1.0 (the First Frame model) — are public.
 
 ## A. Local
 
@@ -63,7 +63,7 @@ Steps and checks:
      --models-dir <ComfyUI>/models --profiles character,motion,headswap,sharpness,regenerate,fibo,sam2d,audio --dry-run   # list, then without --dry-run
    ```
    Models the user already has in that ComfyUI are reused (old names, other subfolders), never renamed or
-   downloaded twice. Ask which modes the user wants; profiles: `character` (Character Swap), `motion` (every Motion Transfer LoRA, Edit Anything v1.0 and the SolarRenderer turbo included), `fibo` (the default image editor, FIBO 2.0 edit turbo), `headswap`, `sharpness`, `audio`
+   downloaded twice. Ask which modes the user wants; profiles: `character` (Character Swap), `motion` (every Motion Transfer LoRA, Motion Transfer FFP v1.0 and the SolarRenderer turbo included), `fibo` (the default image editor, FIBO 2.0 edit turbo), `headswap`, `sharpness`, `audio`
    (generated audio),
    `qwen21` (optional Qwen-Image 2.1 Turbo editor), `klein` / `klein3` (optional FLUX editors), `sam2d` (color marks and latent masks), `sam3d`, `omniref`.
 3. **Start ComfyUI** on 8189: `$COMFY_PY main.py --listen 127.0.0.1 --port 8189 --preview-method taesd --fast-disk`.

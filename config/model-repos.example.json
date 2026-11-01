@@ -366,7 +366,7 @@
       "profiles": [
         "ffp"
       ],
-      "note": "Motion Transfer / Edit Anything v1.0 (220 MB): the VFX Edit first-frame LoRA (rank 128) x1.0 + SolarRenderer control x0.5, rank concat with per-module SVD keeping 99% of the Frobenius energy. The studio selects it whenever a First Frame is attached; it runs on the standard DMAD 4-step turbo."
+      "note": "Motion Transfer FFP v1.0 (220 MB): the VFX Edit first-frame LoRA (rank 128) x1.0 + SolarRenderer control x0.5, rank concat with per-module SVD keeping 99% of the Frobenius energy. The studio selects it whenever a First Frame is attached; it runs on the standard DMAD 4-step turbo."
     },
     {
       "id": "sharpness",

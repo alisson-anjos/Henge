@@ -28,6 +28,10 @@ export type DirectionRequest = {
   pictures: {slot: number; token: string; name: string}[];
   /** Motion Transfer · first-frame propagate: the picture that is the edited first frame. */
   first_frame_slot?: number;
+  /** Character Swap: an edited first frame (sent as the `first_frame` file) replaces frame 0 of the guide. */
+  guide_first_frame?: boolean;
+  /** How an edited first frame is used: frame 0 of the guide, its first latent (default), or a reference picture only. */
+  first_frame_mode?: 'latent' | 'reference';
   generation_status: 'not_submitted';
 };
 

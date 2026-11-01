@@ -228,7 +228,7 @@ def match_people(video: str, photos: list[str], start: float = 0, end: float | N
 @mcp.tool()
 def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | None = None, start: float = 0, end: float | None = None,
                quality: str = '480p', project: str = 'Henge', subjects: list[dict] | None = None, auto_approve: bool = False,
-               keep_audio: bool = True, generate_audio: bool = False, background: str | None = None, seconds_per_shot: float = 4.5, options: dict | None = None, split_points: list[float] | None = None, guide_representation: str = 'original', mark_opacity: float = 1, processing: dict | None = None, audio_conditioning: bool = False, first_frame_slot: int | None = None) -> dict:
+               keep_audio: bool = True, generate_audio: bool = False, background: str | None = None, seconds_per_shot: float = 4.5, options: dict | None = None, split_points: list[float] | None = None, guide_representation: str = 'original', mark_opacity: float = 1, processing: dict | None = None, audio_conditioning: bool = False, first_frame_slot: int | None = None, first_frame: str | None = None, first_frame_mode: str = 'latent') -> dict:
     """Start a generation from local files.
     mode: 'swap' | 'motion' | 'headswap' | 'sharpness'. video: path of the guide video. pictures: paths, in order Picture 1, 2...
     (swap/motion 1-11, headswap exactly 1 face, sharpness none). prompt: the request, naming pictures as @Picture1, @Picture2
@@ -244,7 +244,10 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
     lines in the prompt as <d>[language] text</d>. Needs the H3 audio VAE on the backend (profile audio).
     guide_representation: original (default), 2d, 3d or mask; mask requires subjects with anchors.
     mark_opacity: color-guide opacity 0.1-1. processing: backend processing fields (cut_mode, context_frames, mode, etc.).
-    audio_conditioning: use guide audio as conditioning. first_frame_slot: optional reference slot used as first frame.
+    audio_conditioning: use guide audio as conditioning. first_frame_slot: Motion only, the Picture slot that is the edited
+    first frame. first_frame: Character Swap only, path of the guide frame at `start` with the characters already swapped;
+    it is not a Picture. first_frame_mode: 'latent' (default, the frame replaces frame 0 of the guide the model reads)
+    or 'reference' (a reference picture only).
     options: all backend generation options, including temporal_windows, regional_attention, mask and refiner settings, e.g. {"profile": "character", "conditioning_mode": "guide"|"tara", "turbo": "dmd8", "seed": 42, "upscale_method": "h3"|"regenerate"|"nvidia"|"none"}.
     Returns the job; follow it with wait_for_job."""
     if guide_representation not in ('original', '2d', '3d', 'mask'): raise ValueError('Unknown guide representation')
@@ -271,9 +274,12 @@ def create_job(mode: str, video: str, prompt: str = '', pictures: list[str] | No
                  'pictures': [{'slot': i + 1, 'token': f'<Picture {i + 1}>', 'name': p.name} for i, p in enumerate(pictures)], 'generation_status': 'not_submitted'}
     if processing: direction['processing'].update(processing)
     if first_frame_slot is not None: direction['first_frame_slot'] = first_frame_slot
+    if first_frame: direction['guide_first_frame'] = True
+    if first_frame_slot is not None or first_frame: direction['first_frame_mode'] = first_frame_mode
     opts = {'auto_approve': auto_approve, 'enhance_prompt': True, **(options or {})}
     files = [('video', (source.name, source.open('rb'), 'video/mp4'))] + [(f'picture_{i + 1}', (p.name, p.open('rb'), 'application/octet-stream')) for i, p in enumerate(pictures)]
     if background: files.append(('background', (Path(background).name, Path(background).expanduser().open('rb'), 'application/octet-stream')))
+    if first_frame: files.append(('first_frame', (Path(first_frame).name, Path(first_frame).expanduser().open('rb'), 'application/octet-stream')))
     try: job = api('POST', '/jobs', data={'direction': json.dumps(direction), 'options': json.dumps(opts)}, files=files, timeout=1800).json()
     finally:
         for _, (_, f, _) in files: f.close()

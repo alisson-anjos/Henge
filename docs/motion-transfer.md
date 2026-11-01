@@ -58,22 +58,45 @@ prompt writing is separate from H3's own text encoder. Load the turbo and the ta
 training adapter the LoRAs were trained over only counters distillation during training and is not loaded. The examples use DMD 8-step, Euler/simple, CFG 1. Do not stack a second copy of a component
 that is already merged into your chosen weights.
 
-## Motion Transfer / Edit Anything v1.0 and the First Frame
+## Motion Transfer FFP v1.0 and the First Frame
 
-**Motion Transfer / Edit Anything v1.0** is our first-frame model: the VFX Edit first-frame LoRA (rank 128, trained to carry a
+**FFP is First Frame Propagate.** You edit one frame of the guide — any frame, not only the first — and that image becomes
+frame 0 of what the model renders; the model then rebuilds every frame after it around your image while the guide keeps the
+motion, timing and camera. It is not image-to-video: the clip is regenerated with your frame inside it, so the edit does not
+have to be re-applied frame by frame and does not drift back to the original look halfway through. In the studio the FFP
+card is the control for that: choose a frame, edit it (by hand or with the frame editor), and the picture enters the job as
+a native reference with its role named in the prompt
+(`<Picture N> is the edited first frame of the video: propagate its changes through the whole clip while keeping the
+original motion, timing and camera`).
+
+Not every Motion model was trained for that, so the model picker carries **tags** instead of guesses:
+
+| Tag | Meaning | Which model |
+| --- | --- | --- |
+| **FFP ✓** | trained for First Frame Propagate: an edited frame carries through the clip without drifting | Motion Transfer v1.0, Motion Transfer FFP v1.0 |
+| **FFP ⚠** | takes an edited frame, but FFP is not what it was trained for: it can change more of the clip than the frame you edited | Motion Transfer TARA v1.0 |
+| **multi-reference** | takes several reference pictures at once, each with its own job: person, place, look | Motion Transfer v1.0, Motion Transfer TARA v1.0 |
+| **multi-reference · weaker** | trained with a single reference picture: it does take more than one, and how well they land is up to your prompt | Character Swap v1.1 |
+| **one reference** | it works from a single reference picture | Head Swap v1.0 |
+
+**Motion Transfer FFP v1.0** is our first-frame model: the VFX Edit first-frame LoRA (rank 128, trained to carry a
 painted frame through a video) merged with SolarRenderer control at ×0.5 — rank concatenation, then a per-module SVD that
 keeps 99% of the Frobenius energy (`minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors`, 220 MB). It runs with Guide
-Latents and with TARA. The merge already carries SolarRenderer control, so it does not stack the SolarRenderer step-
+Latents and with TARA, and it is the model the studio picks by default when a First Frame is attached, because it is the one
+merge here that carries SolarRenderer control. The merge already carries that control, so it does not stack the SolarRenderer step-
 distillation turbo on top: it samples on the standard **DMAD 4-step** turbo (Kijai) like every other model, and any other
 turbo stays selectable under Advanced.
 
+Motion Transfer TARA can also take a First Frame, and it often tracks it well — it is the multi-subject model, and it is
+multi-reference like Motion Transfer — but it was trained for binding several subjects, not for FFP: the clip can come out
+changed beyond the frame you edited. When you want a change to the clip itself — add fire,
+remove the car, restyle the scene — that is the Motion Transfer FFP model, and the prompt is the single-sentence
+`vfx_edit:` form rather than the six-section one.
+
 Whenever a **First Frame** is attached — a picture of the clip edited in advance, by hand or with the frame editor
-(FIBO 2.0 by default, Qwen-Image 2.1 Turbo or FLUX Klein if installed) — the studio selects this model by default and
-explains the picture's role in the prompt
-(`<Picture N> is the edited first frame of the video: propagate its changes through the whole clip while keeping the
-original motion, timing and camera`). The source video stays the guide frame by frame, so the edit propagates instead
-of being re-invented per shot. Removing the First Frame leaves the model choice as it is; picking another model by hand
-is respected.
+(FIBO 2.0 by default, Qwen-Image 2.1 Turbo or FLUX Klein if installed) — the studio explains the picture's role in the prompt
+and warns when the selected model is not tagged FFP. Removing the First Frame leaves the model choice as it is; picking
+another model by hand is respected.
 
 The guide stays the frame-by-frame tracing reference and enters as latents only, without the guide's frames reaching the
 text encoder, so nothing of the original performer leaks back (see [conditioning paths](conditioning.md)).
@@ -84,8 +107,13 @@ those files are still installed.
 
 ## Writing the prompt
 
-The studio puts example sentences under the prompt box; clicking one drops it in, then **Improve** writes the full
-caption. Both forms exist because the two jobs are prompted differently.
+The studio puts example sentences under the prompt box, and they change with the model picked in the Motion dropdown.
+They are deliberately narrow, because each model does exactly one job: **Motion Transfer** takes only the performance
+from the guide and gets the people, the place and the look from up to 11 reference pictures, so the video is never a
+copy of the guide; **Motion Transfer TARA** has the same goal through the experimental path and is the one to pick when
+several people, objects or vehicles have to keep their identity, so its sentences name what each picture supplies;
+**Motion Transfer FFP** (the merge with VFX Edit) states a change to the video itself and what has to
+stay as it is. Clicking one drops it in, then **Improve** writes the full caption.
 
 **Copying a performance** (Motion Transfer, Motion Transfer TARA). One English line saying what to take from the guide
 is enough — `Improve` expands it into the six-part H3 caption the model was trained on (`subject_definitions`,
@@ -100,7 +128,7 @@ Name the picture that performs (`@Picture1`), say what changes (setting, style, 
 framing, camera path). With **Exact text** the same line is sent verbatim, so write it in the six-part form yourself in
 that case.
 
-**Changing the clip itself** (Motion Transfer / Edit Anything). A first-frame edit is prompted with one English
+**Changing the clip itself** (Motion Transfer FFP). A first-frame edit is prompted with one English
 sentence, the change first and then what has to survive it — no subject definitions, because the First Frame already
 says who and where:
 

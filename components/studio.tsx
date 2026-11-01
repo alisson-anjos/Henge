@@ -9,6 +9,7 @@ import {downloadJSON, FEEDBACK, HISTORY_KEY, HISTORY_LIMIT, readHistory, type Di
 import VideoTrimModal, {type ClipRange} from './video-trim-modal';
 import {COMMUNITY, type CommunityPreset} from '../lib/community';
 import FirstFrameModal, {coverFit} from './first-frame-modal';
+import {paintMagenta, segmentFrame} from '../lib/segments';
 const FIRST_FRAME_KEY = 'henge-first-frame';
 // The model a First Frame uses: the studio selects it as soon as an edited frame is attached.
 const EDIT_MODEL = 'motion_mix_dyn99';
@@ -90,6 +91,10 @@ export default function Studio() {
   const [bringSlots, setBringSlots] = useState<{slot: number; label: Record<Language, string>}[]>([]);
   const [video, setVideo] = useState<GuideVideo | null>(null);
   const [firstFrameSlot, setFirstFrameSlot] = useState<number | null>(null);
+  // Character Swap's edited first frame is not a Picture: it replaces frame 0 of the guide the model reads.
+  const [swapFirstFrame, setSwapFirstFrame] = useState<{file: File; url: string} | null>(null);
+  // How an edited first frame is used: frame 0 of the guide (its first latent, default) or a reference picture only.
+  const [firstFrameMode, setFirstFrameMode] = useState<'latent' | 'reference'>('latent');
   const [editSlot, setEditSlot] = useState<number | null>(null);
   const [frameModal, setFrameModal] = useState(false);
   const [requestedProfile, setRequestedProfile] = useState<string | null>(null);
@@ -243,24 +248,33 @@ export default function Studio() {
   const fixedRecipe = isFixedRecipe(mode);
   const maxPictures = mode === 'headswap' ? 1 : mode === 'sharpness' ? 0 : MAX_PICTURES;
   const activePictures = pictures.filter(p => p.slot <= maxPictures);
-  // Editing is what Motion Transfer / Edit Anything does: the First Frame already fixes how the video starts, so the
-  // prompt states the change and what must survive it, and never describes the character all over again.
+  // The prompt changes with the model, so the examples follow whichever one the panel currently has selected.
+  // An attached First Frame means editing no matter what was picked before, and the edit model is the one that
+  // defaults to it.
   const editMode = mode === 'motion' && (firstFrameSlot !== null || panelProfile === EDIT_MODEL);
-  // Plain Motion Transfer is prompted the other way round: name the picture, say what to copy from the guide video.
-  const promptTips = editMode
-    ? [
-      // Published VFX Edit prompting: one English sentence, the change first, then what has to survive it. Henge adds
-      // the `vfx_edit:` trigger and names the First Frame itself.
-      {label: tr('fire in his hands', 'fogo nas mãos dele', 'fuego en sus manos'), text: "Add fire effects to the man's hands while preserving his identity, pose, motion, clothing, framing, lighting and background."},
-      {label: tr('turn it into claymation', 'transformar em massinha', 'convertirlo en plastilina'), text: 'Turn the whole scene into claymation while preserving the performer, his pose, motion, clothing, framing, lighting and the background layout.'},
-      {label: tr('remove the car behind him', 'remover o carro atrás dele', 'quitar el coche detrás'), text: 'Remove the car behind the man while preserving his identity, pose, motion, clothing, framing, lighting and the rest of the background.'},
-    ]
-    : [
-      // The trained summary sentence, kept to one line: the Improve tab expands it into the six-part H3 caption.
-      {label: tr('copy the motion', 'copiar o movimento', 'copiar el movimiento'), text: 'The target video follows the frame-by-frame structure and motion of @Video1: the same performance, timing and camera.'},
-      {label: tr('change the setting', 'mudar o cenário', 'cambiar el escenario'), text: 'The target video follows the frame-by-frame structure and motion of @Video1, set in a rain-soaked neon street at night.'},
-      {label: tr('restyle it', 'mudar o estilo', 'cambiar el estilo'), text: 'The target video follows the frame-by-frame structure and motion of @Video1, rendered as claymation with the same framing.'},
-    ];
+  const tipModel = mode === 'motion' ? (editMode ? EDIT_MODEL : panelProfile || 'motion') : null;
+  const promptTips = tipModel === EDIT_MODEL ? [
+    // Published VFX Edit prompting: one English sentence, the change first, then what has to survive it. Henge adds
+    // the `vfx_edit:` trigger and names the First Frame itself.
+    {label: tr('fire in his hands', 'fogo nas mãos dele', 'fuego en sus manos'), text: "Add fire effects to the man's hands while preserving his identity, pose, motion, clothing, framing, lighting and background."},
+    {label: tr('turn it into claymation', 'transformar em massinha', 'convertirlo en plastilina'), text: 'Turn the whole scene into claymation while preserving the performer, his pose, motion, clothing, framing, lighting and the background layout.'},
+    {label: tr('remove the car behind him', 'remover o carro atrás dele', 'quitar el coche detrás'), text: 'Remove the car behind the man while preserving his identity, pose, motion, clothing, framing, lighting and the rest of the background.'},
+  ] : tipModel === 'motion_tara' ? [
+    // TARA has the same goal as Motion Transfer — copy the performance — through the experimental path: the guide stays
+    // a native video reference with temporally aligned attention. Its edge is several people, objects or vehicles at
+    // once, so each sentence names who or what each picture supplies. Everything else still comes from the pictures.
+    {label: tr('two performers', 'dois personagens', 'dos personajes'), text: 'The target video follows the frame-by-frame structure and motion of @Video1, with the singer from @Picture1 and the guitarist from @Picture2.'},
+    {label: tr('keep the truck', 'manter o caminhão', 'mantener el camión'), text: 'The target video follows the frame-by-frame structure and motion of @Video1, keeping the truck from @Picture1 on the same road.'},
+    {label: tr('only the performer changes', 'só o personagem muda', 'solo cambia el personaje'), text: 'The target video follows the frame-by-frame structure and motion of @Video1; only the performer changes, taken from @Picture1.'},
+  ] : tipModel === 'motion' ? [
+    // Motion Transfer copies one thing from the guide: the performance. Up to 11 pictures supply the people, the place
+    // and the look, so the result is never a copy of the guide video. One sentence in this shape is enough; the
+    // Improve tab expands it into the six-part H3 caption.
+    {label: tr('same performance', 'mesma atuação', 'misma actuación'), text: 'The target video follows the frame-by-frame structure and motion of @Video1: the same performance, timing and camera.'},
+    {label: tr('who and where come from the pictures', 'quem e onde vêm das imagens', 'quién y dónde salen de las imágenes'), text: 'The target video follows the frame-by-frame structure and motion of @Video1, with the performer from @Picture1 wearing the jacket from @Picture2 in the alley from @Picture3.'},
+    {label: tr('several references at once', 'várias referências de uma vez', 'varias referencias a la vez'), text: 'The target video follows the frame-by-frame structure and motion of @Video1: the crowd from @Picture1, the instruments from @Picture2 and the stage from @Picture3.'},
+  ] : [];
+  const tipsHint = editMode ? t.editTips : tipModel === 'motion_tara' ? t.taraTips : t.motionTips;
   const busy = working;
 
   useEffect(() => () => {
@@ -312,9 +326,13 @@ export default function Studio() {
 
   // --- Studio assistant: it reads this render's state and acts through the same setters as the controls. ---
   const panelControls = useRef<PanelControls | null>(null);
-  const studioLive = useRef({splitPoints, mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures, promptMode, shotSeconds, cutMode, contextFrames, keepAudio, audioConditioning, timelineFps, project});
-  studioLive.current = {splitPoints, mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures, promptMode, shotSeconds, cutMode, contextFrames, keepAudio, audioConditioning, timelineFps, project};
+  const studioLive = useRef({splitPoints, mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures, promptMode, shotSeconds, cutMode, contextFrames, keepAudio, audioConditioning, timelineFps, project, firstFrameSlot, swapFirstFrame: !!swapFirstFrame, firstFrameMode});
+  studioLive.current = {splitPoints, mode, prompt, video, pictures, subjects, guideRepresentation, markOpacity, quality, generationJob, maxPictures, promptMode, shotSeconds, cutMode, contextFrames, keepAudio, audioConditioning, timelineFps, project, firstFrameSlot, swapFirstFrame: !!swapFirstFrame, firstFrameMode};
   const found = useRef(new Map<string, {width: number; height: number; people: {number: number; x: number; y: number}[]}>());
+  // Assistant frame edits (edit_frame): each keeps its image, the guide size it was made for and the guide time it
+  // came from, so it can be edited again (with that time's segments) or used as a first frame (use_frame).
+  const assistantEdits = useRef(new Map<string, {blob: Blob; width: number; height: number; time?: number}>());
+  const assistantSegments = useRef(new Map<string, Awaited<ReturnType<typeof segmentFrame>>>());
   // Explanation images from the chat (never Pictures): match_people can use them as photos of the people to find.
   const explained = useRef(new Map<string, File>());
   const settle = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -324,6 +342,7 @@ export default function Studio() {
       pictures: c.pictures.map(p => ({slot: p.slot, name: p.file.name})), max_pictures: c.maxPictures,
       subjects: c.subjects.map((s, i) => ({subject: i + 1, label: s.label, color: s.color, picture_slots: s.picture_slots, marks: s.anchors.map(a => a.time_seconds)})),
       generation: panelControls.current?.getOptions() ?? null, guide_representation: c.guideRepresentation, mark_opacity: c.markOpacity, prompt: c.prompt, prompt_mode: c.promptMode, quality: c.quality,
+      first_frame: c.mode === 'swap' ? (c.swapFirstFrame ? {kind: 'swapped guide frame', use_as: c.firstFrameMode} : null) : c.mode === 'motion' && c.firstFrameSlot ? {kind: 'picture', picture: c.firstFrameSlot, use_as: c.firstFrameMode} : null,
       shots: {seconds: c.shotSeconds, cut_mode: c.cutMode, context_frames: c.contextFrames, split_points: c.splitPoints}, output: {keep_audio: c.keepAudio, audio_conditioning: c.audioConditioning, timeline_fps: c.timelineFps}, project: c.project,
       selected_job: c.generationJob ? {id: c.generationJob.id, reference: `#${c.generationJob.id.slice(0, 8)}`, status: c.generationJob.status, stage: c.generationJob.stage, message: c.generationJob.message} : null};
   };
@@ -423,7 +442,7 @@ export default function Studio() {
       }
       case 'find_people': {
         const t = inRange(num('time')); const frame = await captureFrame(c.video!.url, t);
-        const body = new FormData(); body.set('frame', frame.blob, 'frame.png'); body.set('kind', input.kind === 'animal' ? 'animal' : 'person');
+        const body = new FormData(); body.set('frame', frame.blob, 'frame.png'); body.set('kind', input.kind === 'animal' || input.kind === 'character' ? String(input.kind) : 'person');
         const response = await fetch('/api/backend/assistant/people', {method: 'POST', body}); const reply = await response.json();
         if (!response.ok) throw Error(reply.detail || `HTTP ${response.status}`);
         found.current.set(t.toFixed(2), {width: frame.width, height: frame.height, people: reply.people});
@@ -434,7 +453,7 @@ export default function Studio() {
         setMode(m); setKeepAudio(true); await settle(); return {text: `Mode is now ${m}.`};
       }
       // The First Frame of an edit: an attached Picture, or a guide frame edited here with the installed image editor.
-      // Either way the studio moves to Motion Transfer with Motion Transfer / Edit Anything v1.0, the model that carries the edit
+      // Either way the studio moves to Motion Transfer with Motion Transfer FFP v1.0, the model that carries the edit
       // through the whole clip while the guide keeps the motion, timing and camera.
       case 'set_first_frame': {
         if (!c.video?.url) throw Error('Attach the guide video first');
@@ -459,7 +478,114 @@ export default function Studio() {
         }
         if (mode !== 'motion') setMode('motion');
         setFirstFrameSlot(slot); setRequestedProfile(EDIT_MODEL); await settle();
-        return {text: `Picture ${slot} is the edited first frame and Motion Transfer / Edit Anything v1.0 is selected; it propagates that frame through the clip while the guide keeps the motion.`};
+        return {text: `Picture ${slot} is the edited first frame and Motion Transfer FFP v1.0 is selected; it propagates that frame through the clip while the guide keeps the motion.`};
+      }
+      // Character Swap's First Frame: segment the guide frame (SAM 3.1, characters numbered left to right like
+      // find_people kind 'character'), then swap each requested character in turn, each edit made on the previous
+      // result with that character painted magenta. The final frame becomes frame 0 of the guide (or a reference).
+      case 'swap_first_frame': {
+        if (!c.video?.url || !c.video.range) throw Error('Attach and trim the guide video first');
+        const t = inRange(num('time'));
+        const swaps = Array.isArray(input.swaps) ? input.swaps as {character?: unknown; picture?: unknown; description?: unknown; prompt?: unknown}[] : [];
+        if (!swaps.length) throw Error('Give swaps: one {character, picture or description} per character to replace');
+        const frame = await captureFrame(c.video.url, t);
+        const segments = await segmentFrame(frame.blob);
+        if (!segments.count) throw Error(`No character found at ${t.toFixed(2)} s; try another time`);
+        let current = URL.createObjectURL(frame.blob); const done: string[] = [];
+        try {
+          for (const swap of swaps) {
+            const n = Number(swap.character);
+            if (!Number.isInteger(n) || n < 1 || n > segments.count) throw Error(`character must be 1-${segments.count} (find_people kind 'character' at ${t.toFixed(2)} s numbers them)`);
+            const slot = swap.picture === undefined ? 0 : Number(swap.picture);
+            const picture = slot ? c.pictures.find(p => p.slot === slot) : undefined;
+            if (slot && !picture) throw Error(`Picture ${slot} is not attached`);
+            const description = String(swap.description ?? '').trim();
+            if (!picture && !description) throw Error(`Character ${n}: give picture (an attached Picture slot) or description`);
+            const body = new FormData();
+            body.set('frame', await paintMagenta(current, segments, n), 'frame.png'); body.set('op', 'swap'); body.set('marked', '1'); body.set('instruction', description);
+            if (typeof swap.prompt === 'string' && swap.prompt.trim()) body.set('prompt', swap.prompt.trim());
+            if (picture) body.append('picture_01', picture.file, picture.file.name);
+            const edited = await fetch('/api/backend/frame-edit', {method: 'POST', body});
+            if (!edited.ok) {const reply = await edited.json().catch(() => ({})); throw Error(`Character ${n}: ${reply.detail || `HTTP ${edited.status}`}`);}
+            URL.revokeObjectURL(current); current = URL.createObjectURL(await edited.blob());
+            done.push(`#${n} -> ${picture ? `Picture ${slot}` : description}`);
+          }
+          const file = await coverFit(current, frame.width, frame.height);
+          if (mode !== 'swap') setMode('swap');
+          setSwapFirstFrame(previous => {if (previous) URL.revokeObjectURL(previous.url); return {file, url: URL.createObjectURL(file)};});
+          setFirstFrameMode(input.use_as === 'reference' ? 'reference' : 'latent');
+          // The clip starts at the edited frame.
+          if (t > c.video.range.start + .02) setVideo(v => v?.range ? {...v, range: {start: t, end: v.range.end}} : v);
+          await settle();
+          return {text: `Swapped ${done.join(', ')} in the frame at ${t.toFixed(2)} s. It is now the ${input.use_as === 'reference' ? 'first-frame reference' : 'first frame of the guide (its first latent)'} for Character Swap${t > c.video.range.start + .02 ? `, and the interval starts there` : ''}. Check the image: if a swap is wrong, call again with a different prompt or picture.`, images: [await thumbnail(file, 960)]};
+        } finally {URL.revokeObjectURL(current);}
+      }
+      // Granular frame tools: edit_frame makes an edit (from a guide frame, an earlier edit or a Picture) and keeps
+      // it; use_frame puts an edit or a Picture where it is needed; clear_first_frame removes the first frame.
+      case 'edit_frame': {
+        const sources = ['time', 'edit', 'picture'].filter(k => input[k] !== undefined);
+        if (sources.length !== 1) throw Error('Give exactly one source: time (a guide frame), edit (an earlier edit_frame id) or picture (a Picture slot)');
+        let source: Blob, width: number, height: number, time: number | undefined;
+        if (input.time !== undefined) {const t = inRange(num('time')); const f = await captureFrame(c.video!.url, t); source = f.blob; width = f.width; height = f.height; time = t;}
+        else if (input.edit !== undefined) {const e = assistantEdits.current.get(String(input.edit)); if (!e) throw Error(`No edit ${input.edit}; use an id returned by edit_frame`); ({blob: source, width, height, time} = e);}
+        else {const p = c.pictures.find(x => x.slot === num('picture')); if (!p) throw Error(`Picture ${input.picture} is not attached`); source = p.file; const b = await createImageBitmap(p.file); width = b.width; height = b.height; b.close();}
+        const op = String(input.op ?? 'free'); if (!['swap', 'replace', 'remove', 'add', 'free'].includes(op)) throw Error('op must be swap, replace, remove, add or free');
+        const body = new FormData(); let frameBlob: Blob = source; let marked = false;
+        if (input.character !== undefined) {
+          // The character's segment comes from the guide frame at the source's time (an edit keeps the layout).
+          if (time === undefined) throw Error('character needs a guide-frame source (time, or an edit made from one)');
+          const key = time.toFixed(2); let seg = assistantSegments.current.get(key);
+          if (!seg) {seg = await segmentFrame((await captureFrame(c.video!.url, time)).blob); assistantSegments.current.set(key, seg);}
+          const n = num('character'); if (!Number.isInteger(n) || n < 1 || n > seg.count) throw Error(`character must be 1-${seg.count} at ${key} s (find_people kind 'character' shows the numbers)`);
+          const url = URL.createObjectURL(source); try {frameBlob = await paintMagenta(url, seg, n);} finally {URL.revokeObjectURL(url);} marked = true;
+        }
+        body.set('frame', frameBlob, 'frame.png'); body.set('op', op); body.set('what', String(input.what ?? '')); body.set('instruction', String(input.instruction ?? ''));
+        if (marked) body.set('marked', '1');
+        if (typeof input.prompt === 'string' && input.prompt.trim()) body.set('prompt', input.prompt.trim());
+        if (typeof input.editor === 'string') body.set('editor', input.editor);
+        const refs = Array.isArray(input.pictures) ? (input.pictures as unknown[]).map(Number) : [];
+        refs.forEach((slot, i) => {const p = c.pictures.find(x => x.slot === slot); if (!p) throw Error(`Picture ${slot} is not attached`); body.append(`picture_${String(i + 1).padStart(2, '0')}`, p.file, p.file.name);});
+        const response = await fetch('/api/backend/frame-edit', {method: 'POST', body});
+        if (!response.ok) {const reply = await response.json().catch(() => ({})); throw Error(reply.detail || `HTTP ${response.status}`);}
+        const blob = await response.blob(); const id = response.headers.get('x-henge-edit') || crypto.randomUUID().slice(0, 12);
+        assistantEdits.current.set(id, {blob, width, height, time});
+        return {text: `Edit ${id} (${op}${marked ? `, character ${input.character} marked magenta` : ''}${refs.length ? `, references ${refs.map(r => `Picture ${r} = image ${refs.indexOf(r) + 2}`).join(', ')}` : ''}). Look at it; edit it again with edit=${id}, or use_frame edit=${id}.`, images: [await thumbnail(blob, 960)]};
+      }
+      case 'use_frame': {
+        const as = String(input.as ?? 'first_frame');
+        let file: File, time: number | undefined;
+        if (input.edit !== undefined) {
+          const e = assistantEdits.current.get(String(input.edit)); if (!e) throw Error(`No edit ${input.edit}`);
+          const url = URL.createObjectURL(e.blob); try {file = await coverFit(url, e.width, e.height);} finally {URL.revokeObjectURL(url);} time = e.time;
+        } else if (input.picture !== undefined) {const p = c.pictures.find(x => x.slot === num('picture')); if (!p) throw Error(`Picture ${input.picture} is not attached`); file = p.file;}
+        else throw Error('Give edit (an edit_frame id) or picture (a Picture slot)');
+        const useAs = input.use_as === 'reference' ? 'reference' : 'latent';
+        const startAt = async () => {if (time !== undefined && c.video?.range && time > c.video.range.start + .02) {const t = time; setVideo(v => v?.range ? {...v, range: {start: t, end: v.range.end}} : v); return ` The interval now starts at ${t.toFixed(2)} s.`;} return '';};
+        if (as === 'picture') {
+          const slot = Array.from({length: maxPictures}, (_, i) => i + 1).find(i => !c.pictures.some(p => p.slot === i)); if (!slot) throw Error('Every Picture slot is taken');
+          setPictures(current => [...current, {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot)); await settle();
+          return {text: `Added as Picture ${slot}.`};
+        }
+        if (as !== 'first_frame') throw Error("as must be first_frame or picture");
+        if (c.mode === 'swap') {
+          setSwapFirstFrame(previous => {if (previous) URL.revokeObjectURL(previous.url); return {file, url: URL.createObjectURL(file)};}); setFirstFrameMode(useAs);
+          const note = await startAt(); await settle();
+          return {text: `Character Swap first frame set (${useAs === 'latent' ? 'frame 0 of the guide' : 'reference only'}); it is not a Picture.${note}`};
+        }
+        if (c.mode === 'motion') {
+          let slot = input.picture !== undefined ? num('picture') : Array.from({length: maxPictures}, (_, i) => i + 1).find(i => !c.pictures.some(p => p.slot === i)) ?? 0;
+          if (!slot) throw Error('Every Picture slot is taken');
+          if (input.picture === undefined) setPictures(current => [...current, {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
+          setFirstFrameSlot(slot); setFirstFrameMode(useAs); setRequestedProfile(EDIT_MODEL);
+          const note = await startAt(); await settle();
+          return {text: `Picture ${slot} is the Motion First Frame (${useAs === 'latent' ? 'also frame 0 of the guide' : 'reference only'}); Motion Transfer FFP v1.0 is selected (set_options can change the model).${note}`};
+        }
+        throw Error('A first frame is for Character Swap or Motion Transfer; set_mode first');
+      }
+      case 'clear_first_frame': {
+        setSwapFirstFrame(previous => {if (previous) URL.revokeObjectURL(previous.url); return null;});
+        if (c.firstFrameSlot) {setFirstFrameSlot(null); try {localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}}
+        await settle(); return {text: 'No first frame now (a Motion first-frame Picture stays attached as a normal Picture).'};
       }
       case 'set_prompt': setPrompt(String(input.text ?? '')); await settle(); return {text: 'Prompt updated.'};
       case 'mark_subject': {
@@ -615,6 +741,7 @@ export default function Studio() {
   const canExport = !!video?.range && !editingVideo && ready && !busy && !suggesting && (fixedRecipe
     ? activePictures.length === maxPictures
     // Motion's first-frame propagate model also runs from the prompt alone; the bridge rejects that for other models.
+    // Character Swap also needs the character picture: an edited First Frame alone is not an identity.
     : (pictures.length > 0 || mode === 'motion') && !!prompt.trim() && !invalid.length && !subjectErrors);
   const selected = history.find(h => h.id === selectedId) || null;
   const filteredHistory = history.filter(h => historyFilter === 'all' || h.request.mode === historyFilter);
@@ -688,7 +815,8 @@ export default function Studio() {
     } catch { setNotice(tr('Could not load that video from the backend.', 'Não foi possível carregar esse vídeo do backend.', 'No se pudo cargar ese vídeo del backend.')); return false; }
     finally { setLoadingGenerated(null); }
   }
-  function removeVideo() { if (video) URL.revokeObjectURL(video.url); setVideo(null); setPickingId(null); }
+  // A swapped first frame belongs to that guide: it goes with it.
+  function removeVideo() { if (video) URL.revokeObjectURL(video.url); setVideo(null); setPickingId(null); setSwapFirstFrame(current => {if (current) URL.revokeObjectURL(current.url); return null;}); }
   function removeAllPictures() {
     pictures.forEach(p => URL.revokeObjectURL(p.url));
     setPictures([]); setExpectedSlots([]); setBringSlots([]);
@@ -751,7 +879,8 @@ export default function Studio() {
       subject_guidance: mode === 'sharpness' ? {representation: 'original', bindings: [], status: 'selection_only', marker_colors_are_output_appearance: false} : {representation: guideRepresentation, bindings: subjects, status: 'selection_only', marker_colors_are_output_appearance: false, ...(guideRepresentation === '2d' ? {mark_opacity: markOpacity, ...(markLabels ? {mark_labels: true} : {})} : {})},
       video: {name: video.file.name, source_signature: guideSignature, conditioning: 'guide_latents', source_duration: video.duration, start_seconds: video.range.start, end_seconds: video.range.end, duration: selectedDuration},
       pictures: activePictures.map(p => ({slot: p.slot, token: `<Picture ${p.slot}>`, name: p.file.name})),
-      ...(mode === 'motion' && firstFrameSlot && activePictures.some(p => p.slot === firstFrameSlot) ? {first_frame_slot: firstFrameSlot} : {}), generation_status: 'not_submitted',
+      ...(mode === 'motion' && firstFrameSlot && activePictures.some(p => p.slot === firstFrameSlot) ? {first_frame_slot: firstFrameSlot, first_frame_mode: firstFrameMode} : {}),
+      ...(mode === 'swap' && swapFirstFrame ? {guide_first_frame: true, first_frame_mode: firstFrameMode} : {}), generation_status: 'not_submitted',
     };
   }
   async function importSettings(file?: File) {
@@ -797,7 +926,7 @@ export default function Studio() {
       // A reload can find the stored index behind the pictures that are back; indices stay consecutive from Picture 1.
       const slot = storedSlot <= pictures.length ? storedSlot : pictures.length + 1;
       setPictures(current => current.some(p => p.slot === slot) ? current : [...current, {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
-      setFirstFrameSlot(slot); setRequestedProfile(EDIT_MODEL);
+      setFirstFrameSlot(slot); if (mode === 'motion') setRequestedProfile(EDIT_MODEL);
       if (slot !== storedSlot) try {localStorage.setItem(FIRST_FRAME_KEY, JSON.stringify({...saved, slot}));} catch {/* private mode */}
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -807,9 +936,9 @@ export default function Studio() {
     if (['480p', '720p', '1080p', '1440p', '2160p'].includes(r.quality)) setQuality(r.quality);
     setSubjects(readSubjectBindings(r.subject_guidance?.bindings)); setGuideRepresentation(r.subject_guidance && ['2d', '3d', 'mask'].includes(r.subject_guidance.representation) ? r.subject_guidance.representation : 'original'); if (typeof r.subject_guidance?.mark_opacity === 'number') setMarkOpacity(r.subject_guidance.mark_opacity); setGuideSignature(r.video?.source_signature || '');
     if (typeof r.project === 'string') setProject(r.project);
-    setFirstFrameSlot(typeof r.first_frame_slot === 'number' ? r.first_frame_slot : null);
+    setFirstFrameSlot(typeof r.first_frame_slot === 'number' ? r.first_frame_slot : null); setFirstFrameMode(r.first_frame_mode === 'reference' ? 'reference' : 'latent');
     // A restored or imported direction that carries a First Frame uses the Edit model (the panel switches with it).
-    if (typeof r.first_frame_slot === 'number') setRequestedProfile(EDIT_MODEL);
+    if (typeof r.first_frame_slot === 'number' && r.mode === 'motion') setRequestedProfile(EDIT_MODEL);
     setPrompt(r.editor_prompt ?? r.prompt ?? ''); setAudioConditioning(r.audio_conditioning?.enabled === true);
     setKeepAudio(r.output_audio?.keep_source !== false);
     if (r.processing) {setShotSeconds(r.processing.requested_seconds_per_shot || 4.5); setTimelineFps(r.processing.timeline_fps || 24); setContextFrames(r.processing.context_frames || 22); if (r.processing.cut_mode) setCutMode(r.processing.cut_mode);}
@@ -893,7 +1022,15 @@ export default function Studio() {
       const slot = editSlot; setEditSlot(null);
       setPictures(current => current.map(p => p.slot === slot ? (URL.revokeObjectURL(p.url), {slot, file: new File([file], `picture_${slot}_edited.png`, {type: 'image/png'}), url: URL.createObjectURL(file)}) : p));
     }}/>}
-    {frameModal && video?.range && <FirstFrameModal videoUrl={video.url} start={video.range.start} end={video.range.end} pictures={pictures.filter(p => p.slot !== firstFrameSlot)} lang={lang} onClose={() => setFrameModal(false)} onUse={(file, edit, at) => {
+    {frameModal && video?.range && <FirstFrameModal videoUrl={video.url} start={video.range.start} end={video.range.end} pictures={pictures.filter(p => p.slot !== firstFrameSlot)} swap={mode === 'swap'} lang={lang} onClose={() => setFrameModal(false)} onUse={(file, edit, at) => {
+      if (mode === 'swap') {
+        // Character Swap: the frame goes into the guide, the Pictures stay the character references.
+        setSwapFirstFrame(current => {if (current) URL.revokeObjectURL(current.url); return {file, url: URL.createObjectURL(file)};}); setFrameModal(false);
+        const movedTo = at !== undefined && video.range && at > video.range.start + .02 ? at : null;
+        if (movedTo !== null) setVideo(v => v?.range ? {...v, range: {start: movedTo, end: v.range.end}} : v);
+        setNotice(tr('The edited frame replaces the first frame of the guide' + (movedTo !== null ? `; the interval now starts there (${movedTo.toFixed(2)} s).` : '.'), 'O quadro editado substitui o primeiro quadro do guia' + (movedTo !== null ? `; o intervalo agora começa nele (${movedTo.toFixed(2)} s).` : '.'), 'El fotograma editado sustituye el primer fotograma de la guía' + (movedTo !== null ? `; el intervalo ahora empieza en él (${movedTo.toFixed(2)} s).` : '.')));
+        return;
+      }
       const slot = firstFrameSlot ?? Array.from({length: maxPictures}, (_, i) => i + 1).find(i => !pictures.some(p => p.slot === i));
       if (!slot) {setNotice(tr('Remove a picture to make room for the first frame.', 'Remova uma Picture para abrir espaço para o primeiro quadro.', 'Quita una imagen para dejar espacio al primer fotograma.')); return;}
       setPictures(current => [...current.filter(p => {if (p.slot === slot) URL.revokeObjectURL(p.url); return p.slot !== slot;}), {slot, file, url: URL.createObjectURL(file)}].sort((a, b) => a.slot - b.slot));
@@ -904,7 +1041,7 @@ export default function Studio() {
       // A frame edit lives on the bridge: remember it with this guide so a reload can bring it back.
       try {if (edit) localStorage.setItem(FIRST_FRAME_KEY, JSON.stringify({...edit, slot, guide: guideSignature})); else localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}
       if (moved !== null) {setNotice(tr(`Picture ${slot} is the edited frame; the interval now starts there (${moved.toFixed(2)} s), since the first-frame model propagates from the start.`, `A Imagem ${slot} é o quadro editado; o intervalo agora começa nele (${moved.toFixed(2)} s), porque o modelo propaga a partir do início.`, `La Imagen ${slot} es el fotograma editado; el intervalo ahora empieza en él (${moved.toFixed(2)} s), porque el modelo propaga desde el inicio.`)); return;}
-      setNotice(tr(`Picture ${slot} is the edited first frame. Motion Transfer / Edit Anything v1.0 is selected; describe the edit in the prompt.`, `A Imagem ${slot} é o primeiro quadro editado. Motion Transfer / Edit Anything v1.0 foi selecionado; descreva a edição no prompt.`, `La Imagen ${slot} es el primer fotograma editado. Se seleccionó Motion Transfer / Edit Anything v1.0; describe la edición en el prompt.`));
+      setNotice(tr(`Picture ${slot} is the edited first frame. Motion Transfer FFP v1.0 is selected; describe the edit in the prompt.`, `A Imagem ${slot} é o primeiro quadro editado. Motion Transfer FFP v1.0 foi selecionado; descreva a edição no prompt.`, `La Imagen ${slot} es el primer fotograma editado. Se seleccionó Motion Transfer FFP v1.0; describe la edición en el prompt.`));
     }}/>}
     {editingVideo && video && <VideoTrimModal file={video.file} url={video.url} initial={video.range} onConfirm={(range, duration) => {setVideo(v => v ? {...v, range, duration} : v); setEditingVideo(false);}} onCancel={() => {if (!video.range) removeVideo(); setEditingVideo(false);}}/>}
     <header className="topbar">
@@ -953,16 +1090,20 @@ export default function Studio() {
             <div className="label-row"><h2><span className="step-number">02</span>{mode === 'headswap' ? tr('Face reference', 'Rosto de referência', 'Rostro de referencia') : t.refs}</h2><span className="ref-header-end">{pictures.length > 0 && <button type="button" className="text-link remove-all-refs" onClick={removeAllPictures}>{tr('Remove all', 'Remover todas', 'Quitar todas')}</button>}<span className="mono muted">{String(activePictures.length).padStart(2, '0')} / {String(maxPictures).padStart(2, '0')}</span></span></div>
             <input data-testid="picture-input" hidden ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={e => {addPictures(e.target.files); e.target.value = '';}}/>
             <div className="reference-grid">{activePictures.map(p => <div className="reference" key={p.slot}><img draggable={false} src={p.url} alt={`Picture ${p.slot}: ${p.file.name}`}/><button className="remove-ref" aria-label={`Remove Picture ${p.slot}`} onClick={() => removePicture(p.slot)}><Icon name="close" size={11}/></button><button className="edit-ref" title={tr('Edit with the image editor', 'Editar com o editor de imagem', 'Editar con el editor de imagen')} aria-label={tr(`Edit Picture ${p.slot}`, `Editar Picture ${p.slot}`, `Editar Picture ${p.slot}`)} onClick={() => setEditSlot(p.slot)}><Icon name="image" size={11}/></button><button className="ref-label mono nc" onClick={() => insertTag(`@Picture${p.slot}`)}>@Picture{p.slot}</button>{p.slot === firstFrameSlot && <span className="first-frame-badge mono">{tr('1st frame', '1º quadro', '1er fotograma')}</span>}</div>)}{bringSlots.filter(b => b.slot <= maxPictures && !pictures.some(p => p.slot === b.slot)).map(b => <button key={`bring-${b.slot}`} className="add-reference bring-reference" onClick={() => imageInput.current?.click()}><Icon name="plus" size={18}/><span className="mono">@Picture{b.slot}</span><small>{b.label[lang]} · {tr('add your photo', 'adicione sua foto', 'añade tu foto')}</small></button>)}{activePictures.length < maxPictures && !bringSlots.some(b => !pictures.some(p => p.slot === b.slot)) && <button className="add-reference" onClick={() => imageInput.current?.click()}><Icon name="plus" size={18}/><span>{t.add}</span></button>}</div>
-            {mode === 'motion' && video?.range && <details className="ffp-card" open={!!firstFrameSlot}><summary><span className="ffp-head"><span className="eyebrow accent">FFP · {tr('FRAME PROPAGATE', 'PROPAGAR UM QUADRO', 'PROPAGAR UN FOTOGRAMA')}</span><span className="mini-badge">{tr('optional', 'opcional', 'opcional')}</span></span>
+            {(mode === 'motion' || mode === 'swap') && video?.range && <details className="ffp-card" open={!!firstFrameSlot || (mode === 'swap' && !!swapFirstFrame)}><summary><span className="ffp-head"><span className="eyebrow accent">FFP · {tr('FRAME PROPAGATE', 'PROPAGAR UM QUADRO', 'PROPAGAR UN FOTOGRAMA')}</span><span className="mini-badge">{tr('optional', 'opcional', 'opcional')}</span></span>
               <strong>{tr('Edit one frame, the whole video follows', 'Edite um quadro, o vídeo inteiro acompanha', 'Edita un fotograma, todo el vídeo lo sigue')}</strong></summary>
               <ul className="ffp-points">
+                <li><strong>FFP = First Frame Propagate.</strong> {tr('You edit one frame of the guide and that image becomes frame 0 of the result; the model rebuilds every frame after it around your image, while the guide keeps the motion. It is not image-to-video: the clip is regenerated with your frame inside it, so the edit never has to be re-applied frame by frame.', 'Você edita um quadro do guia e essa imagem vira o quadro 0 do resultado; o modelo reconstrói todos os quadros seguintes em volta da sua imagem, enquanto o guia mantém o movimento. Não é image-to-video: o vídeo é regenerado com o seu quadro dentro, então a edição não precisa ser reaplicada quadro a quadro.', 'Editas un fotograma de la guía y esa imagen pasa a ser el fotograma 0 del resultado; el modelo reconstruye todos los fotogramas siguientes alrededor de tu imagen, mientras la guía mantiene el movimiento. No es image-to-video: el clip se regenera con tu fotograma dentro, así que la edición no hay que reaplicarla fotograma a fotograma.')}</li>
                 <li>{tr('Pick any frame of the guide, then replace, remove or add something, or paint the area, with the image editor (FIBO 2.0 by default; Qwen-Image 2.1 and FLUX Klein when installed). You can also upload your own edited frame.', 'Escolha qualquer quadro do guia e substitua, remova ou adicione algo, ou pinte a área, com o editor de imagem (FIBO 2.0 por padrão; Qwen-Image 2.1 e FLUX Klein se instalados). Também dá para enviar o seu próprio quadro editado.', 'Elige cualquier fotograma de la guía y reemplaza, quita o añade algo, o pinta el área, con el editor de imagen (FIBO 2.0 por defecto; Qwen-Image 2.1 y FLUX Klein si están instalados). También puedes subir tu propio fotograma editado.')}</li>
-                <li>{tr('The video starts at that frame and the edit is carried through every frame after it.', 'O vídeo começa nesse quadro e a edição é levada para todos os quadros seguintes.', 'El vídeo empieza en ese fotograma y la edición se lleva a todos los siguientes.')}</li>
               </ul>
-              <small>{tr('Model: Motion Transfer / Edit Anything v1.0, the first-frame LoRA. The other Motion models ignore the frame.', 'Modelo: Motion Transfer / Edit Anything v1.0, a LoRA de primeiro quadro. Os outros modelos de movimento ignoram o quadro.', 'Modelo: Motion Transfer / Edit Anything v1.0, la LoRA de primer fotograma. Los demás modelos de movimiento ignoran el fotograma.')}</small>
-              {firstFrameSlot && pictures.find(p => p.slot === firstFrameSlot) && <div className="ffp-current"><img src={pictures.find(p => p.slot === firstFrameSlot)!.url} alt=""/><span>{tr(`Picture ${firstFrameSlot} · edited frame`, `Imagem ${firstFrameSlot} · quadro editado`, `Imagen ${firstFrameSlot} · fotograma editado`)}</span></div>}
-              <div className="ffp-actions"><button className="primary first-frame-button" onClick={() => setFrameModal(true)}><Icon name="image" size={14}/>{firstFrameSlot ? tr('Change the edited frame', 'Trocar o quadro editado', 'Cambiar el fotograma editado') : tr('Choose and edit a frame', 'Escolher e editar um quadro', 'Elegir y editar un fotograma')}</button>
-              {firstFrameSlot && <button type="button" className="text-link" onClick={() => {setFirstFrameSlot(null); try {localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}}}>{tr('Don’t propagate', 'Não propagar', 'No propagar')}</button>}</div></details>}
+              {mode === 'swap' ? <small>{tr('In Character Swap the frame is optional: the guide frame with the character already swapped in (segment, click who to replace, the image editor does the rest; or upload your own). It replaces the first frame of the guide, so the model starts from it; your reference pictures stay the character references.', 'No Character Swap o quadro é opcional: o quadro do guia com o personagem já trocado (segmente, clique em quem trocar e o editor de imagem faz o resto; ou envie o seu). Ele substitui o primeiro quadro do guia, então o modelo parte dele; suas imagens de referência continuam sendo as referências do personagem.', 'En Character Swap el fotograma es opcional: el fotograma de la guía con el personaje ya cambiado (segmenta, haz clic en quién reemplazar y el editor de imagen hace el resto; o sube el tuyo). Sustituye el primer fotograma de la guía, así que el modelo parte de él; tus imágenes de referencia siguen siendo las referencias del personaje.')}</small> :
+              <small>{tr('Any Motion model takes the frame, but the tags say who was trained for it: Motion Transfer v1.0 and Motion Transfer FFP v1.0 are built to carry a frame through the clip; TARA propagates it, but it was not trained for FFP and can change more of the clip than the frame you edited.', 'Qualquer modelo de movimento aceita o quadro, mas as tags dizem quem foi treinado para isso: Motion Transfer v1.0 e Motion Transfer FFP v1.0 foram feitos para carregar um quadro pelo clipe; o TARA propaga, mas não foi treinado para FFP e pode mudar mais do vídeo do que o quadro editado.', 'Cualquier modelo de movimiento acepta el fotograma, pero las etiquetas dicen quién fue entrenado para ello: Motion Transfer v1.0 y Motion Transfer FFP v1.0 están hechos para llevar un fotograma por el clip; TARA lo propaga, pero no fue entrenado para FFP y puede cambiar más del clip que el fotograma que editaste.')}</small>}
+              {mode === 'swap' && swapFirstFrame && <div className="ffp-current"><img src={swapFirstFrame.url} alt=""/><span>{tr('Edited first frame of the guide', 'Primeiro quadro editado do guia', 'Primer fotograma editado de la guía')}</span></div>}
+              {(mode === 'swap' ? !!swapFirstFrame : !!firstFrameSlot) && <div className="setting-row ffp-mode"><span>{tr('Use the frame as', 'Usar o quadro como', 'Usar el fotograma como')}</span><div className="quality-options">{([['latent', tr('Guide frame 0 (first latent)', 'Quadro 0 do guia (primeiro latent)', 'Fotograma 0 de la guía (primer latent)')], ['reference', tr('Reference only', 'Só referência', 'Solo referencia')]] as const).map(([k, label]) => <button key={k} type="button" className={'nc ' + (firstFrameMode === k ? 'chosen' : '')} aria-pressed={firstFrameMode === k} onClick={() => setFirstFrameMode(k)}>{label}</button>)}</div></div>}
+              {mode === 'motion' && firstFrameSlot && pictures.find(p => p.slot === firstFrameSlot) && <div className="ffp-current"><img src={pictures.find(p => p.slot === firstFrameSlot)!.url} alt=""/><span>{tr(`Picture ${firstFrameSlot} · edited frame`, `Imagem ${firstFrameSlot} · quadro editado`, `Imagen ${firstFrameSlot} · fotograma editado`)}</span></div>}
+              <div className="ffp-actions"><button className="primary first-frame-button" onClick={() => setFrameModal(true)}><Icon name="image" size={14}/>{(mode === 'swap' ? swapFirstFrame : firstFrameSlot) ? tr('Change the edited frame', 'Trocar o quadro editado', 'Cambiar el fotograma editado') : mode === 'swap' ? tr('Swap the character into a frame', 'Colocar o personagem em um quadro', 'Poner al personaje en un fotograma') : tr('Choose and edit a frame', 'Escolher e editar um quadro', 'Elegir y editar un fotograma')}</button>
+              {mode === 'swap' && swapFirstFrame && <button type="button" className="text-link" onClick={() => setSwapFirstFrame(current => {if (current) URL.revokeObjectURL(current.url); return null;})}>{tr('Don’t use it', 'Não usar', 'No usarlo')}</button>}
+              {mode === 'motion' && firstFrameSlot && <button type="button" className="text-link" onClick={() => {setFirstFrameSlot(null); try {localStorage.removeItem(FIRST_FRAME_KEY);} catch {/* private mode */}}}>{tr('Don’t propagate', 'Não propagar', 'No propagar')}</button>}</div></details>}
             <p className="micro-copy">{draggingPictures ? tr('Drop to add references', 'Solte para adicionar referências', 'Suelta para añadir referencias') : mode === 'headswap' ? tr('One clear photo of the new face. The head is placed on the person in the video.', 'Uma foto nítida do novo rosto. A cabeça é aplicada na pessoa do vídeo.', 'Una foto nítida del nuevo rostro. La cabeza se aplica a la persona del vídeo.') : tr('JPG, PNG, WebP, GIF · 25 MB each. Slots keep their numbers.', 'JPG, PNG, WebP, GIF · 25 MB cada. Os slots mantêm seus números.', 'JPG, PNG, WebP, GIF · 25 MB cada. Los slots conservan sus números.')}</p>
           </section>}
           {(mode === 'swap' || mode === 'motion') && video?.range && <section className="input-card surface background-card">
@@ -1023,7 +1164,7 @@ export default function Studio() {
               {mode === 'sharpness' && <pre className="native-preview">Enhance this video with sharp, crisp details while preserving a natural photorealistic appearance.</pre>}</div>}
             
             {mode === 'sharpness' && <div id="sharpness-controls"/>}
-            {!fixedRecipe && <div className="prompt-editor"><textarea ref={textarea} aria-label="Execution prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={editMode ? t.phEdit : mode === 'swap' ? t.phSwap : t.phMotion}/>{query && suggestions.length > 0 && <div className="mention-menu">{suggestions.map(tag => <button key={tag} onClick={() => insertTag(tag)}>{tag}</button>)}</div>}{mode === 'motion' && <div className="prompt-tips"><div className="tip-examples">{promptTips.map(tip => <button type="button" key={tip.text} title={tip.text} onClick={() => setPrompt(tip.text)}>{tip.label}</button>)}</div><small className="tip-hint">{editMode ? t.editTips : t.motionTips}</small></div>}</div>}
+            {!fixedRecipe && <div className="prompt-editor"><textarea ref={textarea} aria-label="Execution prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={editMode ? t.phEdit : mode === 'swap' ? t.phSwap : t.phMotion}/>{query && suggestions.length > 0 && <div className="mention-menu">{suggestions.map(tag => <button key={tag} onClick={() => insertTag(tag)}>{tag}</button>)}</div>}{mode === 'motion' && promptTips.length > 0 && <div className="prompt-tips"><div className="tip-examples">{promptTips.map(tip => <button type="button" key={tip.text} title={tip.text} onClick={() => setPrompt(tip.text)}>{tip.label}</button>)}</div><small className="tip-hint">{tipsHint}</small></div>}</div>}
             {!fixedRecipe && promptMode === 'auto' && <div className="auto-prompt-bar">
               {autoSource === null
                 ? <button type="button" className="primary" disabled={working || !prompt.trim()} onClick={autoPrompt}><Icon name="spark" size={14}/>{working ? tr('Writing…', 'Escrevendo…', 'Escribiendo…') : tr('Write the prompt now', 'Escrever o prompt agora', 'Escribir el prompt ahora')}</button>
@@ -1036,7 +1177,7 @@ export default function Studio() {
             <div className="prompt-footer">{!fixedRecipe && <><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></>}<div className="prompt-generation-actions" id="prompt-generation-actions"/></div>
           </section>
           <input hidden ref={importSettingsInput} type="file" accept="application/json,.json" onChange={e => {importSettings(e.target.files?.[0]); e.target.value = '';}}/>
-          <GenerationPanel background={mode === 'swap' || mode === 'motion' ? background?.file || null : null} key={importRevision} onEnhanceChange={setEnhanceOn} registerControls={controls => {panelControls.current = controls;}} freshRevision={freshRevision} requestedProfile={requestedProfile} onProfileChange={setPanelProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
+          <GenerationPanel firstFrame={mode === 'swap' ? swapFirstFrame?.file || null : null} background={mode === 'swap' || mode === 'motion' ? background?.file || null : null} key={importRevision} onEnhanceChange={setEnhanceOn} registerControls={controls => {panelControls.current = controls;}} freshRevision={freshRevision} requestedProfile={requestedProfile} onProfileChange={setPanelProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
           </section>
         </section>
 

@@ -4,12 +4,68 @@ shared disk with ComfyUI: the same code drives a local ComfyUI, a remote one or 
 Graph inputs are paths relative to the bridge's staging folder (henge/<job>/...). Before a graph runs,
 every staged file it names is uploaded; a ComfyUI that stores it under another name (Comfy Cloud ignores
 subfolders) gets the graph rewritten to that name."""
-import copy,json
+import asyncio,copy,json,time
 from pathlib import Path
 import requests
 
 # Inputs that hold a JSON list of staged paths rather than a single path.
 LIST_INPUTS={('HengeLoadShot','pictures')}
+
+
+class ProgressSocket:
+    """ComfyUI's /ws feed, reconnected when it drops.
+
+    A long render outlives the connection watching it: a reverse proxy restarts, a laptop sleeps, a hosted gateway
+    closes an idle socket, ComfyUI itself closes websockets. The render keeps running in ComfyUI when that happens, so
+    the feed reconnects instead of failing the job. Messages missed while down are skipped; the caller polls /history
+    for the finished result either way, and `lost` says when the socket has been down long enough to ask whether the
+    render is still in the queue at all.
+    """
+    def __init__(self,connect,retry=5.,giveup=240.,clock=time.monotonic):
+        self.connect=connect;self.retry=retry;self.giveup=giveup;self.clock=clock
+        self.ws=None;self.since=None;self.drops=0
+
+    @property
+    def down(self):
+        """Seconds since the feed dropped, or None while it is connected."""
+        return None if self.since is None else self.clock()-self.since
+
+    @property
+    def lost(self):
+        return self.down is not None and self.down>=self.giveup
+
+    async def open(self):
+        try:self.ws=await self.connect()
+        except Exception:
+            self.ws=None
+            if self.since is None:self.since=self.clock()
+            return False
+        self.since=None;return True
+
+    async def close(self):
+        if self.ws is None:return
+        try:await self.ws.close()
+        except Exception:pass
+        self.ws=None
+
+    def dropped(self):
+        """True once per drop, so a caller can report the reconnect without repeating itself."""
+        if self.drops==getattr(self,'reported','') :return False
+        self.reported=self.drops;return True
+
+    async def receive(self,timeout=1.):
+        """Next message, or None when there is nothing to read (a dropped feed, an idle second)."""
+        if self.ws is None:
+            if self.since is None or self.clock()-self.since>=self.retry:await self.open()
+            if self.ws is None:return None
+        try:message=await self.ws.receive(timeout=timeout)
+        except asyncio.TimeoutError:return None
+        except Exception:                               # the socket died in the middle of a read
+            await self.close();self.since=self.clock();self.drops+=1;return None
+        kind=getattr(getattr(message,'type',None),'name',getattr(message,'type',''))
+        if str(kind).upper() in ('CLOSED','ERROR'):
+            await self.close();self.since=self.clock();self.drops+=1;return None
+        return message
 
 
 def referenced_files(graph,staging):

@@ -127,10 +127,23 @@ def clean_details(details,limit):
         if items:out.append(', '.join(items)+(';' if ends else ''))
     return ' '.join(out).rstrip('.,; ')[:limit]
 
-def character_swap_prompt(details):
+def character_swap_prompt(details,slot=1):
+    """`slot` is the identity Picture: not 1 when a First Frame took slot 1."""
     text=clean_details(details,2000)
-    if not text or text.lower() in ('details','{details}'):raise ValueError('The VLM returned no character description for Picture 1')
-    return CHARACTER_SWAP_PROMPT.format(details=text)
+    if not text or text.lower() in ('details','{details}'):raise ValueError(f'The VLM returned no character description for Picture {slot}')
+    prompt=CHARACTER_SWAP_PROMPT.format(details=text)
+    return prompt if slot==1 else prompt.replace('<Picture 1>',f'<Picture {slot}>')
+
+def swap_first_frame(prompt,edited,slot=None):
+    """Character Swap with an edited first frame. By default it replaces frame 0 of the guide (its first latent), so
+    the guide opens on it; `slot` (reference mode) names it as <Picture slot> instead."""
+    if not edited:return prompt
+    if slot:return (prompt+f' <Picture {slot}> is the edited first frame of the video: it already shows the replacement in the'
+                    ' guide\'s scene and pose. Start from it and keep that look through the whole clip while following the guide\'s'
+                    ' motion, timing and camera; it is a frame of the video, not another character.')
+    return (prompt+' The guide video opens on an edited first frame that already shows the replacement in the guide\'s scene'
+            ' and pose: start from it, continue from it and keep that look through the whole clip while following the guide\'s motion, timing'
+            ' and camera.')
 
 def head_swap_prompt(face_details):
     face=' '.join(str(face_details).split()).strip().strip('"')

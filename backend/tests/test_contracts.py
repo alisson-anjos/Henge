@@ -245,6 +245,63 @@ class WorkflowContracts(unittest.TestCase):
   # The merge carries its own SolarRenderer control, so it builds on the standard turbo and takes the guide as latents only.
   g=h3_graph('v.mp4',['f.png'],'vfx_edit: Add rain.',512,288,107,107,ffp,1,4,'original',[],'human',0,turbo=workflows.MODELS[ffp]['turbo_default'])
   self.assertEqual(g['3']['inputs']['lora_name'],'henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors');self.assertEqual(g['2']['inputs']['lora_name'],workflows.TURBOS[workflows.MODELS[ffp]['turbo_default']]['lora']);self.assertFalse(g['9']['inputs']['guide_context'])
+ def test_character_swap_first_frame(self):
+  from edit_modes import character_swap_prompt,swap_first_frame
+  import server
+  # Character Swap's edited frame is not a Picture: it goes into the guide (guide_first_frame + its own file).
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'swap','first_frame_slot':1},{'profile':'character'},[1])
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','guide_first_frame':True},{},[1])
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'swap','guide_first_frame':True,'first_frame_mode':'output'},{},[1])
+  options={};validate_request({**self.request(),'mode':'swap','guide_first_frame':True},options,[1]);self.assertEqual(options['profile'],'character')
+  # Default: frame 0 of the guide; reference mode names it as the Picture after the character pictures.
+  self.assertIn('guide video opens on an edited first frame',swap_first_frame('body_swap: x',True))
+  self.assertIn('<Picture 2> is the edited first frame',swap_first_frame('body_swap: x',True,2))
+  self.assertEqual(swap_first_frame('body_swap: x',False),'body_swap: x')
+  self.assertIn('shown in <Picture 2>',character_swap_prompt('Male, tall',2))
+  # Which image a job opens on: Character Swap's own file, Motion's First Frame Picture, or none.
+  assets={'first_frame':'henge/j/first_frame.png','pictures':{'1':'henge/j/picture_1.png','2':'henge/j/picture_2.png'}}
+  self.assertEqual(server.first_frame_image({'mode':'swap','guide_first_frame':True},assets).name,'first_frame.png')
+  self.assertEqual(server.first_frame_image({'mode':'motion','first_frame_slot':2},assets).name,'picture_2.png')
+  self.assertIsNone(server.first_frame_image({'mode':'swap'},assets))
+  # The graph puts it into the conditioning node, which replaces the guide's frame 0 after HengeGuide.
+  g=h3_graph('v.mp4',['p.png'],'body_swap: x',512,288,107,107,'character',1,8,'original',[],'human',0,first_frame='henge/j/first_frame.png')
+  self.assertEqual(g['9']['inputs']['first_frame'],['27',0]);self.assertEqual(g['27']['inputs']['image'],'henge/j/first_frame.png')
+  self.assertNotIn('first_frame',h3_graph('v.mp4',['p.png'],'body_swap: x',512,288,107,107,'character',1,8,'original',[],'human',0)['9']['inputs'])
+  # The Swap character frame edit: image 2 is the character, put in the performer's place with the same pose.
+  from server import edit_instruction
+  text=edit_instruction('swap','the man in red','',1)
+  self.assertTrue(text.startswith('Replace the man in red with the character from image 2'));self.assertNotIn('Use image 2 as the reference',text)
+  self.assertIn('the main person',edit_instruction('swap','','',1))
+  # Picked from the SAM 3.1 segments: the frame is marked magenta and the marker has to go.
+  marked=edit_instruction('swap','','',1,True)
+  self.assertTrue(marked.startswith('Replace the character marked in magenta with the character from image 2'));self.assertIn('remove it completely',marked)
+  # No picture: the description is the character.
+  self.assertTrue(edit_instruction('swap','','a knight in silver armor',0,True).startswith('Replace the character marked in magenta with this character: a knight in silver armor.'))
+  # The modal shows this default and lets the user rewrite it.
+  from server import frame_edit_default
+  self.assertEqual(frame_edit_default('swap','','',1,True)['instruction'],marked)
+  from workflows import find_people_graph
+  g=find_people_graph('henge/x/frame.png','character',True);self.assertEqual(g['5']['inputs']['images'],['2',2]);self.assertNotIn('5',find_people_graph('henge/x/frame.png'))
+ def test_the_picker_tags_say_what_each_model_was_trained_for(self):
+  # The model names cannot carry every caveat, so each model ships tags and the picker spells them out.
+  # The point is honesty: a model that handles a task without having been trained for it must not look
+  # like one that was, and every tag has to have words in every interface language.
+  import json,workflows
+  from pathlib import Path
+  wording=json.loads((Path(__file__).resolve().parents[2]/'lib'/'model-tags.json').read_text())
+  self.assertEqual(workflows.MODELS['motion']['tags'],['multi-ref','ffp-strong'])
+  self.assertEqual(workflows.MODELS['motion_tara']['tags'],['multi-ref','ffp-works'])
+  # Trained on one reference but able to take more: that is a weaker multi-reference, not "no multi-reference".
+  self.assertEqual(workflows.MODELS['character']['tags'],['multi-ref-weak'])
+  self.assertEqual(workflows.MODELS['headswap']['tags'],['single-ref'])
+  # The first-frame model's whole point is FFP, so that is the only claim it needs.
+  self.assertEqual(workflows.MODELS[workflows.FFP_PROFILE]['tags'],['ffp-strong','multi-ref-weak'])
+  for name,model in workflows.MODELS.items():
+    for tag in model.get('tags',[]):
+      for language in ('en','pt','es'):
+        self.assertIn(tag,wording[language],f'{language} has no wording for the {tag} tag')
+        self.assertTrue(wording[language][tag]['tag'] and wording[language][tag]['tip'])
+
  def test_motion_model_list_and_first_frame_default(self):
   import json,workflows
   # The studio offers three Motion models: the two trained ones and the Edit merge. The superseded comparison LoRAs are

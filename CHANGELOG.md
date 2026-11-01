@@ -9,6 +9,93 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-01
 
+### Character Swap takes a First Frame too, and a First Frame now opens the guide
+- The **FFP card** now shows in Character Swap. Its frame editor opens in a **Swap character** mode: pick any guide
+  frame, press **Segment the characters (SAM 3.1)**, hover to highlight a segment and click the one to replace; it is
+  painted magenta on the frame. The image editor then gets "replace the character marked in magenta with the
+  character from image 2" (the chosen character Picture) or, with no picture, with the character described in the
+  text box, keeping pose, gaze and scene, and removing the marker. Changing the frame drops the segments: segment
+  again. Without segments you can name who to replace instead, and *Upload edited image* still takes a frame you
+  swapped elsewhere. *Describe* stays for any other change.
+- The prompt the image editor gets is shown in the modal, in English, built from those choices (`GET
+  /frame-edit/instruction`), and can be rewritten; a rewritten prompt is sent as is (`prompt` field) until *Reset to
+  default*. This works in every edit mode, not only Swap character.
+- In Character Swap the edited frame is **not a Picture**: it is sent as its own file (`first_frame`, request flag
+  `guide_first_frame`), so all reference pictures stay available for the character.
+- **Use the frame as** (FFP card, Character Swap and Motion): **Guide frame 0 (first latent)**, the default, or
+  **Reference only**. Frame 0 means `HengeH3Conditioning` replaces the first frame of the guide the model reads with
+  the edited image (cover-fitted), so the guide's first latent is that image and the render follows it. It happens
+  inside the conditioning node, after `HengeGuide`, so SAM tracking and 2D/3D marks still run on the source frames.
+  Works in Guide Latents and TARA, first shot only. Motion keeps its First Frame Picture as well (the FFP LoRAs were
+  trained with it as a reference); *Reference only* is the previous Motion behaviour. In Character Swap, *Reference
+  only* sends the frame as the Picture after the character pictures. The swap prompt gets one sentence saying the
+  guide opens on the edited frame (or naming that Picture).
+- **The assistant offers it.** New studio tool `swap_first_frame` (time, swaps: [{character, picture | description,
+  optional English prompt}], use_as): it segments the frame with SAM 3.1 and swaps every listed character in one call,
+  each edit made on the previous result with that character painted magenta, then sets the frame as Character Swap's
+  first frame and starts the interval there. `find_people` takes `kind: character` to show the same numbering. The
+  system prompt tells the assistant to offer this when configuring a Character Swap and to use it for one or several
+  characters; `get_studio_state` reports `first_frame`. MCP `create_job` takes `first_frame` (path of an already
+  swapped frame, Character Swap) and `first_frame_mode`.
+- Building blocks for the assistant, so it is not limited to that recipe: `edit_frame` (source = a guide time, an
+  earlier edit or a Picture; op swap/replace/remove/add/free; optional character number painted magenta, reference
+  Pictures, its own English prompt and editor; edits chain by id), `use_frame` (an edit or Picture as Character Swap's
+  guide first frame, Motion's First Frame, or a new Picture; latent or reference) and `clear_first_frame`.
+- `HengeFindPeople` has a third output, a label map (red = subject number), and a `character` kind (person + animal,
+  overlapping duplicates dropped). `/assistant/people` returns it with `labels=1`.
+- **Workers need a new image** (`HengeH3Conditioning.first_frame`, the label map); an old worker refuses the
+  `first_frame` input and the editor falls back to naming the subject.
+- Validation: contract tests (requests, prompts, graph, edit instructions), TypeScript, a CPU check that the node
+  replaces only frame 0 of the guide tensor. **Not yet run** in the real UI (Playwright) or with a real SAM 3.1 /
+  editor / H3 render.
+
+### The model picker says what each model was trained for
+- The Motion dropdown now shows **tags** on every model, taken from the backend (`MODELS[..]['tags']`) so the studio
+  never claims a capability the LoRA does not have: **Motion Transfer v1.0** `multi-reference`, `FFP ✓`;
+  **Motion Transfer TARA v1.0** `multi-reference`, `FFP ⚠`; **Motion Transfer FFP v1.0** `FFP ✓`; Character Swap v1.1
+  `multi-reference · weaker`; Head Swap v1.0 `one reference`. `multi-reference · weaker` is the honest version of
+  "one reference": those LoRAs were trained with a single picture, they do take more than one, and how well that works
+  is up to your prompt. Tags that mark a limitation (the ⚠ tags and the weaker reference tags) are amber instead of
+  accent, and hovering a tag gives the reason.
+- The selected model's tags are spelled out in full under the picker. The wording lives in `lib/model-tags.json`, in
+  English, Portuguese and Spanish, and a test fails if the backend names a tag that any language does not explain.
+- **FFP = First Frame Propagate** is now explained where it is used, in the FFP card and in
+  [docs/motion-transfer.md](docs/motion-transfer.md): you edit one frame of the guide, that image becomes frame 0 of
+  the render, and the model rebuilds every frame after it around your image while the guide keeps motion, timing and
+  camera. It is not image-to-video — the clip is regenerated with your frame inside it, so the edit is not re-applied
+  frame by frame.
+- TARA keeps its First Frame behaviour but is labelled honestly: it propagates an attached frame, it was not trained
+  for FFP, and it can change more of the clip than the frame you edited. Motion Transfer v1.0 and Motion Transfer FFP
+  are the two trained for it, and the merge with SolarRenderer control stays the model an attached First Frame selects
+  by default.
+
+
+### A dropped progress feed no longer kills a running render
+- The live feed from ComfyUI (`/ws`) is now **reconnected** when it drops: a reverse proxy restart, a sleeping
+  laptop, a hosted gateway closing an idle socket or ComfyUI's own websocket timeout used to end the job with
+  "ComfyUI progress connection closed" even though ComfyUI was still rendering. Samples, step counts, previews and
+  the ETA come back after the reconnect; messages missed during the gap are skipped, and the two-second history poll
+  finishes the render either way.
+- The job says "the live feed from ComfyUI dropped; reconnecting (the render continues)" once per drop.
+- Giving up is now explicit and conservative: after 4 minutes without the feed the bridge asks ComfyUI whether the
+  prompt is still running or queued. It reports a restart only when ComfyUI says the prompt left its queue
+  ("ComfyUI restarted during this render"), and reports the backend as unreachable only after 10 minutes with both
+  the feed and the API down. A ComfyUI that is merely slow, or an API call that fails once, never fails the render.
+
+### The model becomes Motion Transfer FFP, and the prompt examples follow the model
+- **Renamed.** *Motion Transfer / Edit Anything v1.0* is now **Motion Transfer FFP v1.0**, and it is talked about as
+  what it is: the first-frame model. `Edit Anything` is dropped from the label and from the copy — the way to use this
+  model is to **change a frame** (draw on it, restyle it, add or remove something in the picture) and attach it as the
+  First Frame; the model propagates that frame through the clip. The prompt then describes the change in one sentence,
+  it does not do the editing. The profile key (`motion_mix_dyn99`) and the LoRA file stay, so old jobs and settings
+  resolve.
+- **Examples follow the model.** The sentences under the prompt box used to be identical for every Motion model. They
+  now change with the model picked in the dropdown: **Motion Transfer** gets "follow the frame-by-frame structure and
+  motion of @Video1" lines, **Motion Transfer TARA** gets sentences naming the picture that replaces each performer
+  (`Replace the man with @Picture1, keeping ... the camera of @Video1`), and **Motion Transfer FFP**
+  gets edit sentences — the change first, then what has to survive it. The hint under them explains the form in your
+  language, and the block disappears for models with no recipe of their own.
+
 ### Put FIBO 2.0 back as the image editor, with Qwen-Image 2.1 as an optional fast one
 
 - Frame and picture edits use **FIBO 2.0 edit turbo** by default again. **Qwen-Image 2.1** is an optional editor you
@@ -44,10 +131,10 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-10-31
 
-### Surface the first-frame edit model as Motion Transfer / Edit Anything v1.0
+### Surface the first-frame edit model as Motion Transfer FFP v1.0
 
 - The Motion model dropdown now offers exactly three models: **Motion Transfer v1.0**, **Motion Transfer TARA v1.0**
-  and **Motion Transfer / Edit Anything v1.0**. The dyn95/dyn99 comparison mixes, the older First Frame profile and the
+  and **Motion Transfer FFP v1.0**. The dyn95/dyn99 comparison mixes, the older First Frame profile and the
   SolarRenderer-only profiles are no longer offered, while their profile keys still resolve for saved jobs and shared
   settings. The Edit model keeps the internal key `motion_mix_dyn99` and now points at
   `minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors`, promoted from `loras/experimental/` in the Hugging Face

@@ -33,7 +33,7 @@ Fight footage: TEKKEN DADDY (YouTube), Tekken 8 © Bandai Namco — used here as
 ### Not just an interface
 
 - **Task-specific trained LoRAs**: Character Swap v1.1, Motion Transfer v1.0, Motion Transfer TARA v1.0 and Motion
-  Transfer Edit Anything v1.0,
+  Transfer Motion Transfer FFP v1.0,
   Head Swap v1.0 and Little More Sharpness v1.0 (+ an H3 latent upscaler). They come from the BFS LoRA collection,
   all trained by Alisson Anjos ([alissonerdx](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI)).
 - **Guide-latent training**, a method inherited from LTX's guide-latent IC-LoRAs and brought to MiniMax H3: the
@@ -64,7 +64,7 @@ in [docs/REFERENCES.md](docs/REFERENCES.md).
 | Mode | What it does | Recipe |
 |---|---|---|
 | Character Swap | Replace the person in a video with a character picture | Character Swap v1.1 LoRA + turbo; v1.1 one-line `body_swap:` prompt; reference background removed (BiRefNet, #808080, 0.5 MP) |
-| Motion Transfer | Drive people, objects or vehicles with the guide's performance | Three LoRAs: Motion Transfer v1.0, Motion Transfer TARA v1.0 and Motion Transfer / Edit Anything v1.0 (the first-frame model: the first-frame edit LoRA merged with SolarRenderer control), loaded after the turbo (no training adapter at inference); use the matching method. Attaching a **First Frame** selects Edit Anything v1.0 |
+| Motion Transfer | Drive people, objects or vehicles with the guide's performance | Three LoRAs: Motion Transfer v1.0, Motion Transfer TARA v1.0 and Motion Transfer FFP v1.0 (the first-frame model: the first-frame edit LoRA merged with SolarRenderer control), loaded after the turbo (no training adapter at inference); use the matching method. The picker tags say what each one was trained for — FFP (First Frame Propagate) is trained for in Motion Transfer and in the Motion Transfer FFP merge, while TARA only handles it. Attaching a **First Frame** selects Motion Transfer FFP v1.0 |
 | Head Swap | Replace only the head with a face picture | Head Swap v1.0 r32 + turbo; published `head_swap:` template |
 | Sharpness / Upscale | Enhance an upload or an existing Henge result | Little More Sharpness first, then **Open-H3 Refiner + LMS** by default at 1080p/2K; H3 latent upscale, NVIDIA VSR and no upscale are alternatives. 4K requires an alternative method |
 
@@ -124,7 +124,7 @@ video with ffmpeg) and **ComfyUI** (runs the MiniMax H3 graphs on a GPU). Pick w
 The GPU backend needs the selected model profiles (H3 base, text encoder, VAE, planner VLM and task LoRAs).
 Storage depends on the profiles; the pod examples allocate a 180 GB volume. The UI/bridge-only host does not need
 these weights or a GPU. [Models and download links](docs/models-and-downloads.md). The Motion Transfer LoRAs — v1.0, TARA v1.0 and
-the Motion Transfer / Edit Anything v1.0 first-frame model, a merge with SolarRenderer control — are public in [Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI) (BFS Motion Transfer license).
+the Motion Transfer FFP v1.0 first-frame model, a merge with SolarRenderer control — are public in [Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI) (BFS Motion Transfer license).
 **Downloading the default model profiles needs no Hugging Face token.** RunPod Serverless still requires your
 RunPod API key and endpoint ID in the bridge configuration. The default editor `fibo` (FIBO 2.0 edit turbo, Bria) and
 the optional `qwen21` (Qwen-Image 2.1 Turbo) are public. The gated exception is the optional `klein3` profile

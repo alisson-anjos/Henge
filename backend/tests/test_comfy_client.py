@@ -1,8 +1,9 @@
-import json,sys,tempfile,unittest
+import asyncio,json,sys,tempfile,unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from comfy_client import ComfyFiles,referenced_files,output_files
+from comfy_client import ComfyFiles,ProgressSocket,referenced_files,output_files
 from workflows import h3_graph,fibo_graph
 
 class ComfyClientTests(unittest.TestCase):
@@ -41,5 +42,65 @@ class ComfyClientTests(unittest.TestCase):
   outputs={'17':{'videos':[{'filename':'r.mp4','subfolder':'henge/job','type':'output'}]},'18':{'videos':[{'filename':'g.mp4','subfolder':'henge/job','type':'output'}]},'4':{'text':['hi']}}
   self.assertEqual([x['filename'] for x in output_files(outputs,'17','videos')],['r.mp4'])
   self.assertEqual(len(output_files(outputs,kind='videos')),2);self.assertEqual(output_files(outputs,'4'),[])
+
+class FakeSocket:
+ # A ComfyUI /ws playing a scripted list of messages; an Exception in the list raises from receive().
+ def __init__(self,messages):self.messages=list(messages);self.closed=False
+ async def receive(self,timeout=None):
+  if not self.messages:raise asyncio.TimeoutError()
+  message=self.messages.pop(0)
+  if isinstance(message,Exception):raise message
+  return message
+ async def close(self):self.closed=True
+
+def async_return(value):
+ async def call():return value
+ return call()
+
+def text(payload):return SimpleNamespace(type='TEXT',data=json.dumps(payload))
+
+class ProgressSocketTests(unittest.TestCase):
+ # A 40 minute render must not die because the websocket watching it closed.
+ def setUp(self):self.clock=0.
+ def make(self,connect,retry=2.,giveup=6.):return ProgressSocket(connect,retry=retry,giveup=giveup,clock=lambda:self.clock)
+ def drive(self,socket,rounds):
+  out=[]
+  async def walk():
+   for _ in range(rounds):
+    self.clock+=1;out.append(await socket.receive())
+  asyncio.run(walk());return out
+ def test_a_closed_feed_reconnects_and_keeps_reading(self):
+  from aiohttp import WSMsgType
+  closed=SimpleNamespace(type=WSMsgType.CLOSED,data=b'')
+  sockets=[FakeSocket([text({'type':'progress'}),closed]),FakeSocket([text({'type':'progress'})])]
+  socket=self.make(lambda:async_return(sockets.pop(0)))
+  self.assertEqual(len([m for m in self.drive(socket,3) if m]),1,'the feed is reading before the drop')
+  self.assertIsNotNone(socket.down,'the gap is measurable, so the job can report it')
+  self.assertFalse(socket.lost)
+  # The reconnect reads again: a progress event after the drop arrives, so the job never sees the disconnect.
+  self.assertEqual(len([m for m in self.drive(socket,6) if m]),1)
+  self.assertEqual(socket.drops,1);self.assertIsNone(socket.down);self.assertFalse(socket.lost)
+ def test_a_socket_that_dies_mid_read_is_not_fatal(self):
+  sockets=[FakeSocket([text({'type':'progress'}),ConnectionResetError('closed')]),FakeSocket([text({'type':'progress'})])]
+  socket=self.make(lambda:async_return(sockets.pop(0)))
+  self.assertEqual(len([m for m in self.drive(socket,6) if m]),2)
+  self.assertEqual(socket.drops,1)
+ def test_a_refusing_comfyui_is_retried_and_the_wait_is_measured(self):
+  attempts=[]
+  async def connect():
+   attempts.append(1)
+   if len(attempts)<3:raise OSError('connection refused')
+   return FakeSocket([text({'type':'progress'})])
+  socket=self.make(connect)
+  self.drive(socket,5)
+  self.assertGreaterEqual(len(attempts),3,'a ComfyUI still coming back gets retried, not declared dead')
+  self.assertFalse(socket.lost)
+  socket.since=self.clock-socket.giveup
+  self.assertTrue(socket.lost);self.assertEqual(socket.down,socket.giveup)
+ def test_one_drop_reports_the_reconnect_once(self):
+  closed=SimpleNamespace(type='CLOSED',data=b'')
+  socket=self.make(lambda:async_return(FakeSocket([closed,closed])))
+  self.drive(socket,4)
+  self.assertTrue(socket.dropped());self.assertFalse(socket.dropped())
 
 if __name__=='__main__':unittest.main()

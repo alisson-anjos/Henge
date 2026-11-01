@@ -18,11 +18,11 @@ from model_installs import InstallManager
 from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements,comfy_listed
-from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
+from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,swap_first_frame,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
-from comfy_client import ComfyFiles,output_files
+from comfy_client import ComfyFiles,output_files,ProgressSocket
 from runpod_backend import RunPodBackend
 from comfy_sdk_backend import ComfySdkBackend
 
@@ -172,6 +172,9 @@ def validate_request(r,options,slots):
     if MODELS.get(options.get('profile'),{}).get('ffp'):low=0
     first=r.get('first_frame_slot')
     if first is not None and (not isinstance(first,int) or first not in slots):raise ValueError('The first frame must be one of the attached pictures')
+    if first is not None and r['mode']!='motion':raise ValueError('A first-frame Picture is a Motion Transfer option; Character Swap takes its first frame inside the guide')
+    if r.get('first_frame_mode','latent') not in ('latent','reference'):raise ValueError('first_frame_mode must be latent or reference')
+    if r.get('guide_first_frame') and r['mode']!='swap':raise ValueError('Replacing the guide\'s first frame is a Character Swap option')
     if not low<=len(slots)<=high:raise ValueError('Attach exactly one face picture' if r['mode']=='headswap' else 'Sharpness uses only the video; remove the reference pictures' if r['mode']=='sharpness' else 'Attach 1–11 reference images')
     if r.get('quality') not in QUALITY:raise ValueError('Choose 480p, 720p, 1080p, 2K or 4K')
     if r['quality'] in ('1440p','2160p') and r['mode']!='sharpness':raise ValueError('2K and 4K output are only for Sharpness')
@@ -410,10 +413,26 @@ def editor_graph(editor,image,refs,instruction,seed,info=None):
 
 # First-frame edit instructions per operation; the painted area (when given) is the only part that changes.
 EDIT_OPS={'replace':'Replace {what} with {target}.','remove':'Remove {what} and fill the space naturally with what would be behind it.',
-          'add':'Add {target}.','free':'{target}'}
-def edit_instruction(op,what,target,refs):
-    text=EDIT_OPS.get(op,'{target}').format(what=what or 'the marked part',target=target or what or '')
-    if refs:text+=' '+' '.join(f'Use image {i} as the reference for its look.' for i in range(2,refs+2))
+          'add':'Add {target}.','free':'{target}',
+          'swap':'{target}'}
+MAGENTA_MARK='the character marked in magenta'
+def swap_instruction(what,target,refs,marked=False):
+    """Character Swap's First Frame: the guide frame with the performer already replaced by the new character. The
+    character comes from image 2 (more pictures are extra looks of it) or, with no picture, from the description.
+    `marked`: the frame arrives with the chosen subject painted magenta (picked from the SAM 3.1 segments)."""
+    who=MAGENTA_MARK if marked else what or 'the main person'
+    if refs:text=(f'Replace {who} with the character from image 2: the same identity, face, head, hair or fur, skin, body shape,'
+                  ' proportions and clothing as image 2')+(f', and {target.rstrip(".")}' if target else '')+'.'
+    else:text=f'Replace {who} with this character: {target.rstrip(".")}.'
+    text+=f' The new character stands exactly where {who} is, with the same pose, gestures, head angle, gaze and facial expression.'
+    if refs>1:text+=' '+' '.join(f'Image {i} shows the same character; use it for details hidden in image 2.' for i in range(3,refs+2))
+    if marked:text+=' The magenta color is only a selection marker: remove it completely, nothing in the result is magenta unless the character is.'
+    return text
+def edit_instruction(op,what,target,refs,marked=False):
+    if op=='swap':text=swap_instruction(what,target,refs,marked)
+    else:
+        text=EDIT_OPS.get(op,'{target}').format(what=what or 'the marked part',target=target or what or '')
+        if refs:text+=' '+' '.join(f'Use image {i} as the reference for its look.' for i in range(2,refs+2))
     # An edited first frame that moved the camera or the performer fights the guide latents, so the lock is spelled out
     # (camera, framing, placement, size, outline, pose, facing) rather than summarised.
     return text+(' Keep everything else exactly the same: identical camera, framing, perspective and composition, every'
@@ -476,62 +495,80 @@ def execute_graph(job,graph,stage):
         folder=job_path(job['id']);(folder/(stage+'.api.json')).write_text(json.dumps(sent,indent=2))
         client='henge-'+job['id'];pid=None;pace={}
         labels={'SamplerCustomAdvanced':'Loading the video model into the GPU (the first run after a restart can take minutes)','HengeH3LatentUpscale':'Upscaling the latent (H3 upscaler)','HengeRTXUpscale':'Upscaling with NVIDIA RTX Video Super Resolution','KSampler':'Preparing appearance image','HengeH3Conditioning':'Reading guide and references','HengeGuide':'Preparing subject guidance','VAEDecode':'Decoding output','TextGenerate':'Planning the edit'}
+        def queued(pid,running_only=False):
+            """Is ComfyUI still holding this prompt? None when its API cannot answer (a restart or a network glitch
+            must never be read as "the render is gone"), which is what makes the give-up decision below safe."""
+            try:
+                queue=api('GET','/queue')
+                held=list(queue.get('queue_running',[]))+([] if running_only else list(queue.get('queue_pending',[])))
+                return any(item[1]==pid for item in held)
+            except Exception:return None
         async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(URL.replace('http://','ws://').replace('https://','wss://')+'/ws?clientId='+client,heartbeat=30) as ws:
-                async with session.post(URL+'/prompt',json={'prompt':sent,'client_id':client,'extra_data':{'henge_job':job['id'],'stage':stage}}) as res:
-                    reply=await res.json()
-                    if res.status!=200:raise ValueError(str(reply)[:1800])
-                pid=reply['prompt_id']
-                try:
-                    save(job,prompt_id=pid,stage=stage,status='running',step=None,step_total=None,eta_seconds=None,seconds_per_step=None)
-                    started=time.monotonic();last_poll=0
-                    while time.monotonic()-started<12*3600:
-                        if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
-                        try:
-                            message=await ws.receive(timeout=1)
-                            if message.type==aiohttp.WSMsgType.TEXT:
-                                event=json.loads(message.data);data=event.get('data',{})
-                                if data.get('prompt_id',pid)==pid:
-                                    if event.get('type')=='executing' and str(data.get('node')) in graph:
-                                        kind=graph[str(data['node'])]['class_type']
-                                        label=labels.get(kind)
-                                        if label:save(job,message=label,step=None,step_total=None)
-                                    elif event.get('type')=='progress':
-                                        maximum=max(1,int(data.get('max',1)));value=int(data.get('value',0));patch={'step':value,'step_total':maximum}
-                                        if graph.get(str(data.get('node')),{}).get('class_type') in ('SamplerCustomAdvanced','HengeCausalSampler'):
-                                            patch['message']=labels.get(graph[str(data.get('node'))]['class_type'],'Sampling video')
-                                            # Measured pace after the first step (model loading excluded) -> remaining time, per sampler.
-                                            now=time.monotonic();pace.setdefault(str(data.get('node')),(value,now))
-                                            first_value,first_time=pace[str(data.get('node'))]
-                                            if value>first_value:
-                                                per_step=(now-first_time)/(value-first_value)
-                                                left_segments=max(0,job.get('total_segments',1)-job.get('segment',1))
-                                                patch['eta_seconds']=round((maximum-value)*per_step+10+left_segments*(maximum*per_step+25))
-                                                patch['seconds_per_step']=round(per_step,2)
-                                        if stage.startswith('h3_segment_'):patch['progress']=(job.get('segment',1)-1+min(1,value/maximum))/max(1,job.get('total_segments',1))
-                                        save(job,**patch)
-                            elif message.type==aiohttp.WSMsgType.BINARY and stage.startswith('h3_segment_'):
-                                image=preview_jpeg(message.data,pid)
-                                if image:
-                                    tmp=folder/'sampling_preview.tmp';tmp.write_bytes(image);tmp.replace(folder/'sampling_preview.jpg')
-                                    version=time.time_ns()
-                                    save(job,sampling_preview_url=f"/api/backend/jobs/{job['id']}/files/sampling_preview.jpg?v={version}",sampling_preview_updated=version)
-                            elif message.type in [aiohttp.WSMsgType.CLOSED,aiohttp.WSMsgType.ERROR]:raise RuntimeError('ComfyUI progress connection closed')
-                        except asyncio.TimeoutError:pass
-                        if time.monotonic()-last_poll>=2:
-                            async with session.get(URL+'/history/'+pid) as response:history=await response.json()
-                            last_poll=time.monotonic()
-                            if pid in history:
-                                entry=history[pid]
-                                if entry.get('status',{}).get('status_str')=='error':
-                                    errors=[m[1].get('exception_message','Execution failed') for m in entry['status'].get('messages',[]) if m[0]=='execution_error'];raise RuntimeError('; '.join(errors) or 'ComfyUI execution failed')
-                                return entry.get('outputs',{})
-                    raise TimeoutError('ComfyUI job exceeded 12 hours')
-                except (InterruptedError,TimeoutError):
-                    queue=api('GET','/queue')
-                    if any(item[1]==pid for item in queue.get('queue_running',[])):api('POST','/interrupt',json={})
-                    api('POST','/queue',json={'delete':[pid]});raise
-    return asyncio.run(execute())
+            # A long render outlives the websocket watching it (proxy restart, laptop sleep, ComfyUI closing idle
+            # sockets), and that must not fail the job: the feed reconnects, and the two-second history poll below
+            # finishes the render even while it is down.
+            socket=ProgressSocket(lambda:session.ws_connect(URL.replace('http://','ws://').replace('https://','wss://')+'/ws?clientId='+client,heartbeat=30))
+            await socket.open()
+            async with session.post(URL+'/prompt',json={'prompt':sent,'client_id':client,'extra_data':{'henge_job':job['id'],'stage':stage}}) as res:
+                reply=await res.json()
+                if res.status!=200:raise ValueError(str(reply)[:1800])
+            pid=reply['prompt_id']
+            try:
+                save(job,prompt_id=pid,stage=stage,status='running',step=None,step_total=None,eta_seconds=None,seconds_per_step=None)
+                started=time.monotonic();last_poll=0
+                while time.monotonic()-started<12*3600:
+                    if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
+                    message=await socket.receive(timeout=1)
+                    if socket.dropped():save(job,message='The live feed from ComfyUI dropped; reconnecting (the render continues)')
+                    if message is not None:
+                        if message.type==aiohttp.WSMsgType.TEXT:
+                            event=json.loads(message.data);data=event.get('data',{})
+                            if data.get('prompt_id',pid)==pid:
+                                if event.get('type')=='executing' and str(data.get('node')) in graph:
+                                    kind=graph[str(data['node'])]['class_type']
+                                    label=labels.get(kind)
+                                    if label:save(job,message=label,step=None,step_total=None)
+                                elif event.get('type')=='progress':
+                                    maximum=max(1,int(data.get('max',1)));value=int(data.get('value',0));patch={'step':value,'step_total':maximum}
+                                    if graph.get(str(data.get('node')),{}).get('class_type') in ('SamplerCustomAdvanced','HengeCausalSampler'):
+                                        patch['message']=labels.get(graph[str(data.get('node'))]['class_type'],'Sampling video')
+                                        # Measured pace after the first step (model loading excluded) -> remaining time, per sampler.
+                                        now=time.monotonic();pace.setdefault(str(data.get('node')),(value,now))
+                                        first_value,first_time=pace[str(data.get('node'))]
+                                        if value>first_value:
+                                            per_step=(now-first_time)/(value-first_value)
+                                            left_segments=max(0,job.get('total_segments',1)-job.get('segment',1))
+                                            patch['eta_seconds']=round((maximum-value)*per_step+10+left_segments*(maximum*per_step+25))
+                                            patch['seconds_per_step']=round(per_step,2)
+                                    if stage.startswith('h3_segment_'):patch['progress']=(job.get('segment',1)-1+min(1,value/maximum))/max(1,job.get('total_segments',1))
+                                    save(job,**patch)
+                        elif message.type==aiohttp.WSMsgType.BINARY and stage.startswith('h3_segment_'):
+                            image=preview_jpeg(message.data,pid)
+                            if image:
+                                tmp=folder/'sampling_preview.tmp';tmp.write_bytes(image);tmp.replace(folder/'sampling_preview.jpg')
+                                version=time.time_ns()
+                                save(job,sampling_preview_url=f"/api/backend/jobs/{job['id']}/files/sampling_preview.jpg?v={version}",sampling_preview_updated=version)
+                    if time.monotonic()-last_poll>=2:
+                        async with session.get(URL+'/history/'+pid) as response:history=await response.json()
+                        last_poll=time.monotonic()
+                        if pid in history:
+                            entry=history[pid]
+                            if entry.get('status',{}).get('status_str')=='error':
+                                errors=[m[1].get('exception_message','Execution failed') for m in entry['status'].get('messages',[]) if m[0]=='execution_error'];raise RuntimeError('; '.join(errors) or 'ComfyUI execution failed')
+                            return entry.get('outputs',{})
+                        # The feed has been down for a while: only call the render lost when ComfyUI itself says the
+                        # prompt is neither running nor queued, which is what a restart of ComfyUI looks like.
+                        if socket.lost:
+                            down=int(socket.down or 0);state=queued(pid)
+                            if state is False:raise RuntimeError(f'ComfyUI restarted during this render: the live feed has been down {down}s and the prompt left its queue')
+                            if state is None and down>=600:raise RuntimeError(f'ComfyUI is unreachable: the live feed and its API have been down {down}s')
+                raise TimeoutError('ComfyUI job exceeded 12 hours')
+            except (InterruptedError,TimeoutError):
+                queue=api('GET','/queue')
+                if any(item[1]==pid for item in queue.get('queue_running',[])):api('POST','/interrupt',json={})
+                api('POST','/queue',json={'delete':[pid]});raise
+            finally:
+                await socket.close()
 
 def image_from_output(outputs,dest):
     images=output_files(outputs,kind='images')
@@ -761,11 +798,17 @@ def planning(job):
         return text
     bindings=r.get('subject_guidance',{}).get('bindings',[])
     likeness_check(job,pictures,ask)
+    # Character Swap with an edited first frame: that image replaces frame 0 of the guide clip (see generate), so it is
+    # not a Picture; the prompt only says the guide already opens on the swapped character.
+    first=r['mode']=='swap' and bool(r.get('guide_first_frame')) and bool(job['assets'].get('first_frame'))
+    # Reference mode: the frame is sent after the character pictures, as Picture len+1.
+    first_slot=len(pictures)+1 if first and r.get('first_frame_mode','latent')=='reference' else None
     if r['mode']=='swap' and len(pictures)==1 and len(bindings)<=1 and job['options'].get('enhance_prompt',True):
         # One character, no bindings: the Character Swap v1.1 training-format prompt.
         details=clean_details(ask(CHARACTER_INSTRUCTION,pictures[0][1],'vlm_picture_1',1024),2000)
-        plan=fixed_plan('headswap',character_swap_prompt(details),'Replace the main subject of the guide video with the character from Picture 1, keeping scene, camera and performance (Character Swap v1.1 prompt format).',details)
-        if job['options'].get('adapt','auto')!='off' and frame_editor():
+        plan=fixed_plan('headswap',swap_first_frame(character_swap_prompt(details),first,first_slot),'Replace the main subject of the guide video with the character from Picture 1, keeping scene, camera and performance (Character Swap v1.1 prompt format)'+('; the guide opens on the edited first frame.' if first else '.'),details)
+        # An edited first frame already shows the character in the guide's pose, so no humanoid figure is prepared.
+        if not first and job['options'].get('adapt','auto')!='off' and frame_editor():
             # An animal reference for a human performer: the image editor can redraw it as one upright humanoid figure.
             kind=ask('Is the main subject of this picture a human, an animal or something else? Answer with one word: human, animal or other.',pictures[0][1],'vlm_species',16)
             if re.search(r'\banimal\b',kind.lower()):
@@ -792,6 +835,7 @@ def planning(job):
             subjects.append((s['color'],s['picture_slots'],clean_details(ask(CHARACTER_INSTRUCTION,image,f'vlm_picture_{slot}',1024),2000)))
         plan=fixed_plan('swap',multi_swap_prompt(subjects,guidance['representation'],bool(guidance.get('mark_labels'))),'Replace each marked person with the character bound to their color, keeping scene, camera and performance (multi-person Character Swap).')
         plan['picture_roles']=[{'slot':slot,'role':'identity','description':next((d for c,sl,d in subjects if slot in sl),'')} for slot in slots]
+        plan['prompt']=swap_first_frame(plan['prompt'],first,first_slot)
         plan['representation']=guidance['representation']
         raw=ask('Look at these frames of a video. Which of these objects do the people hold or play: phone, microphone, guitar, ukulele, cup, bottle, bicycle, torch, piano, keyboard? Answer with a JSON array of the matching words only, for example ["guitar"], or [] if none.',guide,'vlm_guide',64)
         plan['preserve_objects']=sorted(set(re.findall(r'phone|microphone|guitar|ukulele|cup|bottle|bicycle|torch|piano|keyboard',raw.lower())))
@@ -820,6 +864,7 @@ def planning(job):
     raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw.strip());plan=json.loads(raw)
     plan['prompt']=strip_timecodes(evidence['prompt'])
     plan=validate_plan(plan,slots,job['options'],r)
+    if first:plan['prompt']=swap_first_frame(plan['prompt'],first,first_slot)
     if (plan['adapt_reference'] or plan['preparation_recommended']) and not frame_editor():
         plan['adapt_reference']=plan['preparation_recommended']=False
         plan['warnings'].append('Reference adaptation needs an image editor (FLUX.3 / FLUX.2 Klein), not installed on this ComfyUI; the original pictures are used.')
@@ -1036,6 +1081,15 @@ def frame_count(path):
     try:return int(out.stdout.strip())
     except ValueError:return -1
 
+def first_frame_image(r,assets):
+    """The edited first frame a job opens on, or None. Character Swap sends it as its own file; Motion's First Frame
+    is a Picture (the FFP LoRAs were trained with it as a reference). first_frame_mode 'latent' (default) also puts it
+    as frame 0 of the guide the model reads (the guide's first latent); 'reference' leaves it as a reference picture only."""
+    if r['mode']=='swap' and r.get('guide_first_frame') and assets.get('first_frame'):return INPUT/assets['first_frame']
+    slot=r.get('first_frame_slot')
+    if r['mode']=='motion' and isinstance(slot,int) and str(slot) in assets.get('pictures',{}):return INPUT/assets['pictures'][str(slot)]
+    return None
+
 def generate(job):
     r=job['request'];options=job['options'];assets=job['assets'];plan=job['plan'];work=job_path(job['id']);inp=INPUT/'henge'/job['id'];meta=job['video_info'];seed=int(options.get('seed',42));refs=[assets['pictures'][str(i)] for i in range(1,len(assets['pictures'])+1)]
     if r['mode']=='headswap':refs=[head_reference(INPUT/refs[0],inp/'head_reference.png').relative_to(INPUT).as_posix()]
@@ -1089,6 +1143,10 @@ def generate(job):
     if plan['adapt_reference'] and not swap_figure:
         figure=adapt_request(job)['figure'];adapted_ref=adapt_prepare(job,job);refs.append(adapted_ref.relative_to(INPUT).as_posix())
         if options.get('enhance_prompt',True):prompt+=(f" <Picture {len(refs)}> shows that character in humanoid form, in the starting pose of the guide; use it for body shape, limb proportions and appearance only, it does not supply motion or a background." if figure else f" <Picture {len(refs)}> is the prepared appearance and pose reference; it does not supply motion or override the assigned character identities.")
+    # Edited first frame: frame 0 of shot 1's guide (its first latent) by default; as a reference picture only when asked (Motion's
+    # First Frame is already a Picture; Character Swap's is added after the character pictures).
+    first_frame=first_frame_image(r,assets);first_frame_mode=r.get('first_frame_mode','latent')
+    if first_frame and r['mode']=='swap' and first_frame_mode=='reference':refs=refs+[first_frame.relative_to(INPUT).as_posix()]
     full_refine=full_refiner_enabled(options)
     segment_upscale=None if full_refine else upscale
     segment_windows=None if full_refine else options.get('temporal_windows')
@@ -1109,6 +1167,8 @@ def generate(job):
         shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
                         **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
         graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**({**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.),'labels':bool(r.get('subject_guidance',{}).get('mark_labels'))} if plan['representation']=='2d' else options.get('mask') or {}),**source_blur_settings(options)},lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=segment_upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')),regional_attention=options.get('regional_attention'),temporal_windows=segment_windows,sampler_name=options.get('sampler_name','auto'));result_node,guide_node='17','18'
+        if i==0 and first_frame and first_frame_mode=='latent':
+            graph['27']={'class_type':'LoadImage','inputs':{'image':first_frame.relative_to(INPUT).as_posix()}};graph['9']['inputs']['first_frame']=['27',0]
         per_shot_identities=r['mode'] in ('swap','motion') and bindings and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True)
         if per_shot_identities:
             # Run the exact guide node first: absence must be known before H3 sees any references.
@@ -1138,6 +1198,10 @@ def generate(job):
                 continue
             task='motion_transfer' if options.get('profile','character' if r['mode']=='swap' else 'motion').startswith('motion') else 'body_swap'
             local_bindings,local_refs,local_prompt=shot_swap_plan(active,refs,plan.get('picture_roles',[]),plan['representation'],bool(r.get('subject_guidance',{}).get('mark_labels')),task=task)
+            # Only the first shot opens on the edited frame (as its guide's frame 0, or as an extra reference picture).
+            if i==0 and r['mode']=='swap' and first_frame:
+                if first_frame_mode=='reference':local_refs=local_refs+[refs[-1]];local_prompt=swap_first_frame(local_prompt,True,len(local_refs))
+                else:local_prompt=swap_first_frame(local_prompt,True)
             graph['7']['inputs']['pictures']=json.dumps(local_refs)
             graph['8']['inputs']['bindings']=json.dumps(local_bindings)
             graph['9']['inputs']['prompt']=local_prompt
@@ -1653,12 +1717,12 @@ def list_jobs():
 @app.post('/jobs')
 async def create_job(request:Request):
     if MODEL_INSTALL.active():raise HTTPException(409,'Wait for the model installation to finish before generating')
-    form=await request.form(max_files=13,max_fields=4,max_part_size=32*1024*1024)
+    form=await request.form(max_files=14,max_fields=4,max_part_size=32*1024*1024)
     try:
         r=json.loads(str(form.get('direction','{}')));options=json.loads(str(form.get('options','{}')))
         pictures={int(k.split('_')[1]):v for k,v in form.items() if re.fullmatch(r'picture_\d+',k)}
         if len(pictures)>11:raise ValueError('Attach up to 11 reference images')
-        # Motion Transfer defaults: an attached First Frame selects Motion Transfer / Edit Anything v1.0, the model that carries the
+        # Motion Transfer defaults: an attached First Frame selects Motion Transfer FFP v1.0, the model that carries the
         # edit through the whole clip; otherwise the TARA model and method when the worker has the TARA node.
         if r.get('mode')=='motion' and 'profile' not in options:
             if isinstance(r.get('first_frame_slot'),int):options['profile']=FFP_PROFILE
@@ -1709,6 +1773,13 @@ async def create_job(request:Request):
             temp=inp/'upload_background';await upload(background,temp,25*1024*1024)
             with Image.open(temp) as im:im.convert('RGB').save(inp/'background.png')
             temp.unlink();assets['background']=(inp/'background.png').relative_to(INPUT).as_posix()
+        first_frame=form.get('first_frame')
+        if r.get('guide_first_frame'):
+            # Character Swap: the edited frame replaces frame 0 of the guide clip; it is not one of the Pictures.
+            if not hasattr(first_frame,'read'):raise ValueError('Attach the edited first frame')
+            temp=inp/'upload_first_frame';await upload(first_frame,temp,25*1024*1024)
+            with Image.open(temp) as im:im.convert('RGB').save(inp/'first_frame.png')
+            temp.unlink();assets['first_frame']=(inp/'first_frame.png').relative_to(INPUT).as_posix()
         for slot,file in sorted(pictures.items()):
             dest=inp/f'picture_{slot}.png';temp=inp/f'upload_{slot}';await upload(file,temp,25*1024*1024)
             with Image.open(temp) as im:im.convert('RGB').save(dest)
@@ -1783,6 +1854,12 @@ async def convert_gif(request:Request):
         if p.returncode or not dst.is_file():raise HTTPException(400,'This GIF could not be converted')
         return Response(dst.read_bytes(),media_type='video/mp4')
 
+@app.get('/frame-edit/instruction')
+def frame_edit_default(op:str='free',what:str='',instruction:str='',refs:int=0,marked:bool=False):
+    """The English prompt the editor gets for these choices: the modal shows it as the editable default."""
+    if op not in EDIT_OPS:raise HTTPException(400,'Unknown edit')
+    return {'instruction':edit_instruction(op,what.strip()[:400],instruction.strip()[:4000],max(0,min(12,refs)),marked)}
+
 @app.post('/frame-edit')
 async def frame_edit(request:Request):
     """Frame or picture edit (the edit modal): FIBO 2.0 edit turbo, Qwen-Image 2.1 or FLUX Klein, whichever this
@@ -1792,12 +1869,17 @@ async def frame_edit(request:Request):
     request). Runs as a hidden job so it uses the same ComfyUI or serverless path as generation."""
     installed=dict(frame_editors())
     if not installed:raise HTTPException(409,'No image editor is installed on this ComfyUI (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein)')
-    form=await request.form(max_files=13,max_fields=8,max_part_size=32*1024*1024)
+    form=await request.form(max_files=13,max_fields=10,max_part_size=32*1024*1024)
     editor=str(form.get('editor') or '').strip() or next(iter(installed))
     if editor not in installed:raise HTTPException(400,'This ComfyUI does not have that image editor')
     op=str(form.get('op') or 'free');what=str(form.get('what') or '').strip()[:400];instruction=str(form.get('instruction') or '').strip()
     if op not in EDIT_OPS:raise HTTPException(400,'Unknown edit')
-    if (op in ('free','add') and not instruction) or (op=='replace' and not (what or form.get('mask')) ) or len(instruction)>4000:raise HTTPException(400,'Describe the edit')
+    marked=str(form.get('marked') or '')=='1'
+    # `prompt`: the user's own wording of the editor prompt (the modal starts it from the default below).
+    custom=str(form.get('prompt') or '').strip()
+    if len(custom)>4000:raise HTTPException(400,'The edit prompt must be at most 4000 characters')
+    if op=='swap' and not custom and not instruction and not any(k.startswith('picture_') for k in form.keys()):raise HTTPException(400,'Choose the character picture or describe the character')
+    if not custom and ((op in ('free','add') and not instruction) or (op=='replace' and not (what or form.get('mask')))) or len(instruction)>4000:raise HTTPException(400,'Describe the edit')
     jid=uuid.uuid4().hex;inp=INPUT/'henge'/jid;inp.mkdir(parents=True);job_path(jid).mkdir(parents=True)
     files=[('frame',form.get('frame'))]+sorted(((k,v) for k,v in form.multi_items() if k.startswith('picture_')),key=lambda kv:kv[0])
     images=[]
@@ -1817,7 +1899,7 @@ async def frame_edit(request:Request):
     for i,(name,im) in enumerate(images):
         if i==0 and region:im=im.crop(region)
         dest=inp/f'{name}.png';im.save(dest);staged.append(dest.relative_to(INPUT).as_posix())
-    text=edit_instruction(op,what,instruction,len(staged)-1)
+    text=custom or edit_instruction(op,what,instruction,len(staged)-1,marked)
     job={'id':jid,'created':time.time(),'status':'running','stage':'frame_edit','progress':0,'request':{'mode':'frame_edit','instruction':instruction or what,'op':op,'editor':editor,'masked':bool(region)},'options':{},'message':'Editing the frame'};save(job)
     try:
         seed=int(time.time())%2**31
@@ -2485,25 +2567,34 @@ async def match_people(request:Request):
 @app.post('/assistant/people')
 async def find_people(request:Request):
     """Number the people (or animals) in one guide frame sent by the browser. Runs as a hidden job on the same
-    ComfyUI or serverless path as generation."""
-    form=await request.form(max_files=1,max_fields=2,max_part_size=16*1024*1024)
-    frame=form.get('frame');kind=str(form.get('kind') or 'person')
-    if not hasattr(frame,'read') or kind not in ('person','animal'):raise HTTPException(400,'Send a frame and a kind (person or animal)')
+    ComfyUI or serverless path as generation. `labels=1` (the frame editor's character picker) also returns the label
+    map: a PNG at the frame's size whose red channel is each subject's number, 0 for the background."""
+    form=await request.form(max_files=1,max_fields=3,max_part_size=16*1024*1024)
+    frame=form.get('frame');kind=str(form.get('kind') or 'person');want_labels=str(form.get('labels') or '')=='1'
+    if not hasattr(frame,'read') or kind not in ('person','animal','character'):raise HTTPException(400,'Send a frame and a kind (person, animal or character)')
     jid=uuid.uuid4().hex;inp=INPUT/'henge'/jid;inp.mkdir(parents=True);job_path(jid).mkdir(parents=True)
     try:
         with Image.open(io.BytesIO(await frame.read())) as im:dest=inp/'frame.png';im.convert('RGB').save(dest)
     except OSError:raise HTTPException(400,'The frame is not an image')
     job={'id':jid,'created':time.time(),'status':'running','stage':'find_people','progress':0,'request':{'mode':'find_people'},'options':{},'message':'Finding people'};save(job)
     try:
-        outputs=await asyncio.to_thread(execute_graph,job,find_people_graph(dest.relative_to(INPUT).as_posix(),kind),'find_people')
+        outputs=await asyncio.to_thread(execute_graph,job,find_people_graph(dest.relative_to(INPUT).as_posix(),kind,want_labels),'find_people')
         found=json.loads(outputs.get('4',{}).get('text',['{}'])[0])
-        overlay=await asyncio.to_thread(image_from_output,outputs,inp/'people.png')
+        overlay=await asyncio.to_thread(FILES.download,output_files(outputs,'3','images')[0],inp/'people.png')
         with Image.open(overlay) as im:
             im=im.convert('RGB');im.thumbnail((960,960));buf=io.BytesIO();im.save(buf,'JPEG',quality=85)
+        extra={}
+        if want_labels:
+            # Older workers have no label output: the editor then falls back to describing or painting the subject.
+            files=output_files(outputs,'5','images')
+            if files:
+                label_path=await asyncio.to_thread(FILES.download,files[0],inp/'labels.png')
+                with Image.open(label_path) as im:
+                    lab=io.BytesIO();im.convert('RGB').save(lab,'PNG');extra['labels']='data:image/png;base64,'+base64.b64encode(lab.getvalue()).decode()
         save(job,status='completed',stage='complete',progress=1)
     except Exception as e:
         save(job,status='failed',error=str(e)[:1800]);raise HTTPException(500,f'Finding people failed: {str(e)[:600]}')
-    return {**found,'overlay':'data:image/jpeg;base64,'+base64.b64encode(buf.getvalue()).decode()}
+    return {**found,**extra,'overlay':'data:image/jpeg;base64,'+base64.b64encode(buf.getvalue()).decode()}
 
 @app.post('/assistant/step')
 async def assistant_step(request:Request):

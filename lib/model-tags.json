@@ -1,0 +1,68 @@
+{
+ "en": {
+  "multi-ref": {
+   "tag": "multi-reference",
+   "tip": "Trained with several reference pictures at once: the person, the place and the look can each come from a different image."
+  },
+  "multi-ref-weak": {
+   "tag": "multi-reference · weaker",
+   "tip": "Trained with a single reference, so several work only as well as your prompt describes them, and which picture lands on which subject is not guaranteed."
+  },
+  "single-ref": {
+   "tag": "one reference",
+   "tip": "It works from a single reference picture."
+  },
+  "ffp-strong": {
+   "tag": "FFP ✓",
+   "tip": "FFP = First Frame Propagate. Trained to carry an edited frame through the whole clip: your image becomes frame 0 and the rest is rebuilt around it."
+  },
+  "ffp-works": {
+   "tag": "FFP ⚠",
+   "tip": "It takes an attached first frame, but it was not trained for FFP: it can change more of the clip than the frame you edited."
+  }
+ },
+ "pt": {
+  "multi-ref": {
+   "tag": "multi-referência",
+   "tip": "Treinado com várias imagens de referência ao mesmo tempo: pessoa, lugar e visual podem vir cada um de uma imagem."
+  },
+  "multi-ref-weak": {
+   "tag": "multi-referência · mais fraco",
+   "tip": "Treinado com uma única referência: várias funcionam conforme o seu prompt, e sem garantia de qual imagem vai em quem."
+  },
+  "single-ref": {
+   "tag": "uma referência",
+   "tip": "Trabalha com uma única imagem de referência."
+  },
+  "ffp-strong": {
+   "tag": "FFP ✓",
+   "tip": "FFP = First Frame Propagate. Treinado para levar um quadro editado por todo o clipe: a sua imagem vira o quadro 0 e o resto é refeito em volta dela."
+  },
+  "ffp-works": {
+   "tag": "FFP ⚠",
+   "tip": "Aceita um primeiro quadro anexado, mas não foi treinado para FFP: pode mudar mais do clipe do que o quadro que você editou."
+  }
+ },
+ "es": {
+  "multi-ref": {
+   "tag": "multi-referencia",
+   "tip": "Entrenado con varias imágenes de referencia a la vez: la persona, el lugar y el aspecto pueden salir cada uno de una imagen."
+  },
+  "multi-ref-weak": {
+   "tag": "multi-referencia · más débil",
+   "tip": "Entrenado con una sola referencia: varias funcionan según lo que diga tu prompt, sin garantía de qué imagen recae sobre quién."
+  },
+  "single-ref": {
+   "tag": "una referencia",
+   "tip": "Trabaja con una sola imagen de referencia."
+  },
+  "ffp-strong": {
+   "tag": "FFP ✓",
+   "tip": "FFP = First Frame Propagate. Entrenado para llevar un cuadro editado por todo el clip: tu imagen pasa a ser el cuadro 0 y el resto se rehace a su alrededor."
+  },
+  "ffp-works": {
+   "tag": "FFP ⚠",
+   "tip": "Acepta un primer cuadro adjunto, pero no se entrenó para FFP: puede cambiar más del clip que el cuadro que editaste."
+  }
+ }
+}

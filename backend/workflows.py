@@ -3,27 +3,31 @@ Only branches selected in a validated plan are added: unused loaders never execu
 """
 import json,math
 from pathlib import Path
-# The model an attached First Frame defaults to: Motion Transfer / Edit Anything v1.0 (the profile key predates the name and stays
+# The model an attached First Frame defaults to: Motion Transfer FFP v1.0 (the profile key predates the name and stays
 # so jobs and settings shared earlier keep resolving).
 FFP_PROFILE='motion_mix_dyn99'
 # Default turbo for new jobs, and for any model that does not declare a `turbo_default` of its own.
 DEFAULT_TURBO='dmad4'
 MODELS={
- 'motion':{'label':'Motion Transfer v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors','adapter':None,'clip_context':True},
+ 'motion':{'label':'Motion Transfer v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors','adapter':None,'clip_context':True,
+   # What the picker shows as tags: what this model is actually trained for, so the choice is made with eyes open.
+   'tags':['multi-ref','ffp-strong']},
  # Motion Transfer TARA v1.0: the LoRA trained for TARA; the studio switches to the TARA method with it.
- 'motion_tara':{'label':'Motion Transfer TARA v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors','adapter':None,'clip_context':True,'method':'tara'},
- # Motion Transfer / Edit Anything v1.0 (the profile key stays motion_mix_dyn99 so jobs and settings shared earlier keep resolving):
+ 'motion_tara':{'label':'Motion Transfer TARA v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors','adapter':None,'clip_context':True,'method':'tara',
+   'tags':['multi-ref','ffp-works']},
+ # Motion Transfer FFP v1.0 (the profile key stays motion_mix_dyn99 so jobs and settings shared earlier keep resolving):
  # the VFX Edit first-frame LoRA (rank 128) merged with SolarRenderer control at x0.5 by rank concat + per-module SVD
  # keeping 99% of the Frobenius energy. A First Frame enters as a native reference (prompt: vfx_edit:) and propagates
  # through the clip while the guide keeps the motion; like the other first-frame modes it takes the guide as latents only,
  # without CLIP, so nothing of the original performer leaks. It already carries SolarRenderer control, so it does not stack
  # the SolarRenderer step-distillation LoRA: this LoRA runs on the standard DMAD 4-step turbo (Kijai). Runs with Guide
  # Latents and with TARA.
- 'motion_mix_dyn99':{'label':'Motion Transfer / Edit Anything v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors','adapter':None,'clip_context':False,'ffp':True,'turbo_default':DEFAULT_TURBO},
- 'character':{'task':'swap','label':'Character Swap v1.1','lora':'henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
+ 'motion_mix_dyn99':{'label':'Motion Transfer FFP v1.0','task':'motion','lora':'henge/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors','adapter':None,'clip_context':False,'ffp':True,'turbo_default':DEFAULT_TURBO,
+   'tags':['ffp-strong','multi-ref-weak']},
+ 'character':{'task':'swap','label':'Character Swap v1.1','tags':['multi-ref-weak'],'lora':'henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
- 'headswap':{'task':'headswap','label':'Head Swap v1.0','lora':'henge/minimax_h3_head_swap_v1.0_r32.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False,'scheduler':'beta'},
+ 'headswap':{'task':'headswap','label':'Head Swap v1.0','tags':['single-ref'],'lora':'henge/minimax_h3_head_swap_v1.0_r32.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False,'scheduler':'beta'},
  'sharpness':{'task':'sharpness','label':'Little More Sharpness v1.0','lora':'henge/minimax_h3_lms_v1.0_r64.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
 }
 # Swappable speed LoRAs. Swap modes load it in place of an adapter; Motion stacks it on training
@@ -112,7 +116,7 @@ def split_frames(total,per_shot,context):
         start+=keep-context
     return shots
 
-def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None,gen_audio=False,regional_attention=None,temporal_windows=None,sampler_name="auto"):
+def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,steps,representation,bindings,source_kind,segment_start,audio=False,context_video=None,context_count=0,clip_fps=2.,preserve_objects=None,conditioning_mode="guide",reference_scale=1.,context_prompt=True,attention="comfy kitchen attention",turbo="dmd8",base="h3",cfg=1.,mask=None,lora_strength=1.,causal=None,structure_cfg=1.,structure_sigma_min=0.,upscale=None,skip_frames=0,guide_context=None,gen_audio=False,regional_attention=None,temporal_windows=None,sampler_name="auto",first_frame=None):
     if sampler_name not in SAMPLERS:raise ValueError('Unknown H3 sampler')
     pika=turbo in PIKA['turbos']
     if pika and base!='h3':raise ValueError('Pika H3 Flex Ref2VA requires the H3 Ref2VA base')
@@ -140,6 +144,8 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
       '18':node('HengeSaveVideo',images=['8',0],filename=video.replace('.mp4','_guide.mp4'),trim_frames=trim_frames,fps=24.),
     }
     g['9']['inputs'].update(conditioning_mode=conditioning_mode,reference_scale=reference_scale)
+    # An edited first frame replaces frame 0 of the guide the model reads (after HengeGuide): the guide's first latent.
+    if first_frame:g['27']=node('LoadImage',image=first_frame);g['9']['inputs']['first_frame']=['27',0]
     # The worker drops the context overlap itself, so the bridge only copies the shot (no second encode).
     if skip_frames:g['17']['inputs']['skip_frames']=g['18']['inputs']['skip_frames']=skip_frames
     if representation=='mask':
@@ -376,10 +382,13 @@ def plate_mask_graph(video,width,height,length,filename):
             '3':node('RemoveBackground',bg_removal_model=['2',0],image=['1',0]),'4':node('MaskToImage',mask=['3',0]),
             '5':node('HengeSaveVideo',images=['4',0],filename=filename,trim_frames=length,fps=24.)}
 
-def find_people_graph(image,kind='person'):
-    # One frame: SAM 3.1 finds and numbers every person (or animal) for the studio assistant.
-    return {'1':node('LoadImage',image=image),'2':node('HengeFindPeople',image=['1',0],kind=kind,threshold=.4,sam_checkpoint='sam3.1_multiplex_fp16.safetensors'),
-            '3':node('SaveImage',images=['2',0],filename_prefix=image.rsplit('.',1)[0]+'_people'),'4':node('HengeTextResult',text=['2',1])}
+def find_people_graph(image,kind='person',labels=False):
+    # One frame: SAM 3.1 finds and numbers every person (or animal) for the studio assistant. `labels` also saves the
+    # label map (lossless PNG, red = subject number) the frame editor hovers and clicks.
+    g={'1':node('LoadImage',image=image),'2':node('HengeFindPeople',image=['1',0],kind=kind,threshold=.4,sam_checkpoint='sam3.1_multiplex_fp16.safetensors'),
+       '3':node('SaveImage',images=['2',0],filename_prefix=image.rsplit('.',1)[0]+'_people'),'4':node('HengeTextResult',text=['2',1])}
+    if labels:g['5']=node('SaveImage',images=['2',2],filename_prefix=image.rsplit('.',1)[0]+'_labels')
+    return g
 
 def marks_preview_graph(video,width,height,length,trim_frames,bindings,source_kind,segment_start,preserve_objects,filename,labels=False):
     # The 2D color guide at full opacity: the UI lays it over the source with the chosen opacity, which is exactly the

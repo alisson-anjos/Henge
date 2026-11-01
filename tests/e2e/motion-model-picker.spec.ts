@@ -10,7 +10,7 @@ const GUIDE = process.env.HENGE_E2E_GUIDE || '';
 const MODELS = {
   motion: {label: 'Motion Transfer v1.0', file: 'minimax_h3_motion_transfer_v1.0_ref2va'},
   tara: {label: 'Motion Transfer TARA v1.0', file: 'minimax_h3_motion_transfer_tara_v1.0_ref2va'},
-  edit: {label: 'Motion Transfer / Edit Anything v1.0', file: 'minimax_h3_motion_transfer_ffp_v1.0_ref2va'},
+  edit: {label: 'Motion Transfer FFP v1.0', file: 'minimax_h3_motion_transfer_ffp_v1.0_ref2va'},
 };
 // An edited opening frame (the editor's output shape): Picture 2 carries the edit the model must propagate.
 const EDITED_FRAME = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAaklEQVR4nGNgZ4AAOxYMBgZmEAwJYmBgZGRlAWJWhJwOILnNDST3PmBgYDzAwMDMwMDIwMyAhYMTBwcHB4uLi5uTkxMIBhgMDAwMDAwQwMDAwMDIyMjMzMzMwMDAwMDIyAgAABccCQb6UuYAAAAASUVORK5CYII=', 'base64');
@@ -23,7 +23,12 @@ async function modelOptions(page: Page) {
   await picker(page).click();
   const list = page.locator('.select-list');
   await expect(list).toBeVisible();
-  const items = (await list.locator('li').allTextContents())
+  const items = (await list.locator('li').evaluateAll(els => els.map(el => {
+    // The chips are part of the option, so read the model name with them removed.
+    const c = el.cloneNode(true) as HTMLElement;
+    c.querySelectorAll('.model-tag').forEach(n => n.remove());
+    return c.textContent || '';
+  })))
     .map(s => s.replace(/✓/g, '').replace(/\s+/g, ' ').trim())
     // A model that is not downloaded yet is still listed, flagged as missing.
     .map(s => s.replace(/\s*·\s*(not installed|não instalado|no instalado)$/, ''));
@@ -34,7 +39,8 @@ async function modelOptions(page: Page) {
 async function chooseModel(page: Page, label: string) {
   await picker(page).click();
   await page.locator('.select-list li', {hasText: label}).first().click();
-  await expect(picker(page).locator('.select-value')).toHaveText(label);
+  // The closed control carries the tag chips too, so check the model name itself.
+  await expect(picker(page).locator('.select-value .model-name')).toHaveText(label);
 }
 
 async function openStudio(page: Page) {
@@ -94,11 +100,27 @@ test('the model picker offers the three models and follows the First Frame', asy
   // The picker fills in once the health payload arrives; wait for the three current models rather than the fallback.
   await expect.poll(async () => (await modelOptions(page)).length, {timeout: 30_000}).toBe(3);
   expect(await modelOptions(page)).toEqual([MODELS.motion.label, MODELS.tara.label, MODELS.edit.label]);
+  // Each model carries tags on the picker itself: what it was trained for, and what it only handles by chance.
+  await picker(page).click();
+  const tags = await page.locator('.select-list li').evaluateAll(els => els.map(el => Array.from(el.querySelectorAll('.model-tag')).map(t => t.textContent)));
+  await page.keyboard.press('Escape');
+  // Character Swap is tagged `multi-reference · weaker` rather than "one reference": it does take more than one
+  // picture, it was only trained with one.
+  expect(tags).toEqual([['multi-reference', 'FFP ✓'], ['multi-reference', 'FFP ⚠'], ['FFP ✓', 'multi-reference · weaker']]);
+  // The tag is explained, not just decorated: hovering the chip gives the reason.
+  await picker(page).click();
+  expect(await page.locator('.select-list li .model-tag').first().getAttribute('title')).toMatch(/reference pictures at once/);
+  await page.keyboard.press('Escape');
   // Which model the studio remembered from the last session is the user's business; pick one explicitly.
   await chooseModel(page, MODELS.motion.label);
   // Plain Motion Transfer is prompted by what to copy from the guide; the prompt itself is one line that the
   // enhancer expands into the trained six-part caption.
-  await expect(page.locator('.prompt-tips button').first()).toHaveText(/copy the motion|copiar o movimento|copiar el movimiento/);
+  await expect(page.locator('.prompt-tips button').first()).toHaveText(/same performance|mesma atua\u00e7\u00e3o|misma actuaci\u00f3n/);
+  await chooseModel(page, MODELS.tara.label);
+  // TARA replaces performers: its examples name the picture that replaces them and keep the guide's motion.
+  await expect(page.locator('.prompt-tips button').first())
+    .toHaveText(/two performers|dois personagens|dos personajes/);
+  await chooseModel(page, MODELS.motion.label);
 
   if (!await uploadGuide(page)) {expect(true, 'no guide clip: skipping the First Frame checks').toBeTruthy(); return;}
   // The First Frame card starts collapsed: open it, then ask for the frame editor.
@@ -127,12 +149,15 @@ test('the model picker offers the three models and follows the First Frame', asy
   // Attaching that frame is the edit workflow: the studio moves to the first-frame model on the standard turbo, and the
   // coaching switches to "the change first, then what has to survive it".
   await expect(page.locator('.ffp-card .ffp-current')).toBeVisible();
-  await expect(picker(page).locator('.select-value')).toHaveText(MODELS.edit.label);
+  await expect(picker(page).locator('.select-value .model-name')).toHaveText(MODELS.edit.label);
   await expect(turboValue(page)).toContainText('DMAD 4-step');
   await expect(page.locator('.prompt-tips button').first()).toHaveText(/fire in his hands|fogo nas mãos dele|fuego en sus manos/);
+  await expect(page.locator('.tip-hint')).toContainText(/survive|sobreviver|seguir igual/);
 
-  // A deliberate model choice survives re-renders.
+  // A deliberate model choice survives re-renders. An attached First Frame still makes this an edit, so the edit
+  // sentences stay even when the user moves to TARA: the First Frame already says how the video starts.
   await chooseModel(page, MODELS.tara.label);
-  await expect(picker(page).locator('.select-value')).toHaveText(MODELS.tara.label);
+  await expect(picker(page).locator('.select-value .model-name')).toHaveText(MODELS.tara.label);
+  await expect(page.locator('.prompt-tips button').first()).toHaveText(/fire in his hands|fogo nas mãos dele|fuego en sus manos/);
   expect(errors).toEqual([]);
 });

@@ -10,7 +10,7 @@ ComfyUI directory configured by `COMFY_ROOT`, or expose them with ComfyUI's
 | Task | LoRA | Method |
 | --- | --- | --- |
 | Character Swap | Character Swap v1.1, selected automatically | Guide Latents (default) or TARA (experimental) |
-| Motion Transfer | Motion Transfer v1.0, Motion Transfer TARA v1.0 or Motion Transfer / Edit Anything v1.0, selected in the main generation panel (a First Frame selects Edit Anything v1.0) | Guide Latents (default) or TARA (experimental) |
+| Motion Transfer | Motion Transfer v1.0, Motion Transfer TARA v1.0 or Motion Transfer FFP v1.0, selected in the main generation panel (a First Frame selects Motion Transfer FFP v1.0) | Guide Latents (default) or TARA (experimental) |
 
 The motion model and method are independent. A guide-trained LoRA may be used
 with TARA; a TARA-trained LoRA may be selected with Guide Latents. Wiring support
@@ -42,7 +42,7 @@ profiles in brackets).
 | --- | --- |
 | Motion Transfer v1.0 (`motion`) | [`minimax_h3_motion_transfer_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_ref2va.safetensors) |
 | Motion Transfer TARA v1.0 (`motion`) | [`minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors) |
-| Motion Transfer / Edit Anything v1.0 (`ffp`, part of `motion`) | [`minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors) — 220 MB: the VFX Edit first-frame LoRA (rank 128) ×1.0 + SolarRenderer control ×0.5, rank concat with per-module SVD keeping 99% of the Frobenius energy. The studio selects it whenever a First Frame is attached |
+| Motion Transfer FFP v1.0 (`ffp`, part of `motion`) | [`minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors) — 220 MB: the VFX Edit first-frame LoRA (rank 128) ×1.0 + SolarRenderer control ×0.5, rank concat with per-module SVD keeping 99% of the Frobenius energy. The studio selects it whenever a First Frame is attached |
 | SolarRenderer 4-step turbo (`solar`, installed with `ffp`) | [`solarrenderer/solarrenderer_4step_comfy.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_4step_comfy.safetensors) — 5.9 GB. Optional speed LoRA: the Edit model already carries SolarRenderer control, so it runs on the standard 4-step turbo. Any model can select it under Advanced → Turbo LoRA |
 | Head Swap v1.0 (`headswap`) | [`minimax_h3_head_swap_v1.0_r32.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_head_swap_v1.0_r32.safetensors) |
 | Little More Sharpness v1.0 (`sharpness`) | [`minimax_h3_lms_v1.0_r64.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_lms_v1.0_r64.safetensors) |
@@ -55,7 +55,7 @@ the published workflows no longer load it, and the downloads no longer include i
 Models already in your ComfyUI are reused as they are: under an older short name (for example `character_v1_1`,
 `training_adapter_v2`) or in another subfolder (for example `vae/minimax/…`). The bridge finds them by name and
 `download_models.py` skips them without renaming, so your other workflows keep working.
-The VFX Edit first-frame LoRA behind Motion Transfer / Edit Anything v1.0 (`ffp`, part of `motion`) is merged with SolarRenderer
+The VFX Edit first-frame LoRA behind Motion Transfer FFP v1.0 (`ffp`, part of `motion`) is merged with SolarRenderer
 control (Enderfga, MiniMax H3 Community License); both are public on the same Hugging Face repository. The older
 comparison LoRAs (the dyn95 mixes and the SolarRenderer control alone, kept under `loras/experimental/`) were removed
 from that repository: a job rendered with them re-renders only where those files are still installed.

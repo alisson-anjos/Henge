@@ -23,6 +23,20 @@ class AssistantTest(unittest.TestCase):
   error=out['messages'][2]['results'][0]
   self.assertTrue(error['is_error']);self.assertIn('view_frame',error['text'])
 
+ def test_swap_first_frame_is_offered_to_the_assistant(self):
+  # Character Swap's First Frame: a browser tool that swaps one or several segmented characters in one call.
+  tool=next(t for t in assistant.STUDIO_TOOLS if t['name']=='swap_first_frame')
+  self.assertIn('swap_first_frame',assistant.STUDIO_NAMES)
+  schema=tool['input_schema'];self.assertEqual(schema['required'],['time','swaps'])
+  self.assertEqual(schema['properties']['swaps']['items']['required'],['character'])
+  self.assertEqual(schema['properties']['use_as']['enum'],['latent','reference'])
+  people=next(t for t in assistant.STUDIO_TOOLS if t['name']=='find_people')
+  self.assertIn('character',people['input_schema']['properties']['kind']['enum'])
+  self.assertIn('Character Swap First Frame',assistant.SYSTEM)
+  # And the building blocks, for anything the combined tool does not cover.
+  for name in ('edit_frame','use_frame','clear_first_frame'):self.assertIn(name,assistant.STUDIO_NAMES)
+  edit=next(t for t in assistant.STUDIO_TOOLS if t['name']=='edit_frame')['input_schema']
+  self.assertEqual(edit['properties']['op']['enum'],['swap','replace','remove','add','free']);self.assertIn('prompt',edit['properties'])
  def test_config_never_returns_the_key(self):
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/'assistant.json'

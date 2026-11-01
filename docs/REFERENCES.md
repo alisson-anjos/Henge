@@ -7,7 +7,7 @@ Everything Henge builds on, in one place. Exact downloadable weights, destinatio
 ## Our work
 
 - **Task LoRAs (BFS collection)** by Alisson Anjos ([alissonerdx](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI)):
-  Character Swap v1.1, Motion Transfer v1.0, Motion Transfer TARA v1.0 and Motion Transfer / Edit Anything v1.0 (our merge of the
+  Character Swap v1.1, Motion Transfer v1.0, Motion Transfer TARA v1.0 and Motion Transfer FFP v1.0 (our merge of the
   VFX Edit first-frame LoRA with SolarRenderer control), Head Swap v1.0, Little More Sharpness
   (LMS) v1.0 — the sharpness LoRA used to push results further — and the H3 latent upscaler LMS v0.1. Licenses:
   [Character Swap](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/blob/main/LICENSE_CHARACTER_SWAP.md),

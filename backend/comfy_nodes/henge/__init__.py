@@ -246,9 +246,21 @@ class HengeGuide:
 
 class HengeH3Conditioning:
     @classmethod
-    def INPUT_TYPES(cls):return {'required':{'clip':('CLIP',),'vae':('VAE',),'guide':('IMAGE',),'references':('HENGE_REFS',),'prompt':('STRING',{'multiline':True}),'width':('INT',{'default':512}),'height':('INT',{'default':288}),'length':('INT',{'default':107}),'clip_video_fps':('FLOAT',{'default':2,'min':.5,'max':24}),'reference_size':(['match','max'],),'guide_context':('BOOLEAN',{'default':True}),'audio_conditioning':('BOOLEAN',{'default':False}),'audio_video':('STRING',{'default':''})},'optional':{'audio_vae':('VAE',),'context_images':('IMAGE',),'context_count':('INT',{'default':0}),'conditioning_mode':(['guide','tara'],{'default':'guide'}),'reference_scale':('FLOAT',{'default':1.,'min':.25,'max':1.})}}
+    def INPUT_TYPES(cls):return {'required':{'clip':('CLIP',),'vae':('VAE',),'guide':('IMAGE',),'references':('HENGE_REFS',),'prompt':('STRING',{'multiline':True}),'width':('INT',{'default':512}),'height':('INT',{'default':288}),'length':('INT',{'default':107}),'clip_video_fps':('FLOAT',{'default':2,'min':.5,'max':24}),'reference_size':(['match','max'],),'guide_context':('BOOLEAN',{'default':True}),'audio_conditioning':('BOOLEAN',{'default':False}),'audio_video':('STRING',{'default':''})},'optional':{'audio_vae':('VAE',),'context_images':('IMAGE',),'context_count':('INT',{'default':0}),'conditioning_mode':(['guide','tara'],{'default':'guide'}),'reference_scale':('FLOAT',{'default':1.,'min':.25,'max':1.}),'first_frame':('IMAGE',)}}
     RETURN_TYPES=('CONDITIONING','LATENT');FUNCTION='encode';CATEGORY='Henge'
-    def encode(self,clip,vae,guide,references,prompt,width,height,length,clip_video_fps,reference_size,guide_context,audio_conditioning,audio_video,audio_vae=None,context_images=None,context_count=0,conditioning_mode="guide",reference_scale=1.):
+    def encode(self,clip,vae,guide,references,prompt,width,height,length,clip_video_fps,reference_size,guide_context,audio_conditioning,audio_video,audio_vae=None,context_images=None,context_count=0,conditioning_mode="guide",reference_scale=1.,first_frame=None):
+        if first_frame is not None:
+            # An edited first frame (Character Swap / Motion First Frame) replaces frame 0 of the guide the model reads,
+            # so the guide's first latent is that image. Done here, after HengeGuide, so tracking and marks still run on
+            # the source frames. The image is cover-fitted to the guide's size.
+            h,w=guide.shape[1:3];img=first_frame[:1].to(guide).movedim(-1,1)
+            scale=max(h/img.shape[2],w/img.shape[3]);size=(max(h,round(img.shape[2]*scale)),max(w,round(img.shape[3]*scale)))
+            img=torch.nn.functional.interpolate(img,size=size,mode='bilinear',align_corners=False)
+            top,left=(size[0]-h)//2,(size[1]-w)//2
+            guide=guide.clone();guide[0]=img[0,:,top:top+h,left:left+w].movedim(0,-1)[...,:guide.shape[-1]]
+            print('[Henge H3] edited first frame placed as frame 0 of the guide',flush=True)
+        return self.conditioning(clip,vae,guide,references,prompt,width,height,length,clip_video_fps,reference_size,guide_context,audio_conditioning,audio_video,audio_vae,context_images,context_count,conditioning_mode,reference_scale)
+    def conditioning(self,clip,vae,guide,references,prompt,width,height,length,clip_video_fps,reference_size,guide_context,audio_conditioning,audio_video,audio_vae=None,context_images=None,context_count=0,conditioning_mode="guide",reference_scale=1.):
         from comfy_extras.nodes_minimax_h3 import MiniMaxH3ReferenceToVideo,MiniMaxH3AddGuide
         audio=None
         if audio_conditioning:

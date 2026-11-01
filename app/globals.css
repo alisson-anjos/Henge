@@ -514,6 +514,10 @@ img{display:block;max-width:100%}
 .first-frame-paint{position:relative;width:100%;margin:0 auto;border-radius:12px;overflow:hidden;background:var(--n-13131b);border:1px solid var(--n-2a2a36)}
 .first-frame-paint img{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;max-height:none;object-fit:fill;border:0;border-radius:0}
 .first-frame-paint canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;opacity:.45;touch-action:none;filter:drop-shadow(0 0 0 var(--accent,#d7ff3a))}
+.first-frame-paint canvas.segment-pick{opacity:1;cursor:pointer;filter:none}
+.edit-prompt>span{display:flex;justify-content:space-between;gap:8px}
+.edit-prompt textarea{font-size:12px}
+.segment-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .edit-ops{display:flex;gap:6px;flex-wrap:wrap}.edit-ops button{padding:6px 12px;border-radius:999px;border:1px solid var(--n-2a2a36);background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer}.edit-ops button.chosen{border-color:var(--accent,#d7ff3a);color:var(--accent,#d7ff3a)}
 .edit-editors{display:grid;gap:6px}.edit-editors>div{display:flex;gap:6px;flex-wrap:wrap}.edit-editors button{padding:5px 11px;border-radius:999px;border:1px solid var(--n-2a2a36);background:transparent;color:inherit;font:inherit;font-size:11px;cursor:pointer;transition:border-color .25s,color .25s,background .25s}.edit-editors button:hover{border-color:rgba(var(--accent-rgb),.45)}.edit-editors button.chosen{border-color:var(--accent,#d7ff3a);color:var(--accent,#d7ff3a);background:rgba(var(--accent-rgb),.07)}
 .paint-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px}.paint-tools label{display:flex;align-items:center;gap:6px}
@@ -970,3 +974,13 @@ a[aria-busy=true]:has(.comparison-download-status){cursor:progress}
 .version-changelog summary{cursor:pointer;text-decoration:underline}.version-changelog-body{position:absolute;bottom:calc(100% + 10px);right:0;width:min(640px,calc(100vw - 32px));max-height:60vh;overflow:auto;padding:18px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--n-101017);color:var(--text);box-shadow:0 12px 40px #0006;z-index:20;overflow-wrap:anywhere}
 @media(max-width:700px){.version-changelog-body{position:fixed;bottom:72px;left:16px;right:16px;width:auto}}
 @media(max-width:700px){.topbar-end .settings-button{display:flex;padding:0 8px;min-height:34px}}
+
+/* Model tags: what a trained model is actually for, shown on the picker itself. A model that can do
+   something without having been trained for it wears a warn tag, not a silent green one. */
+.model-tag{display:inline-block;margin-left:5px;padding:1px 5px;border-radius:999px;font:600 8.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.05em;text-transform:uppercase;border:1px solid color-mix(in oklab,var(--ink) 18%,transparent);background:color-mix(in oklab,var(--ink) 6%,transparent);color:color-mix(in oklab,var(--ink) 70%,transparent);cursor:help;vertical-align:2px}
+/* A tag that says "this model was trained for it" wears the accent; a tag that marks a limit wears amber. */
+.model-tag.ffp-strong,.model-tag.multi-ref{border-color:color-mix(in oklab,var(--accent) 40%,transparent);background:color-mix(in oklab,var(--accent) 12%,transparent);color:var(--accent)}
+.model-tag.ffp-works,.model-tag.multi-ref-weak,.model-tag.single-ref{border-color:color-mix(in oklab,#f0a63c 45%,transparent);background:color-mix(in oklab,#f0a63c 12%,transparent);color:#f0a63c}
+.select-list li .model-tag{margin-left:6px}
+.select-value .model-tag{display:none}
+.motion-model-field small{display:block;margin-top:5px;color:var(--muted);line-height:1.5}
