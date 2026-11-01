@@ -9,6 +9,28 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-01
 
+### BFS Body Swap edits the Character Swap first frame; a first frame needs no pictures
+- **BFS Body Swap V1.0 for Qwen-Image 2.1** (`Alissonerdx/BFS-Best-Face-Swap`, MIT) is a new frame editor,
+  "BFS Body Swap (Qwen 2.1)", and the default of the Swap character edit when installed (manifest
+  `bfs_body_swap_qwen21`, profile `qwen21`). FIBO and FLUX Klein pasted the reference as it was (its pose, even its
+  crossed arms) and changed other people; BFS was trained to replace a person keeping the scene's pose. Following its
+  guide: scene first at ~2 MP, the character second at ~0.59 MP, LoRA 1.0 over the Qwen 2.1 turbo, and its prompt
+  (`body_swap: start with <image1> as the base image, ... strictly replicate the exact pose, arm positions, leg
+  positions, hand gestures, head rotation, eye direction and micro expressions from <image1>`) as the editable default.
+  BFS gets no magenta mark: the clicked segment is sent as a mask, BFS edits a crop around that person and the bridge
+  pastes the result back through the mask, grown so new clothes and hair are not cut at the old outline; everyone else
+  keeps their pixels. Only offered for person swaps. Assistant: `swap_first_frame` uses it by default when installed,
+  `edit_frame` takes `editor: 'bfs'`.
+- Edit references in the modal show their prompt name (**image 2**, **image 3**; image 1 is the frame), and an
+  uploaded reference has its own remove button instead of disappearing on click.
+- **Character Swap with a first frame can generate without pictures**: the characters are already in the video. The
+  prompt then defines them by the first frame (`body_swap` wording, the user's request appended).
+- The UI proxy now allows `frame-edit/instruction`, so the editor prompt default actually fills in.
+- An old worker that rejects the label map is retried without it, so the editor says to update the worker.
+- Validation: unit tests (BFS graph contract, prompts, validation, editor lists) and TypeScript; reproduced the FIBO
+  failure on a real frame through the bridge. BFS itself not yet run on the worker (the LoRA has to be installed on
+  the volume).
+
 ### Character Swap takes a First Frame too, and a First Frame now opens the guide
 - The **FFP card** now shows in Character Swap. Its frame editor opens in a **Swap character** mode: pick any guide
   frame, press **Segment the characters (SAM 3.1)**, hover to highlight a segment and click the one to replace; it is

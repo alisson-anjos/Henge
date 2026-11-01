@@ -145,6 +145,20 @@ def swap_first_frame(prompt,edited,slot=None):
             ' and pose: start from it, continue from it and keep that look through the whole clip while following the guide\'s motion, timing'
             ' and camera.')
 
+def first_frame_only_prompt(request=''):
+    """Character Swap with an edited first frame and no reference pictures: who each person becomes is shown only in
+    that frame. The v1.1 body_swap wording, with the first frame in place of <Picture 1>; the user's request follows."""
+    text=('body_swap: subject_definitions: the people in the edited first frame of the guide video are the characters of the'
+          ' target video; their identity, face, hair or fur, skin, body shape, proportions and clothing are defined by that frame.'
+          ' The guide video provides the scene and the performance: background, lighting, camera, framing, body pose, hand and'
+          ' arm movement, head rotation, gaze, lip movement and facial expression, frame by frame.  summary: [video generation]'
+          ' Keep the characters of the first frame and move them with the complete performance of the guide video.'
+          '  detailed_description: [Shot 1] Every character keeps the look they have in the first frame in every frame, with the same'
+          ' timing, pose, gestures, head motion, gaze, speech and facial expressions as the guide. Prevent identity drift, clothing'
+          ' changes, texture crawling and flicker.')
+    extra=re.sub(r'\s+',' ',str(request or '')).strip()
+    return text+(f' {extra}' if extra else '')
+
 def head_swap_prompt(face_details):
     face=' '.join(str(face_details).split()).strip().strip('"')
     if not face:raise ValueError('The VLM returned no facial details for Picture 1')

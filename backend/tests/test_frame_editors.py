@@ -35,7 +35,7 @@ class FrameEditorSelectionTests(unittest.TestCase):
              patch.object(server,'klein_available',return_value=True),patch.object(server,'klein3_available',return_value=True):
             self.assertEqual(server.frame_editor({}),'fibo')
             self.assertEqual([key for key,_ in server.frame_editors({})],['fibo','qwen21','klein','klein3'])
-            self.assertEqual([c['id'] for c in server.frame_editor_choices({})],['fibo','qwen21','klein','klein3'])
+            self.assertEqual([c['id'] for c in server.frame_editor_choices({})],['fibo','qwen21','klein','klein3','bfs'])
             with patch.dict(os.environ,{'HENGE_FRAME_EDITOR':'qwen21'}):
                 self.assertEqual(server.frame_editor({}),'qwen21')
 
@@ -44,7 +44,7 @@ class FrameEditorSelectionTests(unittest.TestCase):
         # image was built with, so the First Frame modal does not hide the frame edit for no reason.
         self.assertFalse(any(c['installed'] for c in server.frame_editor_choices({})))
         assumed=server.frame_editor_choices({},assume=True)
-        self.assertEqual([c['id'] for c in assumed],['fibo','qwen21','klein','klein3'])
+        self.assertEqual([c['id'] for c in assumed],['fibo','qwen21','klein','klein3','bfs'])
         self.assertTrue(all(c['installed'] for c in assumed))
 
     def test_qwen21_graph_edits_the_frame_at_its_own_size(self):

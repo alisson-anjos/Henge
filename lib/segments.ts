@@ -32,3 +32,18 @@ export async function paintMagenta(src: string, segments: Segments, number: numb
   g.putImageData(data, 0, 0);
   return new Promise((resolve, reject) => c.toBlob(b => b ? resolve(b) : reject(Error('Could not encode the frame')), 'image/png'));
 }
+
+/** A white-on-black mask of segment `number` at `width` x `height` (the frame's size), as a PNG: BFS Body Swap edits a
+ * crop around it and the bridge pastes the result back through it. */
+export async function segmentMask(segments: Segments, number: number, width: number, height: number): Promise<Blob> {
+  const c = document.createElement('canvas'); c.width = width; c.height = height;
+  const g = c.getContext('2d'); if (!g) throw Error('Canvas unavailable');
+  const data = g.createImageData(width, height), d = data.data;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const sx = Math.min(segments.width - 1, Math.floor(x * segments.width / width)), sy = Math.min(segments.height - 1, Math.floor(y * segments.height / height));
+    const on = segments.labels[sy * segments.width + sx] === number ? 255 : 0, i = (y * width + x) * 4;
+    d[i] = d[i + 1] = d[i + 2] = on; d[i + 3] = 255;
+  }
+  g.putImageData(data, 0, 0);
+  return new Promise((resolve, reject) => c.toBlob(b => b ? resolve(b) : reject(Error('Could not encode the mask')), 'image/png'));
+}

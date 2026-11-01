@@ -15,10 +15,10 @@ import moving_plate
 import app_updates
 import model_installer
 from model_installs import InstallManager
-from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
+from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,bfs_graph,BFS,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements,comfy_listed
-from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,swap_first_frame,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
+from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,swap_first_frame,first_frame_only_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -170,6 +170,8 @@ def validate_request(r,options,slots):
     elif not r['prompt'].strip():raise ValueError('Provide a valid direction and prompt')
     # First-frame propagate also works from the prompt alone (no picture).
     if MODELS.get(options.get('profile'),{}).get('ffp'):low=0
+    # Character Swap with its own first frame: the characters are already in the video, so pictures are optional.
+    if r['mode']=='swap' and r.get('guide_first_frame'):low=0
     first=r.get('first_frame_slot')
     if first is not None and (not isinstance(first,int) or first not in slots):raise ValueError('The first frame must be one of the attached pictures')
     if first is not None and r['mode']!='motion':raise ValueError('A first-frame Picture is a Motion Transfer option; Character Swap takes its first frame inside the guide')
@@ -375,8 +377,10 @@ def qwen21_lora(info=None):
 # itself and conditions positive AND negative on it, so the composition and the performer survive the edit. FLUX.3
 # [image klein] is last: it resizes the frame to about a megapixel and samples an empty latent, so it re-draws the
 # shot instead of editing it, and the First Frame model then propagates every difference through the whole clip.
-EDITORS=(('fibo','FIBO 2.0 edit turbo'),('qwen21','Qwen-Image 2.1 Turbo'),('klein','FLUX.2 [klein] 4B'),('klein3','FLUX.3 [image klein]'))
-EDITOR_GRAPHS={'fibo':fibo_graph,'klein':klein_graph,'klein3':klein3_graph,'qwen21':qwen21_graph}
+EDITORS=(('fibo','FIBO 2.0 edit turbo'),('qwen21','Qwen-Image 2.1 Turbo'),('klein','FLUX.2 [klein] 4B'),('klein3','FLUX.3 [image klein]'),('bfs','Qwen-Image 2.1 + BFS Body Swap'))
+EDITOR_GRAPHS={'fibo':fibo_graph,'klein':klein_graph,'klein3':klein3_graph,'qwen21':qwen21_graph,'bfs':bfs_graph}
+# BFS is a Character Swap tool, never the general default: it is listed last and only does person swaps.
+def bfs_available(info):return qwen21_available(info) and BFS['lora'] in comfy_choices(info,'LoraLoaderModelOnly','lora_name')
 
 def editor_order(info=None):
     """Editor keys in the order Henge prefers them, with HENGE_FRAME_EDITOR moved to the front."""
@@ -390,7 +394,7 @@ def frame_editors(info=None):
     editor to the front without changing what the picker offers."""
     try:info=comfy_info() if info is None else info
     except Exception:return []
-    ready={'fibo':fibo_available(info),'qwen21':qwen21_available(info),'klein':klein_available(info),'klein3':klein3_available(info)}
+    ready={'fibo':fibo_available(info),'qwen21':qwen21_available(info),'klein':klein_available(info),'klein3':klein3_available(info),'bfs':bfs_available(info)}
     labels=dict(EDITORS)
     return [(key,labels[key]) for key in editor_order(info) if ready[key]]
 
@@ -409,7 +413,7 @@ def editor_graph(editor,image,refs,instruction,seed,info=None):
     """Build the edit graph for one editor, picking the Qwen-Image 2.1 checkpoint that is actually on disk."""
     build=EDITOR_GRAPHS.get(editor)
     if build is None:raise ValueError('Frame editing needs an image editor (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein)')
-    return build(image,refs,instruction,seed,**({'unet':qwen21_model(info),'lora':qwen21_lora(info)} if editor=='qwen21' else {}))
+    return build(image,refs,instruction,seed,**({'unet':qwen21_model(info),'lora':qwen21_lora(info)} if editor in ('qwen21','bfs') else {}))
 
 # First-frame edit instructions per operation; the painted area (when given) is the only part that changes.
 EDIT_OPS={'replace':'Replace {what} with {target}.','remove':'Remove {what} and fill the space naturally with what would be behind it.',
@@ -803,6 +807,10 @@ def planning(job):
     first=r['mode']=='swap' and bool(r.get('guide_first_frame')) and bool(job['assets'].get('first_frame'))
     # Reference mode: the frame is sent after the character pictures, as Picture len+1.
     first_slot=len(pictures)+1 if first and r.get('first_frame_mode','latent')=='reference' else None
+    if r['mode']=='swap' and first and not pictures:
+        # No pictures: the edited first frame is the only source of the new characters' look.
+        plan=fixed_plan('swap',swap_first_frame(first_frame_only_prompt(r['prompt']),True,first_slot),'Keep the characters of the edited first frame through the whole clip, following the guide\'s performance (no reference pictures).')
+        save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the prompt before generating.',step=None,step_total=None);return
     if r['mode']=='swap' and len(pictures)==1 and len(bindings)<=1 and job['options'].get('enhance_prompt',True):
         # One character, no bindings: the Character Swap v1.1 training-format prompt.
         details=clean_details(ask(CHARACTER_INSTRUCTION,pictures[0][1],'vlm_picture_1',1024),2000)
@@ -1855,10 +1863,16 @@ async def convert_gif(request:Request):
         return Response(dst.read_bytes(),media_type='video/mp4')
 
 @app.get('/frame-edit/instruction')
-def frame_edit_default(op:str='free',what:str='',instruction:str='',refs:int=0,marked:bool=False):
+def frame_edit_default(op:str='free',what:str='',instruction:str='',refs:int=0,marked:bool=False,editor:str=''):
     """The English prompt the editor gets for these choices: the modal shows it as the editable default."""
     if op not in EDIT_OPS:raise HTTPException(400,'Unknown edit')
-    return {'instruction':edit_instruction(op,what.strip()[:400],instruction.strip()[:4000],max(0,min(12,refs)),marked)}
+    return {'instruction':editor_instruction(editor,op,what.strip()[:400],instruction.strip()[:4000],max(0,min(12,refs)),marked)}
+
+def editor_instruction(editor,op,what,target,refs,marked=False):
+    """BFS Body Swap runs on its trained prompt (it reads the clicked person from a crop, not a magenta mark); other
+    editors get the instruction built from the edit's fields."""
+    if editor=='bfs':return BFS['prompt']+(f'. {target.rstrip(".")}' if target else '')
+    return edit_instruction(op,what,target,refs,marked)
 
 @app.post('/frame-edit')
 async def frame_edit(request:Request):
@@ -1899,7 +1913,8 @@ async def frame_edit(request:Request):
     for i,(name,im) in enumerate(images):
         if i==0 and region:im=im.crop(region)
         dest=inp/f'{name}.png';im.save(dest);staged.append(dest.relative_to(INPUT).as_posix())
-    text=custom or edit_instruction(op,what,instruction,len(staged)-1,marked)
+    if editor=='bfs' and (op!='swap' or len(staged)<2):raise HTTPException(400,'BFS Body Swap only swaps a person: choose the character picture')
+    text=custom or editor_instruction(editor,op,what,instruction,len(staged)-1,marked)
     job={'id':jid,'created':time.time(),'status':'running','stage':'frame_edit','progress':0,'request':{'mode':'frame_edit','instruction':instruction or what,'op':op,'editor':editor,'masked':bool(region)},'options':{},'message':'Editing the frame'};save(job)
     try:
         seed=int(time.time())%2**31
@@ -1912,7 +1927,13 @@ async def frame_edit(request:Request):
                 # Paste the edited crop back through the painted area, feathered so the seam does not show.
                 from PIL import ImageFilter
                 x0,y0,x1,y1=region;patch=out.resize((x1-x0,y1-y0),Image.LANCZOS)
-                soft=mask.crop(region).filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(max(4,(x1-x0)//60)))
+                soft=mask.crop(region)
+                if op=='swap':
+                    # A swapped person rarely has the old silhouette: grow the mask (on a quarter-size copy, fast) so
+                    # the new clothes and hair are not cut off at the old outline.
+                    small=soft.resize((max(1,soft.width//4),max(1,soft.height//4)));grow=max(3,((x1-x0)//100)|1)
+                    soft=small.filter(ImageFilter.MaxFilter(grow)).resize(soft.size)
+                soft=soft.filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(max(4,(x1-x0)//60)))
                 result=frame.copy();result.paste(patch,(x0,y0),soft)
             else:result=out.resize(frame.size,Image.LANCZOS) if out.size!=frame.size else out
             result.save(inp/'edited.png')
@@ -2578,7 +2599,13 @@ async def find_people(request:Request):
     except OSError:raise HTTPException(400,'The frame is not an image')
     job={'id':jid,'created':time.time(),'status':'running','stage':'find_people','progress':0,'request':{'mode':'find_people'},'options':{},'message':'Finding people'};save(job)
     try:
-        outputs=await asyncio.to_thread(execute_graph,job,find_people_graph(dest.relative_to(INPUT).as_posix(),kind,want_labels),'find_people')
+        try:outputs=await asyncio.to_thread(execute_graph,job,find_people_graph(dest.relative_to(INPUT).as_posix(),kind,want_labels),'find_people')
+        except Exception as e:
+            # A worker from before the label map (or the character kind) rejects the graph: number the people without
+            # it, so the editor can say the worker needs updating instead of failing.
+            if not want_labels or 'validat' not in str(e).lower():raise
+            print(f'[Henge] label map unavailable on this worker, retrying without it: {str(e)[:200]}',flush=True)
+            outputs=await asyncio.to_thread(execute_graph,job,find_people_graph(dest.relative_to(INPUT).as_posix(),'person' if kind=='character' else kind),'find_people')
         found=json.loads(outputs.get('4',{}).get('text',['{}'])[0])
         overlay=await asyncio.to_thread(FILES.download,output_files(outputs,'3','images')[0],inp/'people.png')
         with Image.open(overlay) as im:

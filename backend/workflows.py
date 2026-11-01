@@ -367,6 +367,24 @@ def qwen21_graph(image,refs,instruction,seed,unet=None,lora='',steps=None,cfg=No
     if lora:g['9']=node('LoraLoaderModelOnly',model=['1',0],lora_name=lora,strength_model=1.)
     return g
 
+# BFS Body Swap V1.0 for Qwen-Image 2.1 (Alissonerdx/BFS-Best-Face-Swap, MIT): replaces the whole person of image 1 (the
+# scene) with the person of image 2, keeping the scene's pose, framing and light. Its guide: scene ~2 MP and reference
+# ~0.59 MP (a larger reference overrides the scene), TextEncodeQwenImage21 at resolution 0, scene first, strength 1.
+# Henge uses it for Character Swap's First Frame on a crop around the clicked character, pasted back through its mask.
+BFS={'lora':'henge/bfs_body_swap_v1.0_qwen_2.1.safetensors',
+     'prompt':('body_swap: start with <image1> as the base image, keeping its lighting, environment, and background. replace the body'
+               ' from <image1> with the body from <image2>, strictly preserving the clothing, body shape and proportions from <image2>.'
+               ' strictly replicate the exact pose, arm positions, leg positions, hand gestures, head rotation, eye direction and micro'
+               ' expressions from <image1>')}
+def bfs_graph(image,refs,instruction,seed,unet=None,lora='',**_):
+    if len(refs)<1:raise ValueError('BFS Body Swap needs the character picture as image 2')
+    g=qwen21_graph(image,refs[:1],instruction or BFS['prompt'],seed,unet=unet,lora=lora,prefix=image.rsplit('.',1)[0]+'_bfs')
+    g['30']=node('LoraLoaderModelOnly',model=['9',0] if lora else ['1',0],lora_name=BFS['lora'],strength_model=1.);g['6']['inputs']['model']=['30',0]
+    g['31']=node('ImageScaleToTotalPixels',image=['10',0],upscale_method='lanczos',megapixels=2.,resolution_steps=16)
+    g['32']=node('ImageScaleToTotalPixels',image=['22',0],upscale_method='lanczos',megapixels=.59,resolution_steps=16)
+    g['5']['inputs']['images.image_1']=['31',0];g['5']['inputs']['images.image_2']=['32',0]
+    return g
+
 def subject_looks_graph(looks):
     # One node per marked person: the look of the person under the user's click, used to recognise them after cuts.
     g={}

@@ -9,7 +9,7 @@ import {downloadJSON, FEEDBACK, HISTORY_KEY, HISTORY_LIMIT, readHistory, type Di
 import VideoTrimModal, {type ClipRange} from './video-trim-modal';
 import {COMMUNITY, type CommunityPreset} from '../lib/community';
 import FirstFrameModal, {coverFit} from './first-frame-modal';
-import {paintMagenta, segmentFrame} from '../lib/segments';
+import {paintMagenta, segmentFrame, segmentMask} from '../lib/segments';
 const FIRST_FRAME_KEY = 'henge-first-frame';
 // The model a First Frame uses: the studio selects it as soon as an edited frame is attached.
 const EDIT_MODEL = 'motion_mix_dyn99';
@@ -491,6 +491,9 @@ export default function Studio() {
         const frame = await captureFrame(c.video.url, t);
         const segments = await segmentFrame(frame.blob);
         if (!segments.count) throw Error(`No character found at ${t.toFixed(2)} s; try another time`);
+        // BFS Body Swap (trained for person swaps) when installed, unless the call names another editor.
+        const editors = await fetch('/api/backend/health').then(r => r.json()).then(h => (Array.isArray(h.frame_editors) ? h.frame_editors : []).filter((e: {installed?: boolean}) => e?.installed).map((e: {id: string}) => e.id)).catch(() => [] as string[]);
+        const editor = typeof input.editor === 'string' ? input.editor : editors.includes('bfs') ? 'bfs' : undefined;
         let current = URL.createObjectURL(frame.blob); const done: string[] = [];
         try {
           for (const swap of swaps) {
@@ -502,13 +505,17 @@ export default function Studio() {
             const description = String(swap.description ?? '').trim();
             if (!picture && !description) throw Error(`Character ${n}: give picture (an attached Picture slot) or description`);
             const body = new FormData();
-            body.set('frame', await paintMagenta(current, segments, n), 'frame.png'); body.set('op', 'swap'); body.set('marked', '1'); body.set('instruction', description);
+            if (editor === 'bfs') {
+              if (!picture) throw Error(`Character ${n}: BFS Body Swap needs a picture; give picture, or editor 'qwen21' for a description`);
+              body.set('frame', await (await fetch(current)).blob(), 'frame.png'); body.set('mask', await segmentMask(segments, n, frame.width, frame.height), 'mask.png'); body.set('editor', 'bfs');
+            } else {body.set('frame', await paintMagenta(current, segments, n), 'frame.png'); body.set('marked', '1'); if (editor) body.set('editor', editor);}
+            body.set('op', 'swap'); body.set('instruction', description);
             if (typeof swap.prompt === 'string' && swap.prompt.trim()) body.set('prompt', swap.prompt.trim());
             if (picture) body.append('picture_01', picture.file, picture.file.name);
             const edited = await fetch('/api/backend/frame-edit', {method: 'POST', body});
             if (!edited.ok) {const reply = await edited.json().catch(() => ({})); throw Error(`Character ${n}: ${reply.detail || `HTTP ${edited.status}`}`);}
             URL.revokeObjectURL(current); current = URL.createObjectURL(await edited.blob());
-            done.push(`#${n} -> ${picture ? `Picture ${slot}` : description}`);
+            done.push(`#${n} -> ${picture ? `Picture ${slot}` : description}${editor ? ` (${editor})` : ''}`);
           }
           const file = await coverFit(current, frame.width, frame.height);
           if (mode !== 'swap') setMode('swap');
@@ -537,7 +544,8 @@ export default function Studio() {
           const key = time.toFixed(2); let seg = assistantSegments.current.get(key);
           if (!seg) {seg = await segmentFrame((await captureFrame(c.video!.url, time)).blob); assistantSegments.current.set(key, seg);}
           const n = num('character'); if (!Number.isInteger(n) || n < 1 || n > seg.count) throw Error(`character must be 1-${seg.count} at ${key} s (find_people kind 'character' shows the numbers)`);
-          const url = URL.createObjectURL(source); try {frameBlob = await paintMagenta(url, seg, n);} finally {URL.revokeObjectURL(url);} marked = true;
+          if (input.editor === 'bfs') body.set('mask', await segmentMask(seg, n, width, height), 'mask.png');
+          else {const url = URL.createObjectURL(source); try {frameBlob = await paintMagenta(url, seg, n);} finally {URL.revokeObjectURL(url);} marked = true;}
         }
         body.set('frame', frameBlob, 'frame.png'); body.set('op', op); body.set('what', String(input.what ?? '')); body.set('instruction', String(input.instruction ?? ''));
         if (marked) body.set('marked', '1');
@@ -742,7 +750,8 @@ export default function Studio() {
     ? activePictures.length === maxPictures
     // Motion's first-frame propagate model also runs from the prompt alone; the bridge rejects that for other models.
     // Character Swap also needs the character picture: an edited First Frame alone is not an identity.
-    : (pictures.length > 0 || mode === 'motion') && !!prompt.trim() && !invalid.length && !subjectErrors);
+    // Character Swap with its own first frame needs no pictures: the characters are already in the video.
+    : (pictures.length > 0 || mode === 'motion' || (mode === 'swap' && !!swapFirstFrame)) && !!prompt.trim() && !invalid.length && !subjectErrors);
   const selected = history.find(h => h.id === selectedId) || null;
   const filteredHistory = history.filter(h => historyFilter === 'all' || h.request.mode === historyFilter);
   const chosenTemplate = TEMPLATES.find(x => x.id === activeTemplate);
@@ -1090,14 +1099,17 @@ export default function Studio() {
             <div className="label-row"><h2><span className="step-number">02</span>{mode === 'headswap' ? tr('Face reference', 'Rosto de referência', 'Rostro de referencia') : t.refs}</h2><span className="ref-header-end">{pictures.length > 0 && <button type="button" className="text-link remove-all-refs" onClick={removeAllPictures}>{tr('Remove all', 'Remover todas', 'Quitar todas')}</button>}<span className="mono muted">{String(activePictures.length).padStart(2, '0')} / {String(maxPictures).padStart(2, '0')}</span></span></div>
             <input data-testid="picture-input" hidden ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={e => {addPictures(e.target.files); e.target.value = '';}}/>
             <div className="reference-grid">{activePictures.map(p => <div className="reference" key={p.slot}><img draggable={false} src={p.url} alt={`Picture ${p.slot}: ${p.file.name}`}/><button className="remove-ref" aria-label={`Remove Picture ${p.slot}`} onClick={() => removePicture(p.slot)}><Icon name="close" size={11}/></button><button className="edit-ref" title={tr('Edit with the image editor', 'Editar com o editor de imagem', 'Editar con el editor de imagen')} aria-label={tr(`Edit Picture ${p.slot}`, `Editar Picture ${p.slot}`, `Editar Picture ${p.slot}`)} onClick={() => setEditSlot(p.slot)}><Icon name="image" size={11}/></button><button className="ref-label mono nc" onClick={() => insertTag(`@Picture${p.slot}`)}>@Picture{p.slot}</button>{p.slot === firstFrameSlot && <span className="first-frame-badge mono">{tr('1st frame', '1º quadro', '1er fotograma')}</span>}</div>)}{bringSlots.filter(b => b.slot <= maxPictures && !pictures.some(p => p.slot === b.slot)).map(b => <button key={`bring-${b.slot}`} className="add-reference bring-reference" onClick={() => imageInput.current?.click()}><Icon name="plus" size={18}/><span className="mono">@Picture{b.slot}</span><small>{b.label[lang]} · {tr('add your photo', 'adicione sua foto', 'añade tu foto')}</small></button>)}{activePictures.length < maxPictures && !bringSlots.some(b => !pictures.some(p => p.slot === b.slot)) && <button className="add-reference" onClick={() => imageInput.current?.click()}><Icon name="plus" size={18}/><span>{t.add}</span></button>}</div>
-            {(mode === 'motion' || mode === 'swap') && video?.range && <details className="ffp-card" open={!!firstFrameSlot || (mode === 'swap' && !!swapFirstFrame)}><summary><span className="ffp-head"><span className="eyebrow accent">FFP · {tr('FRAME PROPAGATE', 'PROPAGAR UM QUADRO', 'PROPAGAR UN FOTOGRAMA')}</span><span className="mini-badge">{tr('optional', 'opcional', 'opcional')}</span></span>
+            {(mode === 'motion' || mode === 'swap') && video?.range && <details className="ffp-card" open={!!firstFrameSlot || (mode === 'swap' && !!swapFirstFrame)}>{mode === 'swap' ? <>
+              <summary><span className="ffp-head"><span className="eyebrow accent">{tr('FIRST FRAME', 'PRIMEIRO QUADRO', 'PRIMER FOTOGRAMA')}</span><span className="mini-badge">{tr('optional', 'opcional', 'opcional')}</span></span>
+              <strong>{tr('Start from a swapped frame', 'Comece de um quadro já trocado', 'Empieza desde un fotograma ya cambiado')}</strong></summary>
+              <small>{tr('Pick a frame, click who to replace and the image editor swaps in your character. The render starts from that frame; your pictures stay the references.', 'Escolha um quadro, clique em quem trocar e o editor de imagem coloca o seu personagem. O vídeo começa desse quadro; suas imagens continuam como referência.', 'Elige un fotograma, haz clic en quién reemplazar y el editor de imagen pone a tu personaje. El vídeo empieza en ese fotograma; tus imágenes siguen como referencia.')}</small>
+              </> : <><summary><span className="ffp-head"><span className="eyebrow accent">FFP · {tr('FRAME PROPAGATE', 'PROPAGAR UM QUADRO', 'PROPAGAR UN FOTOGRAMA')}</span><span className="mini-badge">{tr('optional', 'opcional', 'opcional')}</span></span>
               <strong>{tr('Edit one frame, the whole video follows', 'Edite um quadro, o vídeo inteiro acompanha', 'Edita un fotograma, todo el vídeo lo sigue')}</strong></summary>
               <ul className="ffp-points">
                 <li><strong>FFP = First Frame Propagate.</strong> {tr('You edit one frame of the guide and that image becomes frame 0 of the result; the model rebuilds every frame after it around your image, while the guide keeps the motion. It is not image-to-video: the clip is regenerated with your frame inside it, so the edit never has to be re-applied frame by frame.', 'Você edita um quadro do guia e essa imagem vira o quadro 0 do resultado; o modelo reconstrói todos os quadros seguintes em volta da sua imagem, enquanto o guia mantém o movimento. Não é image-to-video: o vídeo é regenerado com o seu quadro dentro, então a edição não precisa ser reaplicada quadro a quadro.', 'Editas un fotograma de la guía y esa imagen pasa a ser el fotograma 0 del resultado; el modelo reconstruye todos los fotogramas siguientes alrededor de tu imagen, mientras la guía mantiene el movimiento. No es image-to-video: el clip se regenera con tu fotograma dentro, así que la edición no hay que reaplicarla fotograma a fotograma.')}</li>
                 <li>{tr('Pick any frame of the guide, then replace, remove or add something, or paint the area, with the image editor (FIBO 2.0 by default; Qwen-Image 2.1 and FLUX Klein when installed). You can also upload your own edited frame.', 'Escolha qualquer quadro do guia e substitua, remova ou adicione algo, ou pinte a área, com o editor de imagem (FIBO 2.0 por padrão; Qwen-Image 2.1 e FLUX Klein se instalados). Também dá para enviar o seu próprio quadro editado.', 'Elige cualquier fotograma de la guía y reemplaza, quita o añade algo, o pinta el área, con el editor de imagen (FIBO 2.0 por defecto; Qwen-Image 2.1 y FLUX Klein si están instalados). También puedes subir tu propio fotograma editado.')}</li>
               </ul>
-              {mode === 'swap' ? <small>{tr('In Character Swap the frame is optional: the guide frame with the character already swapped in (segment, click who to replace, the image editor does the rest; or upload your own). It replaces the first frame of the guide, so the model starts from it; your reference pictures stay the character references.', 'No Character Swap o quadro é opcional: o quadro do guia com o personagem já trocado (segmente, clique em quem trocar e o editor de imagem faz o resto; ou envie o seu). Ele substitui o primeiro quadro do guia, então o modelo parte dele; suas imagens de referência continuam sendo as referências do personagem.', 'En Character Swap el fotograma es opcional: el fotograma de la guía con el personaje ya cambiado (segmenta, haz clic en quién reemplazar y el editor de imagen hace el resto; o sube el tuyo). Sustituye el primer fotograma de la guía, así que el modelo parte de él; tus imágenes de referencia siguen siendo las referencias del personaje.')}</small> :
-              <small>{tr('Any Motion model takes the frame, but the tags say who was trained for it: Motion Transfer v1.0 and Motion Transfer FFP v1.0 are built to carry a frame through the clip; TARA propagates it, but it was not trained for FFP and can change more of the clip than the frame you edited.', 'Qualquer modelo de movimento aceita o quadro, mas as tags dizem quem foi treinado para isso: Motion Transfer v1.0 e Motion Transfer FFP v1.0 foram feitos para carregar um quadro pelo clipe; o TARA propaga, mas não foi treinado para FFP e pode mudar mais do vídeo do que o quadro editado.', 'Cualquier modelo de movimiento acepta el fotograma, pero las etiquetas dicen quién fue entrenado para ello: Motion Transfer v1.0 y Motion Transfer FFP v1.0 están hechos para llevar un fotograma por el clip; TARA lo propaga, pero no fue entrenado para FFP y puede cambiar más del clip que el fotograma que editaste.')}</small>}
+              <small>{tr('Any Motion model takes the frame, but the tags say who was trained for it: Motion Transfer v1.0 and Motion Transfer FFP v1.0 are built to carry a frame through the clip; TARA propagates it, but it was not trained for FFP and can change more of the clip than the frame you edited.', 'Qualquer modelo de movimento aceita o quadro, mas as tags dizem quem foi treinado para isso: Motion Transfer v1.0 e Motion Transfer FFP v1.0 foram feitos para carregar um quadro pelo clipe; o TARA propaga, mas não foi treinado para FFP e pode mudar mais do vídeo do que o quadro editado.', 'Cualquier modelo de movimiento acepta el fotograma, pero las etiquetas dicen quién fue entrenado para ello: Motion Transfer v1.0 y Motion Transfer FFP v1.0 están hechos para llevar un fotograma por el clip; TARA lo propaga, pero no fue entrenado para FFP y puede cambiar más del clip que el fotograma que editaste.')}</small></>}
               {mode === 'swap' && swapFirstFrame && <div className="ffp-current"><img src={swapFirstFrame.url} alt=""/><span>{tr('Edited first frame of the guide', 'Primeiro quadro editado do guia', 'Primer fotograma editado de la guía')}</span></div>}
               {(mode === 'swap' ? !!swapFirstFrame : !!firstFrameSlot) && <div className="setting-row ffp-mode"><span>{tr('Use the frame as', 'Usar o quadro como', 'Usar el fotograma como')}</span><div className="quality-options">{([['latent', tr('Guide frame 0 (first latent)', 'Quadro 0 do guia (primeiro latent)', 'Fotograma 0 de la guía (primer latent)')], ['reference', tr('Reference only', 'Só referência', 'Solo referencia')]] as const).map(([k, label]) => <button key={k} type="button" className={'nc ' + (firstFrameMode === k ? 'chosen' : '')} aria-pressed={firstFrameMode === k} onClick={() => setFirstFrameMode(k)}>{label}</button>)}</div></div>}
               {mode === 'motion' && firstFrameSlot && pictures.find(p => p.slot === firstFrameSlot) && <div className="ffp-current"><img src={pictures.find(p => p.slot === firstFrameSlot)!.url} alt=""/><span>{tr(`Picture ${firstFrameSlot} · edited frame`, `Imagem ${firstFrameSlot} · quadro editado`, `Imagen ${firstFrameSlot} · fotograma editado`)}</span></div>}

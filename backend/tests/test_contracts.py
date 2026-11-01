@@ -253,6 +253,11 @@ class WorkflowContracts(unittest.TestCase):
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','guide_first_frame':True},{},[1])
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'swap','guide_first_frame':True,'first_frame_mode':'output'},{},[1])
   options={};validate_request({**self.request(),'mode':'swap','guide_first_frame':True},options,[1]);self.assertEqual(options['profile'],'character')
+  # Its own first frame already shows the characters: no picture is needed then, and only then.
+  validate_request({**self.request(),'mode':'swap','guide_first_frame':True,'prompt':'Keep the hat.'},{},[])
+  with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'swap','prompt':'Keep the hat.'},{},[])
+  from edit_modes import first_frame_only_prompt
+  p=first_frame_only_prompt('  Keep   the hat. ');self.assertTrue(p.startswith('body_swap: subject_definitions: the people in the edited first frame'));self.assertTrue(p.endswith(' Keep the hat.'));self.assertNotIn('<Picture',p)
   # Default: frame 0 of the guide; reference mode names it as the Picture after the character pictures.
   self.assertIn('guide video opens on an edited first frame',swap_first_frame('body_swap: x',True))
   self.assertIn('<Picture 2> is the edited first frame',swap_first_frame('body_swap: x',True,2))
@@ -282,6 +287,22 @@ class WorkflowContracts(unittest.TestCase):
   self.assertEqual(frame_edit_default('swap','','',1,True)['instruction'],marked)
   from workflows import find_people_graph
   g=find_people_graph('henge/x/frame.png','character',True);self.assertEqual(g['5']['inputs']['images'],['2',2]);self.assertNotIn('5',find_people_graph('henge/x/frame.png'))
+ def test_bfs_body_swap_editor(self):
+  # BFS Body Swap V1.0 (Qwen-Image 2.1): its guide's contract, scene first at ~2 MP, the character second at ~0.59 MP,
+  # the BFS LoRA over the (turbo) model, and its trained prompt by default.
+  from workflows import bfs_graph,BFS,QWEN21
+  g=bfs_graph('henge/j/frame.png',['henge/j/picture_01.png'],'',7,unet=QWEN21['base'],lora=QWEN21['turbo'])
+  self.assertEqual(g['30']['inputs']['lora_name'],BFS['lora']);self.assertEqual(g['30']['inputs']['model'],['9',0]);self.assertEqual(g['6']['inputs']['model'],['30',0])
+  self.assertEqual(g['5']['inputs']['images.image_1'],['31',0]);self.assertEqual(g['31']['inputs']['megapixels'],2.)
+  self.assertEqual(g['5']['inputs']['images.image_2'],['32',0]);self.assertEqual(g['32']['inputs']['megapixels'],.59);self.assertEqual(g['32']['inputs']['image'],['22',0])
+  self.assertEqual(g['5']['inputs']['prompt'],BFS['prompt']);self.assertEqual(g['5']['inputs']['resolution'],0)
+  self.assertTrue(BFS['prompt'].startswith('body_swap: start with <image1> as the base image'))
+  with self.assertRaises(ValueError):bfs_graph('henge/j/frame.png',[],'',7)
+  # Without the turbo LoRA the BFS LoRA loads straight on the checkpoint.
+  self.assertEqual(bfs_graph('f.png',['p.png'],'',1)['30']['inputs']['model'],['1',0])
+  from server import editor_instruction,EDITORS
+  self.assertEqual(editor_instruction('bfs','swap','','',1),BFS['prompt']);self.assertTrue(editor_instruction('bfs','swap','','keep the microphone',1).endswith('. keep the microphone'))
+  self.assertIn('magenta',editor_instruction('fibo','swap','','',1,True));self.assertEqual(EDITORS[-1][0],'bfs')
  def test_the_picker_tags_say_what_each_model_was_trained_for(self):
   # The model names cannot carry every caveat, so each model ships tags and the picker spells them out.
   # The point is honesty: a model that handles a task without having been trained for it must not look

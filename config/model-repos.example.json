@@ -291,6 +291,15 @@
       "note": "5-step turbo LoRA (335 MB) for the plain Qwen-Image 2.1 checkpoint: with it Henge runs 5 steps at CFG 1 instead of 24, so the fast edit does not need the 7.3 GB Turbo checkpoint."
     },
     {
+      "id": "bfs_body_swap_qwen21",
+      "url": "https://huggingface.co/Alissonerdx/BFS-Best-Face-Swap/resolve/main/bfs_body_swap_v1.0_qwen_2.1.safetensors",
+      "destination": "loras/henge/bfs_body_swap_v1.0_qwen_2.1.safetensors",
+      "profiles": [
+        "qwen21"
+      ],
+      "note": "BFS Body Swap V1.0 for Qwen-Image 2.1 (MIT): the Character Swap First Frame editor. Replaces the clicked person with the character picture, keeping pose, framing and light."
+    },
+    {
       "id": "klein_diffusion_models",
       "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4b-fp8/resolve/main/flux-2-klein-4b-fp8.safetensors",
       "destination": "diffusion_models/flux-2-klein-4b-fp8.safetensors",
