@@ -1,8 +1,8 @@
 {
-  "id": "27daa930-0f3d-4c4b-b9e4-741a9e50c863",
+  "id": "8d9dc03b-cfbc-4bc1-9057-e04b8d2a49f2",
   "revision": 0,
-  "last_node_id": 921,
-  "last_link_id": 1668,
+  "last_node_id": 924,
+  "last_link_id": 1673,
   "nodes": [
     {
       "id": 112,
@@ -1391,7 +1391,8 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            239
+            1669,
+            1671
           ]
         },
         {
@@ -3099,7 +3100,7 @@
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "link": 239
+          "link": 1673
         }
       ],
       "outputs": [
@@ -12745,6 +12746,154 @@
         "# Motion Transfer v1.0 - native nodes (START HERE)\n\nBuilt on the Character Swap v1.1 native workflow: same models, controls, optional LMS upscale second pass and comparison.\n\n**Models.** DMD Ref2VA 8-step turbo -> `minimax_h3_motion_transfer_v1.0_ref2va.safetensors` (strength 1). CFG 1, Euler, 8 steps. The motion LoRA already carries ostris' training adapter V2 (merged in): do not load the adapter separately.\n\n**Pictures.** Picture 1 is connected. For more pictures (another view of the same character, a second performer, an outfit, an object, a place or a style), select the matching *Picture N* and *Picture N size* nodes in the *Extra reference pictures* group, and the *Picture N for the prompt writer* node, and press Ctrl+B. Their order is their label: the first enabled picture is <Picture 1>, the next <Picture 2>...\n\n**References** go to H3 at up to 2048 px (`ref_image_size = max`): much better likeness than `match`, about 30% slower; each picture is capped at 1 MP first (several full-size pictures crashed the H3 text encoder). Switch to `match` for speed or many pictures.\n\n**Setting.** Motion transfer copies the performance, not necessarily the place: the setting comes from your request, else an environment picture, else the scene a character picture shows (not a plain or studio backdrop), else the guide.\n\n**Prompt.** With *Write the prompt automatically* on, Qwen 3.5 first describes the guide from one frame per second (action, camera, setting; never the performer's looks), then sees only the enabled pictures, decides each picture's role and writes the six-part motion_transfer prompt. Put roles or changes in *Your request* (\"Picture 2 is the new background\", \"the woman on the left becomes Picture 1\"). The template is editable in *Prompt template*. Turn automatic off to use *Manual prompt*.\n\n**Guide.** The guide video enters as aligned latents through Add Guide at frame 0.\n\nModel links: https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI (docs/motion-transfer.md)."
       ],
       "title": "START HERE"
+    },
+    {
+      "id": 922,
+      "type": "GetImageSize",
+      "pos": [
+        -2900.0233641397176,
+        -477.48498215251686
+      ],
+      "size": [
+        220,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1669
+        }
+      ],
+      "outputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "links": []
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": []
+        },
+        {
+          "name": "batch_size",
+          "type": "INT",
+          "links": [
+            1670
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetImageSize"
+      },
+      "widgets_values": [],
+      "title": "Guide frames loaded"
+    },
+    {
+      "id": 923,
+      "type": "ComfyMathExpression",
+      "pos": [
+        -2660.0233641397176,
+        -477.48498215251686
+      ],
+      "size": [
+        300,
+        110
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "a",
+          "name": "values.a",
+          "type": "FLOAT,INT,BOOLEAN",
+          "link": 1670
+        },
+        {
+          "name": "values.b",
+          "shape": 7,
+          "type": "FLOAT,INT,BOOLEAN",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "links": []
+        },
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            1672
+          ]
+        },
+        {
+          "name": "BOOL",
+          "type": "BOOLEAN",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ComfyMathExpression"
+      },
+      "widgets_values": [
+        "a - ((a - 5) % 17)"
+      ],
+      "title": "Snap to H3 length (17n+5, never longer than the guide)"
+    },
+    {
+      "id": 924,
+      "type": "ImageFromBatch",
+      "pos": [
+        -2340.0233641397176,
+        -477.48498215251686
+      ],
+      "size": [
+        240,
+        90
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1671
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          },
+          "link": 1672
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            1673
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ImageFromBatch"
+      },
+      "widgets_values": [
+        0,
+        1
+      ],
+      "title": "Guide on the H3 frame grid"
     }
   ],
   "links": [
@@ -12835,14 +12984,6 @@
       45,
       1,
       "VAE"
-    ],
-    [
-      239,
-      8,
-      0,
-      104,
-      0,
-      "IMAGE"
     ],
     [
       250,
@@ -14579,6 +14720,46 @@
       831,
       0,
       "STRING"
+    ],
+    [
+      1669,
+      8,
+      0,
+      922,
+      0,
+      "IMAGE"
+    ],
+    [
+      1670,
+      922,
+      2,
+      923,
+      0,
+      "INT"
+    ],
+    [
+      1671,
+      8,
+      0,
+      924,
+      0,
+      "IMAGE"
+    ],
+    [
+      1672,
+      923,
+      1,
+      924,
+      1,
+      "INT"
+    ],
+    [
+      1673,
+      924,
+      0,
+      104,
+      0,
+      "IMAGE"
     ]
   ],
   "groups": [

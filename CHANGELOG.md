@@ -9,6 +9,17 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-02
 
+### Native Motion Transfer workflows: the guide is cut to a valid H3 length
+
+- In `minimax_h3_motion_transfer_workflow_native_nodes_v1.0.json` and
+  `minimax_h3_motion_transfer_tara_workflow_native_nodes_v1.0.json` the loaded guide is now trimmed to the largest
+  17n+5 frame count it really contains. A duration longer than the clip (for example 10 s on a 9 s guide) used to give
+  the guide and the output different frame counts: TARA stopped with "Native temporal guide and output must have
+  identical temporal grids", and Add Guide could drift. The reference video, Add Guide, the output length and the
+  prompt writer's frames all use the trimmed guide. The guide's audio is not trimmed (at most about 0.7 s longer).
+- Workflow files only; the studio's own generation path is unchanged. Same files published on Hugging Face.
+- Checked: link integrity and the ComfyUI frontend conversion of both workflows. No generation was run with the change.
+
 ### Motion Transfer v1.0 and TARA v1.0: training adapter V2 merged in; references at full detail
 
 - The published `minimax_h3_motion_transfer_v1.0_ref2va.safetensors` (185 MB) and
