@@ -12,13 +12,12 @@ media are included.
 ## LoRAs
 
 From [Alissonerdx/Minimax-H3-ComfyUI](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI), into `models/loras/`:
-`minimax_h3_motion_transfer_v1.0_ref2va.safetensors` (or `…_tara_v1.0_ref2va`), and
-`minimax_h3_ref2va_training_adapter_v2.safetensors` from
-[ostris/minimax_h3_training_adapter](https://huggingface.co/ostris/minimax_h3_training_adapter).
+`minimax_h3_motion_transfer_v1.0_ref2va.safetensors` (or `…_tara_v1.0_ref2va`).
 
-**Training adapter V2.** The Motion Transfer LoRAs were trained on top of adapter V2 kept frozen. They usually work
-without it, but the examples load the adapter first and the motion LoRA after it, which reproduces the training
-conditions; compare both on your clips.
+**Training adapter V2 merged in.** The Motion Transfer LoRAs were trained on top of
+[ostris' training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter) kept frozen. The published
+files carry it (merged by rank concat, then per-module SVD keeping 99% of the Frobenius energy), so the examples load only
+the turbo and the motion LoRA; do not load the adapter again.
 
 ## TARA
 

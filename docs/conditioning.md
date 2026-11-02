@@ -34,3 +34,8 @@ Swap and Head Swap got CLIP they were not trained with) move to Auto once. API a
 Code: `HengeH3Conditioning` (`backend/comfy_nodes/henge/__init__.py`) builds paths 2 and 3; `guide_context` turns the
 CLIP frames on, per model (`clip_context` in `backend/workflows.py`). TARA uses `BFSMiniMaxH3NativeTemporal` from
 ComfyUI-BFSNodes.
+
+**Reference pictures** reach H3 with `reference_size = max` (up to 2048 px on the short edge) instead of `match` (scaled to
+the generation's pixel area, where the face of a full-body picture is a few dozen pixels): likeness improves clearly, at
+about 30% more sampling time. `HengeLoadShot` first caps every picture at 1 MP, because the H3 text encoder reads each
+reference too and several full-size pictures crashed it.

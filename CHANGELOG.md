@@ -9,6 +9,26 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-02
 
+### Motion Transfer v1.0 and TARA v1.0: training adapter V2 merged in; references at full detail
+
+- The published `minimax_h3_motion_transfer_v1.0_ref2va.safetensors` (185 MB) and
+  `minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors` (126 MB) now carry ostris' training adapter V2: each motion
+  LoRA x1 + the adapter x1 merged by exact rank concat (rank 64 + 32), then per-module SVD keeping 99% of the Frobenius
+  energy. Same names; the previous files (620 MB, without the adapter) moved to `loras/base_loras_ignore/` on Hugging
+  Face. The models now run under the conditions they were trained on (before, Henge loaded the LoRA without the adapter).
+- The manifest gives both files a `size`. `model_installer`, `download_models.py` and `/health` treat a copy of another
+  size under the same name as an older release: the model shows as missing and installing it replaces the file.
+- References reach H3 with `reference_size = max` instead of `match` (the face of a full-body picture was a few dozen
+  pixels), each capped at 1 MP in `HengeLoadShot` (several full-size pictures crashed the H3 text encoder). About 30%
+  slower sampling, clearly better likeness in a side-by-side test.
+- The published Motion Transfer v1.0 workflows say the adapter is merged into the task LoRA; their builder no longer
+  adds an adapter node.
+- Validation on a user GPU, same seed, Wonder-Woman clip with a camera cut and an elf reference (8 s, 320x576): TARA
+  merged vs full LoRA + separate adapter, motion-curve correlation with the guide 0.945 vs 0.940 at zero lag; Guide
+  Latents merged 0.45 at zero lag (0.82 one frame late). Frames visually match the full LoRA + adapter. Not compared yet:
+  the merged files against the previous Henge setup (LoRA without the adapter). Unit tests for the size check and the
+  reference cap. **Needs a new worker image** and the new files on the volume.
+
 ### SolarRenderer FFP: normal-map guide, 15-second shots, 4x smaller LoRAs
 
 - **Normal-map structure.** Motion Transfer SolarRenderer FFP no longer gets the guide footage as its structure video:

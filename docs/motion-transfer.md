@@ -46,10 +46,10 @@ frame counts; TARA uses the BFS model patch. The native examples do not require 
 | H3 text encoder | `qwen3vl_32b_minimax_h3_int8_convrot.safetensors` — Comfy-Org H3 |
 | Video VAE | `minimax_h3_video_vae_fp16.safetensors` — Comfy-Org H3 |
 | Turbo | `minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors` — [drbaph](https://huggingface.co/drbaph/MiniMax-H3-Turbo-Lora-ComfyUI/tree/main/experimental) |
-| Guide Latents task | `minimax_h3_motion_transfer_v1.0_ref2va.safetensors` — [BFS LoRAs](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/tree/main/loras) |
-| TARA task | `minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors` — BFS LoRAs |
+| Guide Latents task | `minimax_h3_motion_transfer_v1.0_ref2va.safetensors` (training adapter V2 merged in) — [BFS LoRAs](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/tree/main/loras) |
+| TARA task | `minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors` (training adapter V2 merged in) — BFS LoRAs |
 | Edit task (First Frame) | `minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors` — [BFS LoRAs](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/blob/main/loras/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors): the VFX Edit first-frame LoRA ×1.0 + SolarRenderer control ×0.5, rank concat with per-module SVD keeping 99% of the Frobenius energy |
-| Turbo for the Edit task | `solarrenderer/solarrenderer_4step_comfy.safetensors` — [BFS LoRAs](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/tree/main/loras/solarrenderer): SolarRenderer 4-step, ComfyUI H3 keys (5.9 GB) |
+| Turbo for the Edit task | `solarrenderer/solarrenderer_4step_comfy_fro_dyn99.safetensors` — [BFS LoRAs](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/tree/main/loras/solarrenderer): SolarRenderer 4-step, ComfyUI H3 keys (5.9 GB) |
 | Planner prompt VLM | `qwen3.5_9b_w4a8_gptq.safetensors` — [Comfy-Org MOSS-Image](https://huggingface.co/Comfy-Org/MOSS-Image/tree/main/text_encoders); choose another compatible generation-capable VLM if preferred |
 
 Place base weights in `models/diffusion_models`, encoders in `models/text_encoders`, VAE in `models/vae`,

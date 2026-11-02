@@ -40,17 +40,23 @@ profiles in brackets).
 
 | Mode | File |
 | --- | --- |
-| Motion Transfer v1.0 (`motion`) | [`minimax_h3_motion_transfer_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_ref2va.safetensors) |
-| Motion Transfer TARA v1.0 (`motion`) | [`minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors) |
+| Motion Transfer v1.0 (`motion`) | [`minimax_h3_motion_transfer_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_ref2va.safetensors) — 185 MB, training adapter V2 merged in |
+| Motion Transfer TARA v1.0 (`motion`) | [`minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors) — 126 MB, training adapter V2 merged in |
 | Motion Transfer FFP v1.0 (`ffp`, part of `motion`) | [`minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_ffp_v1.0_ref2va.safetensors) — 220 MB: the VFX Edit first-frame LoRA (rank 128) ×1.0 + SolarRenderer control ×0.5, rank concat with per-module SVD keeping 99% of the Frobenius energy. The studio selects it whenever a First Frame is attached |
 | SolarRenderer 4-step turbo (`solar`, installed with `ffp`) | [`solarrenderer/solarrenderer_4step_comfy_fro_dyn99.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_4step_comfy_fro_dyn99.safetensors) — 1.4 GB, per-module SVD keeping 99% of the Frobenius energy (the full-rank 5.9 GB `solarrenderer_4step_comfy.safetensors` is used when already installed). Optional speed LoRA: the Edit model already carries SolarRenderer control, so it runs on the standard 4-step turbo. Any model can select it under Advanced → Turbo LoRA |
 | Head Swap v1.0 (`headswap`) | [`minimax_h3_head_swap_v1.0_r32.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_head_swap_v1.0_r32.safetensors) |
 | Little More Sharpness v1.0 (`sharpness`) | [`minimax_h3_lms_v1.0_r64.safetensors`](https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_lms_v1.0_r64.safetensors) |
 
-**No training adapter at inference.** The Motion Transfer LoRAs were trained on top of
+**Training adapter V2 merged in.** The Motion Transfer LoRAs were trained on top of
 [ostris' training adapter V2](https://huggingface.co/ostris/minimax_h3_training_adapter), which counters the
-distillation of the base while training. Generation runs without it: base, turbo LoRA, then the task LoRA. Henge and
-the published workflows no longer load it, and the downloads no longer include it.
+distillation of the base while training. Since 2026-11-02 the published `minimax_h3_motion_transfer_v1.0_ref2va` and
+`minimax_h3_motion_transfer_tara_v1.0_ref2va` files carry it: LoRA x1 + adapter x1 by exact rank concat, then per-module
+SVD keeping 99% of the Frobenius energy (185 MB and 126 MB instead of 620 MB + 310 MB). Generation runs base, turbo LoRA,
+then this one file; do not load the adapter again on top. The previous files (without the adapter) are kept in
+`loras/base_loras_ignore/`. The manifest gives these two files a `size`: a copy of another size under the same name (the
+previous release) counts as not installed, so `/health` lists the model as missing and installing it again downloads the
+new file. In tests with the same seed they matched the full LoRA + separate adapter, including TARA's frame sync across
+camera cuts.
 
 Models already in your ComfyUI are reused as they are: under an older short name (for example `character_v1_1`,
 `training_adapter_v2`) or in another subfolder (for example `vae/minimax/…`). The bridge finds them by name and

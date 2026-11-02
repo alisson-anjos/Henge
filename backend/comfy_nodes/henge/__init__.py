@@ -32,11 +32,18 @@ class HengeLoadShot:
     def load(self,video,pictures,width,height,length):
         refs=[]
         for p in json.loads(pictures):
-            with Image.open(input_path(p)) as im:refs.append(torch.from_numpy(np.asarray(im.convert('RGB')).copy()).float()[None]/255)
+            with Image.open(input_path(p)) as im:
+                im=im.convert('RGB')
+                # References go to H3 at full detail (reference_size 'max'), each capped at REF_MAX_PIXELS: the H3 text
+                # encoder reads every picture too, and several pictures at full size crashed it.
+                if im.width*im.height>REF_MAX_PIXELS:
+                    k=(REF_MAX_PIXELS/(im.width*im.height))**.5;im=im.resize((max(32,round(im.width*k)),max(32,round(im.height*k))),Image.LANCZOS)
+                refs.append(torch.from_numpy(np.asarray(im).copy()).float()[None]/255)
         return read_frames(input_path(video),width,height,length),refs
 
 
 VIDEO_EXTENSIONS=('.mp4','.mov','.webm','.mkv','.avi','.m4v')
+REF_MAX_PIXELS=1_000_000
 
 class HengeLoadVideo:
     """Load Video for exported Henge workflows: a file from ComfyUI's input folder (with an upload button), decoded

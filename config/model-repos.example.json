@@ -204,6 +204,8 @@
       "id": "motion_transfer_v1",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_v1.0_ref2va.safetensors",
       "destination": "loras/henge/minimax_h3_motion_transfer_v1.0_ref2va.safetensors",
+      "size": 184840504,
+      "note": "Training adapter V2 merged in (exact rank concat, then per-module SVD keeping 99% of the Frobenius energy), 185 MB. The size marks this release: an older copy under the same name is replaced.",
       "profiles": [
         "motion_transfer"
       ]
@@ -212,6 +214,8 @@
       "id": "motion_transfer_tara_v1",
       "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors",
       "destination": "loras/henge/minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors",
+      "size": 126417912,
+      "note": "Training adapter V2 merged in (exact rank concat, then per-module SVD keeping 99% of the Frobenius energy), 126 MB. The size marks this release: an older copy under the same name is replaced.",
       "profiles": [
         "motion_transfer_tara"
       ]

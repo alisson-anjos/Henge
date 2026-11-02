@@ -146,7 +146,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
       '6':node('VAELoader',vae_name='minimax_h3_video_vae_fp16.safetensors'),
       '7':node('HengeLoadShot',video=video,pictures=json.dumps(refs),width=width,height=height,length=length),
       '8':node('HengeGuide',images=['7',0],representation=representation,bindings=json.dumps(bindings),source_kind=source_kind,segment_start=segment_start,sam_checkpoint='sam3.1_multiplex_fp16.safetensors',body_model='sam_3d_body_dinov3_bf16.safetensors',preserve_objects=json.dumps(preserve_objects or []),mask_settings=json.dumps(mask or {})),
-      '9':node('HengeH3Conditioning',clip=['5',0],vae=['6',0],guide=['8',0],references=['7',1],prompt=prompt,width=width,height=height,length=length,clip_video_fps=clip_fps,reference_size='match',guide_context=model['clip_context'] if guide_context is None else bool(guide_context),audio_conditioning=audio,audio_video=video),
+      '9':node('HengeH3Conditioning',clip=['5',0],vae=['6',0],guide=['8',0],references=['7',1],prompt=prompt,width=width,height=height,length=length,clip_video_fps=clip_fps,reference_size='max',guide_context=model['clip_context'] if guide_context is None else bool(guide_context),audio_conditioning=audio,audio_video=video),
       '10':node('CFGGuider',model=['4',0],positive=['9',0],negative=['9',0],cfg=1.),
       '11':node('RandomNoise',noise_seed=seed),
       '12':node('KSamplerSelect',sampler_name=selected_sampler),

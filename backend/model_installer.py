@@ -52,7 +52,9 @@ def selected(manifest,model_id):
 
 
 def installed(root,item):
-    return destination(root,item).is_file() and destination(root,item).stat().st_size>0
+    # A manifest 'size' marks a re-released file under the same name: an older copy of another size is not installed.
+    path=destination(root,item)
+    return path.is_file() and path.stat().st_size>0 and (not item.get('size') or path.stat().st_size==int(item['size']))
 
 
 def install(root,manifest,model_id,progress,cancelled=lambda:False):

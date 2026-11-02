@@ -350,6 +350,24 @@ class WorkflowContracts(unittest.TestCase):
   g=h3_graph('v.mp4',['f.png'],'Add rain.',512,288,107,107,'motion_solar_ffp',1,4,'original',[],'human',0,turbo=m['turbo_default'])
   self.assertEqual(g['3']['inputs']['lora_name'],'henge/solarrenderer_control_comfy_fro_dyn99.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
 
+ def test_rereleased_files_and_full_detail_references(self):
+  # A file re-released under the same name carries its size in the manifest: an older copy of another size is not
+  # installed (installer, downloader and /health agree), so the volume gets the new one.
+  import json,tempfile,model_installer,requirements_check,workflows
+  from pathlib import Path
+  sys_path=Path(__file__).resolve().parents[2]/'scripts'
+  import sys;sys.path.insert(0,str(sys_path))
+  from download_models import current
+  manifest={m['id']:m for m in json.loads((Path(__file__).resolve().parents[2]/'config'/'model-repos.example.json').read_text())['models']}
+  item=manifest['motion_transfer_v1'];self.assertEqual(item['size'],184840504)
+  self.assertEqual(requirements_check.RELEASE_SIZES[item['destination']],184840504)
+  root=Path(tempfile.mkdtemp());f=root/item['destination'];f.parent.mkdir(parents=True);f.write_bytes(b'x'*10)
+  self.assertFalse(model_installer.installed(root,item));self.assertFalse(current(f,item))
+  self.assertTrue(model_installer.installed(root,{k:v for k,v in item.items() if k!='size'}))
+  # References go at full detail (each capped at 1 MP by HengeLoadShot).
+  g=h3_graph('v.mp4',['r.png'],'x',512,288,107,107,'motion',1,8,'original',[],'human',0)
+  self.assertEqual(g['9']['inputs']['reference_size'],'max')
+
  def test_compressed_solar_loras_fall_back_to_full_rank_files(self):
   # The 99%-energy SolarRenderer LoRAs are the installed default; a volume that already holds the full-rank file (under
   # its public or its old private name) keeps using it instead of downloading another copy.

@@ -7,6 +7,9 @@ import json,os,shutil
 from pathlib import Path
 
 LEGACY_LORAS=json.loads(Path(__file__).with_name('legacy_loras.json').read_text())
+# Files re-released under the same name carry their 'size' in the manifest; an older copy on disk is not installed.
+try:RELEASE_SIZES={m['destination']:int(m['size']) for m in json.loads((Path(__file__).resolve().parents[1]/'config'/'model-repos.example.json').read_text())['models'] if m.get('size')}
+except (OSError,ValueError,KeyError):RELEASE_SIZES={}
 
 # Matched on the file name's ending, so both the published names (minimax_h3_…) and the old short ones get a label.
 ADAPTER_LABELS={'training_adapter_v2.safetensors':'Motion training adapter V2','dmd_ref2va_8step.safetensors':'Turbo LoRA · DMD 8-step',
@@ -71,7 +74,9 @@ def check(models_dir,models,listed=()):
         if relative in rows:rows[relative]['groups'].append(group);return
         row={'id':key,'label':label,'file':relative,'groups':[group]}
         path=installed_path(relative);download=by_destination.get(relative,{})
-        if path.is_file() and path.stat().st_size>0:row.update(state='installed',total=path.stat().st_size)
+        outdated=path.is_file() and relative in RELEASE_SIZES and path.stat().st_size!=RELEASE_SIZES[relative]
+        if outdated:row.update(state='missing',error='An older release of this file is installed; install again to update it.')
+        elif path.is_file() and path.stat().st_size>0:row.update(state='installed',total=path.stat().st_size)
         elif comfy_has(relative) or (relative.startswith('loras/') and comfy_has('loras/'+(LEGACY_LORAS.get(relative.removeprefix('loras/')) or ''))):
             row.update(state='installed',location='comfyui')
         else:

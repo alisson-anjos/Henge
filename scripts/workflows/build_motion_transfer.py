@@ -9,7 +9,6 @@ ROOT=Path(__file__).resolve().parents[2]
 SCHEMAS=json.loads(Path(sys.argv[1]).read_text())
 OUT=ROOT/'workflows'
 PREFIX='minimax_h3_motion_transfer'
-ADAPTER='minimax_h3_ref2va_training_adapter_v2.safetensors'
 TURBO='minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors'
 GUIDE_LORA='minimax_h3_motion_transfer_v1.0_ref2va.safetensors'
 TARA_LORA='minimax_h3_motion_transfer_tara_v1.0_ref2va.safetensors'
@@ -83,12 +82,12 @@ class Graph:
 def build(tara=False,planner=False):
  g=Graph();method='tara' if tara else 'guide_latents';variant='planner' if planner else 'native_nodes';name=f'{PREFIX}_{"tara_" if tara else ""}workflow_{variant}_v1.0.json'
  base=g.add('UNETLoader','MiniMax H3 Ref2VA base',(0,0),{'unet_name':'minimax_h3_ref2va_pruned_int8_convrot.safetensors','weight_dtype':'default'})
- adapter=g.add('LoraLoaderModelOnly','Training adapter V2 — strength 1',(0,160),{'lora_name':ADAPTER,'strength_model':1.})
  turbo=g.add('LoraLoaderModelOnly','DMD Ref2VA 8-step turbo',(0,320),{'lora_name':TURBO,'strength_model':1.})
  task=g.add('LoraLoaderModelOnly','Motion Transfer TARA v1.0' if tara else 'Motion Transfer v1.0 — Guide Latents',(0,480),{'lora_name':TARA_LORA if tara else GUIDE_LORA,'strength_model':1.})
  attention=g.add('ModelAttentionBackend','Attention — see Kitchen/TARA note',(0,640),{'attention':'pytorch attention' if tara else 'comfy kitchen attention'})
  shift=g.add('MiniMaxH3SigmaShift','H3 sampling shift',(0,800),{'shift_video':12.,'shift_audio':3.})
- for a,b in zip([base,adapter,turbo,task,attention],[adapter,turbo,task,attention,shift]):g.link(a,0,b,'model')
+ # Training adapter V2 is merged into the task LoRA: base -> turbo -> task LoRA.
+ for a,b in zip([base,turbo,task,attention],[turbo,task,attention,shift]):g.link(a,0,b,'model')
  clip=g.add('CLIPLoader','H3 text encoder — NOT the prompt VLM',(400,0),{'clip_name':'qwen3vl_32b_minimax_h3_int8_convrot.safetensors','type':'minimax','device':'default'})
  vae=g.add('VAELoader','H3 video VAE',(400,160),{'vae_name':'minimax_h3_video_vae_fp16.safetensors'})
  if planner:
@@ -117,7 +116,7 @@ def build(tara=False,planner=False):
  else:
   trim=g.add('ImageFromBatch','Trim grid padding to actual source duration',(3020,0),{'batch_index':0,'length':107});g.link(decode,0,trim,'image');g.link(prepare,8,trim,'length');create=g.add('CreateVideo','24 fps; original source audio',(3020,220),{'fps':24.});g.link(trim,0,create,'images');g.link(video,2,create,'audio');save=g.add('SaveVideo','Save Motion Transfer output',(3020,450),{'filename_prefix':'motion_transfer/'+method,'format':'auto','codec':'auto'});g.link(create,0,save,'video')
   g.note('Native use / timing / limits','''# Native conditioning, with small public BFS helpers\nUpload the guide and Picture 1. The second image is disconnected and OPTIONAL; connect more native ref_images slots consecutively (up to 9) and assign their roles in the editable H3 prompt. No Planner or prompt VLM is required.\n\nSource aspect ratio sets the output; 0.4 MP cap; 24 fps; initial test limited to 107 decoded frames. To use a longer clip, change BOTH VHS frame_load_cap and Prepare max_frames. Prefer the Planner workflow for long videos and camera cuts. Padding is trimmed to the actual source duration.\n\nAudio output copies the source; no dialogue is inferred or generated. Motion/identity fidelity still needs visual review. Native means native H3 conditioning, not zero custom nodes: BFS handles source geometry (and TARA), VHS loads the video. No Henge private nodes required.''',(820,950),(700,420))
- g.note('START HERE — choose the matching Motion Transfer LoRA',f'''# Motion Transfer v1.0 — {"TARA" if tara else "Guide Latents"} / {variant}\n\nMatching LoRA: {TARA_LORA if tara else GUIDE_LORA}\nTraining adapter V2 → DMD Ref2VA 8-step turbo → task LoRA; strengths 1, CFG 1, Euler/simple, 8 steps. These are inference defaults, not quality guarantees. Do not load another copy of an already merged adapter/turbo.\n\n{"TARA keeps the guide in native ref_video_1 and patches model attention. No full-video Add Guide is used in the first-pass contract." if tara else "The guide enters through Add Guide, not native video-reference latents. Planner additionally shows sampled guide frames to the text encoder."}\n\nDependencies: updated ComfyUI native MiniMax H3, ComfyUI-BFSNodes 1.115.33+, VideoHelperSuite for native video loading. Model download links are in docs/motion-transfer.md in the HF repo. Select installed model names if your files are in subfolders.\n\nThese graphs are derived from the native/Planner contracts of the published Character Swap v1.1 workflows, with Motion Transfer-specific prompts and model wiring. No bundled private media; replace guide.mp4/reference_1.png before queueing.''',(0,1130),(700,480))
+ g.note('START HERE — choose the matching Motion Transfer LoRA',f'''# Motion Transfer v1.0 — {"TARA" if tara else "Guide Latents"} / {variant}\n\nMatching LoRA: {TARA_LORA if tara else GUIDE_LORA}\nDMD Ref2VA 8-step turbo → task LoRA (training adapter V2 is merged into the task LoRA: do not load it separately); strengths 1, CFG 1, Euler/simple, 8 steps. These are inference defaults, not quality guarantees. Do not load another copy of an already merged adapter/turbo.\n\n{"TARA keeps the guide in native ref_video_1 and patches model attention. No full-video Add Guide is used in the first-pass contract." if tara else "The guide enters through Add Guide, not native video-reference latents. Planner additionally shows sampled guide frames to the text encoder."}\n\nDependencies: updated ComfyUI native MiniMax H3, ComfyUI-BFSNodes 1.115.33+, VideoHelperSuite for native video loading. Model download links are in docs/motion-transfer.md in the HF repo. Select installed model names if your files are in subfolders.\n\nThese graphs are derived from the native/Planner contracts of the published Character Swap v1.1 workflows, with Motion Transfer-specific prompts and model wiring. No bundled private media; replace guide.mp4/reference_1.png before queueing.''',(0,1130),(700,480))
  g.note('N reference images — read before assigning roles',REF_NOTE,(1580,1130),(680,520));g.note('Kitchen compatibility / MODIFIED TARA kernel',KITCHEN_NOTE,(2320,1130),(760,650));return g.save(name,method,planner)
 
 if __name__=='__main__':

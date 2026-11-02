@@ -72,9 +72,11 @@ def main():
         # the bridge finds it by name. Nothing is renamed, so the user's other workflows keep working.
         if not dest.exists():
             legacy=root/'loras'/LEGACY.get(item['destination'].removeprefix('loras/'),'-')
-            same=[p for p in (root/PurePosixPath(item['destination']).parts[0]).rglob(dest.name) if p.is_file() and p.stat().st_size>0] if (root/PurePosixPath(item['destination']).parts[0]).is_dir() else []
-            found=legacy if legacy.is_file() and legacy.stat().st_size>0 else (same[0] if same else None)
+            same=[p for p in (root/PurePosixPath(item['destination']).parts[0]).rglob(dest.name) if current(p,item)] if (root/PurePosixPath(item['destination']).parts[0]).is_dir() else []
+            found=legacy if current(legacy,item) else (same[0] if same else None)
             if found:print('Already installed:',item['id'],'as',found.relative_to(root),flush=True);status.set(item,'installed',total=found.stat().st_size);continue
+        if dest.is_file() and dest.stat().st_size>0 and not current(dest,item):
+            print(f"Replacing {item['id']}: {dest.name} is an older release",flush=True);dest.unlink()
         if dest.is_file() and dest.stat().st_size>0:
             if has_keys(dest,item.get('require_keys')):print('Already installed:',item['id'],flush=True);status.set(item,'installed',total=dest.stat().st_size);continue
             print(f"Replacing {item['id']}: {dest.name} is an incompatible format",flush=True);dest.unlink()
@@ -123,6 +125,11 @@ class DownloadStatus:
         self.write()
     def write(self):
         tmp=self.path.with_suffix('.tmp');tmp.write_text(json.dumps({'updated':time.time(),'models':list(self.rows.values())},indent=1));tmp.replace(self.path)
+
+def current(path,item):
+    """A file counts as installed when it is not empty and, if the manifest gives a 'size' (a file re-released under
+    the same name, e.g. a LoRA that now carries its training adapter), has exactly that size."""
+    return path.is_file() and path.stat().st_size>0 and (not item.get('size') or path.stat().st_size==int(item['size']))
 
 def remote_size(item,token):
     try:
