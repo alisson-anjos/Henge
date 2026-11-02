@@ -327,7 +327,7 @@ class WorkflowContracts(unittest.TestCase):
   import workflows
   from edit_modes import ffp_prompt
   m=workflows.MODELS['motion_solar_ffp']
-  self.assertEqual(m['label'],'Motion Transfer SolarRenderer FFP v1.0');self.assertEqual(m['lora'],'henge/solar_control.safetensors')
+  self.assertEqual(m['label'],'Motion Transfer SolarRenderer FFP v1.0');self.assertEqual(m['lora'],'henge/solarrenderer_control_comfy.safetensors')
   self.assertTrue(m['first_frame_only']);self.assertFalse(m.get('ffp'));self.assertEqual(m['tags'],['ffp-only'])
   # Always offered, but it cannot run without its edited frame; with one it is a normal choice.
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','prompt':'Add rain.'},{'profile':'motion_solar_ffp'},[1])
@@ -337,7 +337,7 @@ class WorkflowContracts(unittest.TestCase):
   # Its prompt is the FFP sentence without the VFX Edit trigger.
   self.assertEqual(ffp_prompt('Add rain.',None,None),'Add rain.');self.assertTrue(ffp_prompt('vfx_edit: Add rain.',2,None).startswith('Add rain. <Picture 2> is the edited first frame'))
   g=h3_graph('v.mp4',['f.png'],'Add rain.',512,288,107,107,'motion_solar_ffp',1,4,'original',[],'human',0,turbo=m['turbo_default'])
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solar_control.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solarrenderer_control_comfy.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
 
  def test_solarrenderer_ffp_uses_solarrenderer_conditioning(self):
   # SolarRenderer's own pipeline: its conditioning (guide = structure <Video 1>, the frame = <Video 2>), its 4-step LoRA
@@ -349,7 +349,7 @@ class WorkflowContracts(unittest.TestCase):
   g=workflows.solar_graph(g,'P','henge/j/first.png',9)
   self.assertEqual(g['9']['class_type'],'HengeSolarConditioning');self.assertEqual(g['9']['inputs']['structure'],['8',0]);self.assertEqual(g['9']['inputs']['first_frame'],['27',0])
   self.assertEqual(g['27']['inputs']['image'],'henge/j/first.png');self.assertEqual(g['9']['inputs']['prompt'],'P')
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solar_control.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0]);self.assertIn(g['2']['inputs']['lora_name'],workflows.SOLAR_TURBOS)
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solarrenderer_control_comfy.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0]);self.assertIn(g['2']['inputs']['lora_name'],workflows.SOLAR_TURBOS)
   self.assertEqual(g['28']['class_type'],'HengeSolarModel');self.assertEqual(g['28']['inputs']['seed'],9)
   self.assertEqual(g['10'],{'class_type':'BasicGuider','inputs':{'model':['28',0],'conditioning':['9',0]}})
   self.assertEqual(g['12']['inputs']['sampler_name'],'lcm');self.assertEqual(g['14']['inputs']['latent_image'],['9',1])

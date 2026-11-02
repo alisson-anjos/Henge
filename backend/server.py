@@ -575,6 +575,7 @@ def execute_graph(job,graph,stage):
                 api('POST','/queue',json={'delete':[pid]});raise
             finally:
                 await socket.close()
+    return asyncio.run(execute())
 
 def image_from_output(outputs,dest):
     images=output_files(outputs,kind='images')
@@ -1562,7 +1563,7 @@ def health():
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
     unets=comfy_choices(info,'UNETLoader','unet_name')
     if installed:workflows.INSTALLED={**workflows.INSTALLED,**{n:set(comfy_choices(info,n,key)) for n,key in workflows.LOADERS.items()}}
-    models={key:{**value,'available':unknown or lora_installed(value['lora'],installed) and lora_installed(value['adapter'],installed) and (not value.get('unet') or value['unet'] in unets) and mode_ready[key]} for key,value in MODELS.items()}
+    models={key:{**value,'available':unknown or (lora_installed(value['lora'],installed) or any(lora_installed(a,installed) for a in value.get('lora_alternatives',[]))) and lora_installed(value['adapter'],installed) and (not value.get('unet') or value['unet'] in unets) and mode_ready[key]} for key,value in MODELS.items()}
     turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or lora_installed(value['lora'],installed)} for key,value in TURBOS.items()}
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.

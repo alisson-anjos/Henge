@@ -9,6 +9,20 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-02
 
+### Fix: pods could not generate, and the SolarRenderer FFP LoRA failed to download (issue #3)
+- **Every generation on a pod or a local ComfyUI failed** with `'NoneType' object has no attribute 'get'` since
+  v2026.11.01.1: the change that reconnects ComfyUI's progress feed dropped the line that runs the render loop, so the
+  local path returned nothing. Restored, with a regression test that drives the real loop against a fake ComfyUI
+  (`tests/test_local_execute.py`). RunPod Serverless was not affected.
+- **Motion Transfer SolarRenderer FFP v1.0** pointed at a private dataset, so the pod template's default `motion`
+  download (it includes `ffp`) failed with "Access denied". Its LoRA is now public:
+  `Alissonerdx/Minimax-H3-ComfyUI/loras/solarrenderer/solarrenderer_control_comfy.safetensors` (SolarRenderer's control
+  LoRA converted to ComfyUI H3 keys, Apache-2.0, 5.9 GB, profiles `ffp`/`solar`). Older volumes with
+  `solar_control.safetensors` keep working, and the new `HengeSolarLoraLoader` also loads the release as published by
+  Enderfga/SolarRenderer (diffusers names).
+- Validation: backend unit tests including the new regression test (fails without the fix), TypeScript; the public
+  file downloads without a token. Pods need the new image (`:latest` after this release builds).
+
 ### First-frame prompts are about replacing the character; editor brush; subjects are optional
 - The prompt examples and placeholder of the First Frame models no longer suggest VFX edits (fire, claymation,
   removing a car) or show the `vfx_edit:` trigger, which Henge adds itself. They now replace the character and name the

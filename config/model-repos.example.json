@@ -379,13 +379,13 @@
     },
     {
       "id": "solar_control",
-      "url": "https://huggingface.co/datasets/Alissonerdx/Kagemage-Backups/resolve/main/henge_solar/solar_control.safetensors",
-      "destination": "loras/henge/solar_control.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_control_comfy.safetensors",
+      "destination": "loras/henge/solarrenderer_control_comfy.safetensors",
       "profiles": [
         "ffp",
         "solar"
       ],
-      "note": "Motion Transfer SolarRenderer FFP v1.0: the SolarRenderer control LoRA (Enderfga/SolarRenderer) converted to ComfyUI H3 keys, used alone for clips that start from an edited first frame. Private dataset for now: needs HF_TOKEN."
+      "note": "Motion Transfer SolarRenderer FFP v1.0: SolarRenderer's control LoRA (Enderfga/SolarRenderer, Apache-2.0) converted to ComfyUI H3 keys, public (5.9 GB). Used alone, on SolarRenderer's own conditioning, for clips that start from an edited first frame."
     },
     {
       "id": "sharpness",

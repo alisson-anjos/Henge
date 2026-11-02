@@ -118,3 +118,70 @@ class HengeSolarModel:
         model = model.clone()
         model.add_wrapper(comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL, _SilentSoundtrack(silence, seed))
         return (model,)
+
+
+# ------------------------------------------------------------------------------------------------- LoRA
+import re
+
+import comfy.lora
+import folder_paths
+
+_BLOCK = re.compile(r'^(transformer_blocks|token_refiner\.refiner_blocks)\.(\d+)\.(.+)$')
+
+
+def lora_patches(lora, inner, ffn):
+    """A released SolarRenderer LoRA (diffusers PEFT names) as ComfyUI LoRA entries and the slices of ComfyUI's fused
+    weights they patch: q, k, v onto their thirds of attn.qkv_proj, the feed-forward [value; gate] onto fc1's
+    [gate; value] halves."""
+    entries, key_map = {}, {}
+    for key in lora:
+        if not key.endswith('.lora_A.weight'):
+            continue
+        base = key[:-len('.lora_A.weight')]
+        match = _BLOCK.match(base)
+        if match is None:
+            raise ValueError(f'{key}: not a MiniMax-H3 transformer block or token refiner module')
+        prefix, index, module = match.groups()
+        root = 'diffusion_model.' + ('blocks' if prefix == 'transformer_blocks' else 'token_refiner.blocks') + f'.{index}'
+        a, b = lora[key], lora[base + '.lora_B.weight']
+        if module in ('attn.to_q', 'attn.to_k', 'attn.to_v'):
+            third = 'qkv'.index(module[-1])
+            entries[base + '.lora_A.weight'], entries[base + '.lora_B.weight'] = a, b
+            key_map[base] = (f'{root}.attn.qkv_proj.weight', (0, third * inner, inner))
+        elif module == 'ff.net.0.proj':
+            half = b.shape[0] // 2
+            for part, rows, start in (('value', b[:half], ffn), ('gate', b[half:], 0)):
+                entries[f'{base}.{part}.lora_A.weight'], entries[f'{base}.{part}.lora_B.weight'] = a, rows
+                key_map[f'{base}.{part}'] = (f'{root}.mlp.fc1.weight', (0, start, ffn))
+        elif module in ('attn.to_out.0', 'ff.net.2'):
+            entries[base + '.lora_A.weight'], entries[base + '.lora_B.weight'] = a, b
+            key_map[base] = f'{root}.' + ('attn.out_proj.weight' if module == 'attn.to_out.0' else 'mlp.fc2.weight')
+        else:
+            raise ValueError(f'{key}: no ComfyUI counterpart for {module}')
+    return entries, key_map
+
+
+class HengeSolarLoraLoader:
+    """A SolarRenderer LoRA as released on the Hub (diffusers names) or already converted to ComfyUI keys."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required': {'model': ('MODEL',), 'lora_name': (folder_paths.get_filename_list('loras'),),
+                             'strength': ('FLOAT', {'default': 1.0, 'min': -4.0, 'max': 4.0, 'step': 0.05})}}
+    RETURN_TYPES = ('MODEL',)
+    FUNCTION = 'load'
+    CATEGORY = 'Henge'
+
+    def load(self, model, lora_name, strength):
+        lora = comfy.utils.load_torch_file(folder_paths.get_full_path_or_raise('loras', lora_name), safe_load=True)
+        if not any(k.startswith('transformer_blocks.') for k in lora):
+            patches = comfy.lora.load_lora(lora, comfy.lora.model_lora_keys_unet(model.model, {}))
+        else:
+            dm = model.model.diffusion_model
+            entries, key_map = lora_patches(lora, dm.blocks[0].attn.out_proj.weight.shape[1], dm.blocks[0].mlp.fc2.weight.shape[1])
+            patches = comfy.lora.load_lora(entries, key_map)
+        model = model.clone()
+        missed = set(patches) - set(model.add_patches(patches, strength))
+        if missed:
+            raise ValueError(f'{lora_name}: {len(missed)} modules found no weight in this model')
+        print(f'[Henge H3] SolarRenderer LoRA {lora_name}: {len(patches)} weights', flush=True)
+        return (model,)

@@ -88,11 +88,12 @@ merge here that carries SolarRenderer control. The merge already carries that co
 distillation turbo on top: it samples on the standard **DMAD 4-step** turbo (Kijai) like every other model, and any other
 turbo stays selectable under Advanced.
 
-**Motion Transfer SolarRenderer FFP v1.0** is SolarRenderer control on its own (`solar_control.safetensors`, the
-Enderfga/SolarRenderer control LoRA converted to ComfyUI H3 keys), without the VFX Edit LoRA. It is always listed but only
-for a clip that starts from an edited first frame: the studio and the bridge refuse to generate with it until a First
-Frame is attached, and attaching one still selects Motion Transfer FFP v1.0 by default. Its weights are still in a
-private dataset (`HF_TOKEN`).
+**Motion Transfer SolarRenderer FFP v1.0** is SolarRenderer control on its own:
+[Enderfga/SolarRenderer](https://huggingface.co/Enderfga/SolarRenderer)'s control LoRA (Apache-2.0) converted to ComfyUI
+H3 keys, public in our repository as `loras/solarrenderer/solarrenderer_control_comfy.safetensors` (5.9 GB, model
+profiles `ffp` and `solar`). `HengeSolarLoraLoader` also loads the release as published (diffusers names). It is always listed
+but only for a clip that starts from an edited first frame: the studio and the bridge refuse to generate with it until a
+First Frame is attached, and attaching one still selects Motion Transfer FFP v1.0 by default.
 
 It runs on **SolarRenderer's own conditioning and sampler**, ported into the Henge nodes (`HengeSolarConditioning`,
 `HengeSolarModel`), not on Henge's H3 conditioning:

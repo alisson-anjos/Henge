@@ -31,7 +31,7 @@ MODELS={
  # It runs on SolarRenderer's own conditioning and sampler (solar_graph): the guide as the structure video <Video 1>,
  # the edited frame as <Video 2> held still, both laid over frame 0 as keyframes; its 4-step LoRA, lcm, shift-12 sigmas,
  # a held silent soundtrack, and its six-part prompt.
- 'motion_solar_ffp':{'label':'Motion Transfer SolarRenderer FFP v1.0','task':'motion','lora':'henge/solar_control.safetensors','adapter':None,'clip_context':False,'first_frame_only':True,'trigger':None,'conditioning':'solar','turbo_default':'solar4',
+ 'motion_solar_ffp':{'label':'Motion Transfer SolarRenderer FFP v1.0','task':'motion','lora':'henge/solarrenderer_control_comfy.safetensors','lora_alternatives':['henge/solar_control.safetensors','henge/solarrenderer_control_lora.safetensors'],'adapter':None,'clip_context':False,'first_frame_only':True,'trigger':None,'conditioning':'solar','turbo_default':'solar4',
    'tags':['ffp-only']},
  'character':{'task':'swap','label':'Character Swap v1.1','tags':['multi-ref-weak'],'lora':'henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
@@ -396,6 +396,10 @@ def bfs_graph(image,refs,instruction,seed,unet=None,lora='',**_):
 
 # SolarRenderer's four-step LoRA in ComfyUI keys: the converted copy on Henge volumes first, then the public one.
 SOLAR_TURBOS=('henge/turbo_solar_4step.safetensors','henge/solarrenderer_4step_comfy.safetensors')
+# SolarRenderer's control LoRA: our public copy converted to ComfyUI H3 keys (Alissonerdx/Minimax-H3-ComfyUI), the same
+# file under its older private name, then the release as published by Enderfga/SolarRenderer (diffusers names).
+# HengeSolarLoraLoader loads any of them.
+SOLAR_CONTROLS=('henge/solarrenderer_control_comfy.safetensors','henge/solar_control.safetensors','henge/solarrenderer_control_lora.safetensors')
 SOLAR_MAX_FRAMES=158   # trained length; the held silence covers 170 frames
 def solar_sigmas(steps=4,shift=12.):
     """SolarRenderer's four-step grid: linspace(1, 0) shifted by 12 (comfy_nodes/henge/solar.py has the same)."""
@@ -406,7 +410,9 @@ def solar_graph(g,prompt,first_frame=None,seed=0):
     <Video 2>), its 4-step LoRA under the control LoRA, the held silent soundtrack, lcm on its shift-12 sigmas with a
     BasicGuider. Loading, the guide, masks and saving stay as h3_graph built them."""
     turbo=next((t for t in SOLAR_TURBOS if lora_installed(t)),SOLAR_TURBOS[0])
-    g['2']=node('LoraLoaderModelOnly',model=['1',0],lora_name=turbo,strength_model=1.);g['3']['inputs']['model']=['2',0]
+    control=next((c for c in SOLAR_CONTROLS if lora_installed(c)),SOLAR_CONTROLS[0])
+    g['2']=node('HengeSolarLoraLoader',model=['1',0],lora_name=turbo,strength=1.)
+    g['3']=node('HengeSolarLoraLoader',model=['2',0],lora_name=control,strength=1.)
     for key in ('4','21','24','25'):g.pop(key,None)
     g['28']=node('HengeSolarModel',model=['22',0],seed=int(seed))
     i=g['9']['inputs']
