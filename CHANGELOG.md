@@ -9,6 +9,18 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-02
 
+### First-frame prompts are about replacing the character; editor brush; subjects are optional
+- The prompt examples and placeholder of the First Frame models no longer suggest VFX edits (fire, claymation,
+  removing a car) or show the `vfx_edit:` trigger, which Henge adds itself. They now replace the character and name the
+  edited first frame by its Picture tag (`@PictureN`, the real slot); Character Swap with a swapped first frame names
+  the character Picture when there is one. The assistant's guidance and docs/motion-transfer.md say the same.
+- Frame editor brush: round on screen (its radius is scaled per axis; the pane can show the frame squeezed), no gaps on
+  fast strokes, painted magenta; the mask sent to the bridge is still white where painted.
+- "Subjects and references" carries an **optional** badge and says you can keep Original and describe everything in
+  the prompt; marks only bind people to their references.
+- Validation: TypeScript, backend unit tests, the Playwright model-picker tests with a guide video (first-frame tips),
+  and Playwright screenshots of the brush and the subjects panel on the rebuilt local UI.
+
 ### Motion Transfer SolarRenderer FFP runs on SolarRenderer's own conditioning
 - `motion_solar_ffp` no longer goes through Henge's H3 conditioning. SolarRenderer's nodes are ported into the Henge
   node pack (Apache-2.0, see THIRD_PARTY_NOTICES.md), so workers need no extra node pack:

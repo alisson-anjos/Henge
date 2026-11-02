@@ -165,7 +165,7 @@ export default function FirstFrameModal({videoUrl, start, end, image, edited, pi
       if (marked) body.set('marked', '1');
       if (promptEdited && editPrompt.trim()) body.set('prompt', editPrompt.trim());
       if (editor) body.set('editor', editor);
-      if (op !== 'swap' && painted && paint.current) {const mask = await new Promise<Blob | null>(r => paint.current!.toBlob(r, 'image/png')); if (mask) body.set('mask', mask, 'mask.png');}
+      if (op !== 'swap' && painted && paint.current) {const mask = await exportMask(); if (mask) body.set('mask', mask, 'mask.png');}
       editRefs.forEach((r, i) => body.append(`picture_${String(i + 1).padStart(2, '0')}`, r.file, r.file.name));
       const response = await fetch('/api/backend/frame-edit', {method: 'POST', body});
       if (!response.ok) {const reply = await response.json().catch(() => ({})); throw Error(reply.detail || reply.error || `HTTP ${response.status}`);}
@@ -200,12 +200,29 @@ export default function FirstFrameModal({videoUrl, start, end, image, edited, pi
 
   // The painted mask: white where the edit may change the frame; drawn at the frame's own resolution.
   useEffect(() => {const c = paint.current; if (c && frame) {c.width = frame.width; c.height = frame.height; setPainted(false);}}, [frame]);
+  // The brush is round on screen: the canvas can be shown squeezed (the pane caps its height), so its radius is scaled
+  // per axis. Dabs are stamped along the path so a fast stroke leaves no gaps. Painted magenta; the mask sent to the
+  // bridge is white (exportMask).
+  const lastDab = useRef<{x: number; y: number} | null>(null);
   function stroke(e: React.PointerEvent<HTMLCanvasElement>) {
     const c = paint.current; if (!c || !drawing.current) return;
-    const r = c.getBoundingClientRect(), x = (e.clientX - r.left) * c.width / r.width, y = (e.clientY - r.top) * c.height / r.height;
+    const r = c.getBoundingClientRect(), sx = c.width / r.width, sy = c.height / r.height;
+    const x = (e.clientX - r.left) * sx, y = (e.clientY - r.top) * sy, rx = brush * sx / 2, ry = brush * sy / 2;
     const g = c.getContext('2d'); if (!g) return;
-    g.globalCompositeOperation = erase ? 'destination-out' : 'source-over'; g.fillStyle = 'white';
-    g.beginPath(); g.arc(x, y, brush * c.width / r.width / 2, 0, Math.PI * 2); g.fill(); if (!erase) setPainted(true);
+    g.globalCompositeOperation = erase ? 'destination-out' : 'source-over'; g.fillStyle = '#ff00ff';
+    const from = lastDab.current ?? {x, y}, steps = Math.max(1, Math.ceil(Math.hypot((x - from.x) / rx, (y - from.y) / ry) * 3));
+    for (let k = 1; k <= steps; k++) {const t = k / steps; g.beginPath(); g.ellipse(from.x + (x - from.x) * t, from.y + (y - from.y) * t, rx, ry, 0, 0, Math.PI * 2); g.fill();}
+    lastDab.current = {x, y}; if (!erase) setPainted(true);
+  }
+  /** The painted area as the bridge reads it: white where painted, transparent elsewhere. */
+  async function exportMask(): Promise<Blob | null> {
+    const c = paint.current; if (!c) return null;
+    const out = document.createElement('canvas'); out.width = c.width; out.height = c.height;
+    const g = out.getContext('2d'), src = c.getContext('2d'); if (!g || !src) return null;
+    const data = src.getImageData(0, 0, c.width, c.height), d = data.data;
+    for (let i = 0; i < d.length; i += 4) {const a = d[i + 3]; d[i] = d[i + 1] = d[i + 2] = a ? 255 : 0;}
+    g.putImageData(data, 0, 0);
+    return new Promise(resolve => out.toBlob(resolve, 'image/png'));
   }
   function clearMask() {const c = paint.current; c?.getContext('2d')?.clearRect(0, 0, c.width, c.height); setPainted(false);}
   const ready = promptEdited && !!editPrompt.trim() ? true : op === 'swap' ? editRefs.length > 0 || !!instruction.trim() : op === 'remove' ? !!(what.trim() || painted) : op === 'replace' ? !!((what.trim() || painted) && instruction.trim()) : !!instruction.trim();
@@ -225,7 +242,7 @@ export default function FirstFrameModal({videoUrl, start, end, image, edited, pi
       <button type="button" className="trim-close" aria-label={tr('Close', 'Fechar', 'Cerrar')} onClick={onClose}>×</button></header>
     <div className="first-frame-body">
     <div className="first-frame-panes">
-      <figure><figcaption className="eyebrow muted">{image ? tr('Picture', 'Imagem', 'Imagen') : tr('Guide frame', 'Quadro do guia', 'Fotograma de la guía')}{frame ? ` · ${frame.width}×${frame.height}` : ''}</figcaption>{frame ? <div className="first-frame-paint" style={shape}><img src={frame.url} alt=""/>{editor && op === 'swap' && segments && <canvas ref={pickCanvas} className="segment-pick" aria-label={tr('Click the character to replace', 'Clique no personagem a trocar', 'Haz clic en el personaje a reemplazar')} onPointerMove={e => setHover(labelAt(e))} onPointerLeave={() => setHover(0)} onClick={e => {const n = labelAt(e); setPicked(p => n && n !== p ? n : 0);}}/>}{editor && op !== 'swap' && <canvas ref={paint} aria-label={tr('Paint the area to edit', 'Pinte a área a editar', 'Pinta el área a editar')} onPointerDown={e => {drawing.current = true; e.currentTarget.setPointerCapture(e.pointerId); stroke(e);}} onPointerMove={stroke} onPointerUp={() => {drawing.current = false;}}/>}</div> : <div className="first-frame-empty">{tr('Reading the frame…', 'Lendo o quadro…', 'Leyendo el fotograma…')}</div>}</figure>
+      <figure><figcaption className="eyebrow muted">{image ? tr('Picture', 'Imagem', 'Imagen') : tr('Guide frame', 'Quadro do guia', 'Fotograma de la guía')}{frame ? ` · ${frame.width}×${frame.height}` : ''}</figcaption>{frame ? <div className="first-frame-paint" style={shape}><img src={frame.url} alt=""/>{editor && op === 'swap' && segments && <canvas ref={pickCanvas} className="segment-pick" aria-label={tr('Click the character to replace', 'Clique no personagem a trocar', 'Haz clic en el personaje a reemplazar')} onPointerMove={e => setHover(labelAt(e))} onPointerLeave={() => setHover(0)} onClick={e => {const n = labelAt(e); setPicked(p => n && n !== p ? n : 0);}}/>}{editor && op !== 'swap' && <canvas ref={paint} aria-label={tr('Paint the area to edit', 'Pinte a área a editar', 'Pinta el área a editar')} onPointerDown={e => {drawing.current = true; lastDab.current = null; e.currentTarget.setPointerCapture(e.pointerId); stroke(e);}} onPointerMove={stroke} onPointerUp={() => {drawing.current = false; lastDab.current = null;}}/>}</div> : <div className="first-frame-empty">{tr('Reading the frame…', 'Lendo o quadro…', 'Leyendo el fotograma…')}</div>}</figure>
       <figure><figcaption className="eyebrow muted">{tr('Edited', 'Editado', 'Editado')}</figcaption>{result ? <img src={result.url} alt="" style={shape}/> : <div className="first-frame-empty" style={shape}>{busy ? tr(`${editorName} is editing… (about 1 min)`, `${editorName} está editando… (cerca de 1 min)`, `${editorName} está editando… (alrededor de 1 min)`) : editor ? tr(`Edit with ${editorName} or upload an image`, `Edite com ${editorName} ou envie uma imagem`, `Edita con ${editorName} o sube una imagen`) : tr('Upload an edited image', 'Envie uma imagem editada', 'Sube una imagen editada')}</div>}</figure>
     </div>
     <div className="first-frame-form">

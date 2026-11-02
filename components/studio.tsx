@@ -253,12 +253,14 @@ export default function Studio() {
   // defaults to it.
   const editMode = mode === 'motion' && (firstFrameSlot !== null || panelProfile === EDIT_MODEL || panelProfile === 'motion_solar_ffp');
   const tipModel = mode === 'motion' ? (editMode ? EDIT_MODEL : panelProfile || 'motion') : null;
+  // The First Frame is named by its Picture tag in the prompt (@PictureN becomes <Picture N>).
+  const frameTag = `@Picture${firstFrameSlot ?? 1}`;
   const promptTips = tipModel === EDIT_MODEL ? [
-    // Published VFX Edit prompting: one English sentence, the change first, then what has to survive it. Henge adds
-    // the `vfx_edit:` trigger and names the First Frame itself.
-    {label: tr('fire in his hands', 'fogo nas mãos dele', 'fuego en sus manos'), text: "Add fire effects to the man's hands while preserving his identity, pose, motion, clothing, framing, lighting and background."},
-    {label: tr('turn it into claymation', 'transformar em massinha', 'convertirlo en plastilina'), text: 'Turn the whole scene into claymation while preserving the performer, his pose, motion, clothing, framing, lighting and the background layout.'},
-    {label: tr('remove the car behind him', 'remover o carro atrás dele', 'quitar el coche detrás'), text: 'Remove the car behind the man while preserving his identity, pose, motion, clothing, framing, lighting and the rest of the background.'},
+    // The First Frame models carry the edited frame through the clip; here the edit is a new character, so the
+    // sentence names who changes and what of the guide stays. Henge adds the trigger (if any) and names the frame.
+    {label: tr('replace the character', 'trocar o personagem', 'cambiar el personaje'), text: `Replace the character with the one in ${frameTag}, the edited first frame, keeping the guide's pose, motion, timing, framing, lighting and background.`},
+    {label: tr('keep the outfit', 'manter a roupa', 'mantener la ropa'), text: `Replace the character with the one in ${frameTag}, the edited first frame, keeping their face, hair and outfit stable in every frame and the pose and motion of the guide.`},
+    {label: tr('several characters', 'vários personagens', 'varios personajes'), text: `Replace each character with the matching one in ${frameTag}, the edited first frame, keeping who is where, their poses, motion, framing and the background.`},
   ] : tipModel === 'motion_tara' ? [
     // TARA has the same goal as Motion Transfer — copy the performance — through the experimental path: the guide stays
     // a native video reference with temporally aligned attention. Its edge is several people, objects or vehicles at
@@ -1176,7 +1178,7 @@ export default function Studio() {
               {mode === 'sharpness' && <pre className="native-preview">Enhance this video with sharp, crisp details while preserving a natural photorealistic appearance.</pre>}</div>}
             
             {mode === 'sharpness' && <div id="sharpness-controls"/>}
-            {!fixedRecipe && <div className="prompt-editor"><textarea ref={textarea} aria-label="Execution prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={editMode ? t.phEdit : mode === 'swap' ? t.phSwap : t.phMotion}/>{query && suggestions.length > 0 && <div className="mention-menu">{suggestions.map(tag => <button key={tag} onClick={() => insertTag(tag)}>{tag}</button>)}</div>}{mode === 'motion' && promptTips.length > 0 && <div className="prompt-tips"><div className="tip-examples">{promptTips.map(tip => <button type="button" key={tip.text} title={tip.text} onClick={() => setPrompt(tip.text)}>{tip.label}</button>)}</div><small className="tip-hint">{tipsHint}</small></div>}</div>}
+            {!fixedRecipe && <div className="prompt-editor"><textarea ref={textarea} aria-label="Execution prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={editMode ? t.phEdit.replace('{frame}', frameTag) : mode === 'swap' ? (swapFirstFrame ? (activePictures.length ? t.phSwapFirstPic.replace('{who}', `@Picture${activePictures[0].slot}`) : t.phSwapFirst) : t.phSwap) : t.phMotion}/>{query && suggestions.length > 0 && <div className="mention-menu">{suggestions.map(tag => <button key={tag} onClick={() => insertTag(tag)}>{tag}</button>)}</div>}{mode === 'motion' && promptTips.length > 0 && <div className="prompt-tips"><div className="tip-examples">{promptTips.map(tip => <button type="button" key={tip.text} title={tip.text} onClick={() => setPrompt(tip.text)}>{tip.label}</button>)}</div><small className="tip-hint">{tipsHint}</small></div>}</div>}
             {!fixedRecipe && promptMode === 'auto' && <div className="auto-prompt-bar">
               {autoSource === null
                 ? <button type="button" className="primary" disabled={working || !prompt.trim()} onClick={autoPrompt}><Icon name="spark" size={14}/>{working ? tr('Writing…', 'Escrevendo…', 'Escribiendo…') : tr('Write the prompt now', 'Escrever o prompt agora', 'Escribir el prompt ahora')}</button>

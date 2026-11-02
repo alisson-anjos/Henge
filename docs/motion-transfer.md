@@ -110,9 +110,9 @@ It runs on **SolarRenderer's own conditioning and sampler**, ported into the Hen
 
 Motion Transfer TARA can also take a First Frame, and it often tracks it well — it is the multi-subject model, and it is
 multi-reference like Motion Transfer — but it was trained for binding several subjects, not for FFP: the clip can come out
-changed beyond the frame you edited. When you want a change to the clip itself — add fire,
-remove the car, restyle the scene — that is the Motion Transfer FFP model, and the prompt is the single-sentence
-`vfx_edit:` form rather than the six-section one.
+changed beyond the frame you edited. When the clip should start from an edited frame (typically the guide frame with
+the character already replaced), that is the Motion Transfer FFP model, and the prompt is a single sentence rather than
+the six-section one.
 
 Whenever a **First Frame** is attached — a picture of the clip edited in advance, by hand or with the frame editor
 (FIBO 2.0 by default, Qwen-Image 2.1 Turbo or FLUX Klein if installed) — the studio explains the picture's role in the prompt
@@ -133,8 +133,8 @@ They are deliberately narrow, because each model does exactly one job: **Motion 
 from the guide and gets the people, the place and the look from up to 11 reference pictures, so the video is never a
 copy of the guide; **Motion Transfer TARA** has the same goal through the experimental path and is the one to pick when
 several people, objects or vehicles have to keep their identity, so its sentences name what each picture supplies;
-**Motion Transfer FFP** (the merge with VFX Edit) states a change to the video itself and what has to
-stay as it is. Clicking one drops it in, then **Improve** writes the full caption.
+**Motion Transfer FFP** names the edited first frame (`@PictureN`), who is replaced and what of the guide
+stays. Clicking one drops it in, then **Improve** writes the full caption.
 
 **Copying a performance** (Motion Transfer, Motion Transfer TARA). One English line saying what to take from the guide
 is enough — `Improve` expands it into the six-part H3 caption the model was trained on (`subject_definitions`,
@@ -149,17 +149,17 @@ Name the picture that performs (`@Picture1`), say what changes (setting, style, 
 framing, camera path). With **Exact text** the same line is sent verbatim, so write it in the six-part form yourself in
 that case.
 
-**Changing the clip itself** (Motion Transfer FFP). A first-frame edit is prompted with one English
-sentence, the change first and then what has to survive it — no subject definitions, because the First Frame already
-says who and where:
+**Starting from an edited first frame** (Motion Transfer FFP). Prompt it with one English sentence that names the
+frame by its Picture tag, says who is replaced and what of the guide stays — no subject definitions, because the First
+Frame already says who and where:
 
 ```text
-vfx_edit: Add fire effects to the man's hands while preserving his identity, pose, motion, clothing, framing,
-lighting and background.
+Replace the character with the one in @Picture2, the edited first frame, keeping the guide's pose, motion, timing,
+framing, lighting and background.
 ```
 
-Henge adds the `vfx_edit:` trigger if you leave it out, and appends the First Frame clause naming `<Picture N>`, so the
-sentence itself only carries the edit. Never ask to preserve the very thing being edited — a style change that says
+Henge adds the model's trigger itself and appends the First Frame clause naming `<Picture N>`, so the sentence only
+carries the edit. Never ask to preserve the very thing being edited — a style change that says
 “keep the lighting and colours” fights itself.
 
 **The frame you edit is the strongest control there is.** Render starts from it and keeps its materials, colours and

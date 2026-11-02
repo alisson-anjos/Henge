@@ -155,13 +155,13 @@ test('the model picker offers the four models and follows the First Frame', asyn
   await expect(page.locator('.ffp-card .ffp-current')).toBeVisible();
   await expect(picker(page).locator('.select-value .model-name')).toHaveText(MODELS.edit.label);
   await expect(turboValue(page)).toContainText('DMAD 4-step');
-  await expect(page.locator('.prompt-tips button').first()).toHaveText(/fire in his hands|fogo nas mãos dele|fuego en sus manos/);
-  await expect(page.locator('.tip-hint')).toContainText(/survive|sobreviver|seguir igual/);
+  await expect(page.locator('.prompt-tips button').first()).toHaveText(/replace the character|trocar o personagem|cambiar el personaje/);
+  await expect(page.locator('.tip-hint')).toContainText(/who is replaced|quem é trocado|a quién se reemplaza/);
 
   // A deliberate model choice survives re-renders. An attached First Frame still makes this an edit, so the edit
   // sentences stay even when the user moves to TARA: the First Frame already says how the video starts.
   await chooseModel(page, MODELS.tara.label);
   await expect(picker(page).locator('.select-value .model-name')).toHaveText(MODELS.tara.label);
-  await expect(page.locator('.prompt-tips button').first()).toHaveText(/fire in his hands|fogo nas mãos dele|fuego en sus manos/);
+  await expect(page.locator('.prompt-tips button').first()).toHaveText(/replace the character|trocar o personagem|cambiar el personaje/);
   expect(errors).toEqual([]);
 });
