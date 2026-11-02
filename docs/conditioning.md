@@ -23,10 +23,13 @@ In plain words:
 - **TARA**: the guide stays a native video reference, and a temporal attention bias keeps each generated frame aligned
   with the matching guide frame. No new trained layers.
 
-**In the studio** (Settings → *Guide for the text encoder*, shown with Guide Latents in every mode): **Latents +
-CLIP** (path 3, the default), **Latents only** (path 2) or **Auto** (each model's default: path 3 for Motion Transfer
-v1.0 and TARA v1.0, path 2 for Character Swap, Head Swap, Sharpness and Motion Transfer FFP v1.0). Use *Latents only* when the replaced
-person's clothes or hair leak into the result. API and MCP jobs that omit `guide_clip` get `auto`.
+**In the studio** (Settings → *Guide for the text encoder*, shown with Guide Latents in every mode): **Auto** is the
+default and follows how each model was trained (`clip_context` in `backend/workflows.py`): path 3 (latents + CLIP) for
+Motion Transfer v1.0 and Motion Transfer TARA v1.0, path 2 (latents only) for Character Swap, Head Swap, Sharpness and the
+First Frame models. The Auto button shows which one the selected model gets. **Latents + CLIP** and **Latents only**
+force one path for every model. Settings saved before this default (which forced Latents + CLIP everywhere, so Character
+Swap and Head Swap got CLIP they were not trained with) move to Auto once. API and MCP jobs that omit `guide_clip` get
+`auto`.
 
 Code: `HengeH3Conditioning` (`backend/comfy_nodes/henge/__init__.py`) builds paths 2 and 3; `guide_context` turns the
 CLIP frames on, per model (`clip_context` in `backend/workflows.py`). TARA uses `BFSMiniMaxH3NativeTemporal` from

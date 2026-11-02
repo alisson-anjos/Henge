@@ -370,6 +370,13 @@ def qwen21_model(info=None):
     except Exception:return QWEN21['unet']
     listed=comfy_choices(info,'UNETLoader','unet_name')
     return next((m for m in (QWEN21['unet'],QWEN21['base']) if m in listed),QWEN21['unet'])
+def qwen21_sampler(info=None):
+    """Qwen-Image 2.1's turbo schedule samples with deis_2m; ComfyUI builds without it (the worker's pinned one) have
+    deis, then euler."""
+    try:info=comfy_info() if info is None else info
+    except Exception:info={}
+    listed=comfy_choices(info,'KSampler','sampler_name')
+    return next((s for s in ('deis_2m','deis') if s in listed),'euler' if listed else 'deis')
 def qwen21_lora(info=None):
     """The 5-step turbo LoRA. The full checkpoint plus this LoRA runs the same short, CFG 1 schedule as the 7.3 GB
     Turbo checkpoint, so the fast edit does not depend on downloading that one."""
@@ -415,7 +422,7 @@ def editor_graph(editor,image,refs,instruction,seed,info=None):
     """Build the edit graph for one editor, picking the Qwen-Image 2.1 checkpoint that is actually on disk."""
     build=EDITOR_GRAPHS.get(editor)
     if build is None:raise ValueError('Frame editing needs an image editor (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein)')
-    return build(image,refs,instruction,seed,**({'unet':qwen21_model(info),'lora':qwen21_lora(info)} if editor in ('qwen21','bfs') else {}))
+    return build(image,refs,instruction,seed,**({'unet':qwen21_model(info),'lora':qwen21_lora(info),'sampler':qwen21_sampler(info)} if editor in ('qwen21','bfs') else {}))
 
 # First-frame edit instructions per operation; the painted area (when given) is the only part that changes.
 EDIT_OPS={'replace':'Replace {what} with {target}.','remove':'Remove {what} and fill the space naturally with what would be behind it.',

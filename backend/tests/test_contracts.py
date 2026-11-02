@@ -303,6 +303,17 @@ class WorkflowContracts(unittest.TestCase):
   from server import editor_instruction,EDITORS
   self.assertEqual(editor_instruction('bfs','swap','','',1),BFS['prompt']);self.assertTrue(editor_instruction('bfs','swap','','keep the microphone',1).endswith('. keep the microphone'))
   self.assertIn('magenta',editor_instruction('fibo','swap','','',1,True));self.assertEqual(EDITORS[-1][0],'bfs')
+ def test_qwen21_sampler_follows_what_comfyui_has(self):
+  # The worker's pinned ComfyUI has no deis_2m: Qwen-Image 2.1 (and BFS on it) must not ask for a sampler it lacks.
+  import server,workflows
+  ks=lambda names:{'KSampler':{'input':{'required':{'sampler_name':[names]}}}}
+  self.assertEqual(server.qwen21_sampler(ks(['euler','deis','lcm'])),'deis')
+  self.assertEqual(server.qwen21_sampler(ks(['euler','deis_2m','deis'])),'deis_2m')
+  self.assertEqual(server.qwen21_sampler(ks(['euler'])),'euler')
+  self.assertEqual(server.qwen21_sampler({}),'deis')
+  g=workflows.qwen21_graph('f.png',[],'x',1,sampler='deis');self.assertEqual(g['6']['inputs']['sampler_name'],'deis')
+  self.assertEqual(workflows.bfs_graph('f.png',['p.png'],'',1,sampler='deis')['6']['inputs']['sampler_name'],'deis')
+
  def test_the_picker_tags_say_what_each_model_was_trained_for(self):
   # The model names cannot carry every caveat, so each model ships tags and the picker spells them out.
   # The point is honesty: a model that handles a task without having been trained for it must not look

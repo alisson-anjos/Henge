@@ -358,19 +358,19 @@ def klein3_graph(image,refs,instruction,seed,steps=16,prefix=None):
 # TextEncodeQwenImage21 feeds the pictures to the Qwen3-VL tower AND as VAE reference latents, and returns a latent at
 # the FIRST picture's size: resolution=0 keeps the frame's own size instead of cropping it to about 1 megapixel, which
 # is what keeps the edit pixel-aligned with the guide. The Turbo checkpoint is the default: 8 steps at CFG 1 on
-# deis_2m/simple; the 5-step LoRA does the same on the full checkpoint when only that one is installed, and only the
+# deis_2m/simple (deis_2m comes from the RES4LYF node pack; without it, core ComfyUI's deis); the 5-step LoRA does the same on the full checkpoint when only that one is installed, and only the
 # non-distilled build alone falls back to 24 steps and CFG 2.5 on euler/simple.
 QWEN21={'unet':'qwen_image_2.1_turbo_int8_convrot.safetensors','base':'qwen_image_2.1_int8_convrot.safetensors',
         'clip':'qwen3vl_8b_int8_convrot.safetensors','vae':'qwen_image_2.1_vae_bf16.safetensors',
         'turbo':'henge/p_q_image_2.1_5_steps_v0.1_comfyui_bf16.safetensors'}
-def qwen21_graph(image,refs,instruction,seed,unet=None,lora='',steps=None,cfg=None,prefix=None):
+def qwen21_graph(image,refs,instruction,seed,unet=None,lora='',steps=None,cfg=None,prefix=None,sampler=None):
     unet=unet or QWEN21['unet'];quick=unet==QWEN21['unet'] or bool(lora)
     steps=steps or (5 if lora else 8 if unet==QWEN21['unet'] else 24);cfg=cfg if cfg is not None else (1. if quick else 2.5)
     g={'1':node('UNETLoader',unet_name=unet,weight_dtype='default'),'2':node('CLIPLoader',clip_name=QWEN21['clip'],type='qwen_image',device='default'),
        '3':node('VAELoader',vae_name=QWEN21['vae']),'10':node('LoadImage',image=image),
        '5':node('TextEncodeQwenImage21',clip=['2',0],prompt=instruction,negative_prompt='',vae=['3',0],resolution=0,**{'images.image_1':['10',0]}),
        '6':node('KSampler',model=['9',0] if lora else ['1',0],positive=['5',0],negative=['5',1],latent_image=['5',2],seed=seed,steps=steps,cfg=cfg,
-                sampler_name='deis_2m' if quick else 'euler',scheduler='simple',denoise=1.),
+                sampler_name=(sampler or 'deis_2m') if quick else 'euler',scheduler='simple',denoise=1.),
        '7':node('VAEDecode',samples=['6',0],vae=['3',0]),'8':node('SaveImage',images=['7',0],filename_prefix=prefix or image.rsplit('.',1)[0]+'_qwen21')}
     for i,r in enumerate(refs,2):g[str(20+i)]=node('LoadImage',image=r);g['5']['inputs'][f'images.image_{i}']=[str(20+i),0]
     if lora:g['9']=node('LoraLoaderModelOnly',model=['1',0],lora_name=lora,strength_model=1.)
@@ -385,9 +385,9 @@ BFS={'lora':'henge/bfs_body_swap_v1.0_qwen_2.1.safetensors',
                ' from <image1> with the body from <image2>, strictly preserving the clothing, body shape and proportions from <image2>.'
                ' strictly replicate the exact pose, arm positions, leg positions, hand gestures, head rotation, eye direction and micro'
                ' expressions from <image1>')}
-def bfs_graph(image,refs,instruction,seed,unet=None,lora='',**_):
+def bfs_graph(image,refs,instruction,seed,unet=None,lora='',sampler=None,**_):
     if len(refs)<1:raise ValueError('BFS Body Swap needs the character picture as image 2')
-    g=qwen21_graph(image,refs[:1],instruction or BFS['prompt'],seed,unet=unet,lora=lora,prefix=image.rsplit('.',1)[0]+'_bfs')
+    g=qwen21_graph(image,refs[:1],instruction or BFS['prompt'],seed,unet=unet,lora=lora,prefix=image.rsplit('.',1)[0]+'_bfs',sampler=sampler)
     g['30']=node('LoraLoaderModelOnly',model=['9',0] if lora else ['1',0],lora_name=BFS['lora'],strength_model=1.);g['6']['inputs']['model']=['30',0]
     g['31']=node('ImageScaleToTotalPixels',image=['10',0],upscale_method='lanczos',megapixels=2.,resolution_steps=16)
     g['32']=node('ImageScaleToTotalPixels',image=['22',0],upscale_method='lanczos',megapixels=.59,resolution_steps=16)

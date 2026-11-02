@@ -9,6 +9,19 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-02
 
+### Each model gets the guide the way it was trained; Qwen-Image 2.1 / BFS on serverless
+- **Guide for the text encoder now defaults to Auto**: each model as it was trained (`clip_context`): Latents + CLIP
+  for Motion Transfer v1.0 and TARA, **Latents only for Character Swap, Head Swap**, Sharpness and the First Frame
+  models. The UI used to force Latents + CLIP for every mode, so Character Swap and Head Swap were fed guide frames
+  through CLIP they were not trained with (and the original performer's clothes or hair could leak). The Auto button
+  shows what the selected model gets; Latents + CLIP and Latents only still force one path. Settings saved before this
+  (`defaults_v5`) move to Auto once; a choice made afterwards is kept.
+- **Qwen-Image 2.1 and BFS Body Swap edits failed on the serverless worker** (`sampler_name: 'deis_2m' not in list`):
+  `deis_2m` comes from the RES4LYF node pack, which the worker does not have. The graph now uses `deis_2m` only when
+  ComfyUI lists it, else core `deis`, else `euler`.
+- Validation: unit tests, TypeScript, Playwright on the rebuilt local UI (Auto · Latents only for Character Swap and
+  Head Swap; old saved settings migrate, new ones stick), and a real BFS Body Swap edit on the serverless worker.
+
 ### Fix: pods could not generate, and the SolarRenderer FFP LoRA failed to download (issue #3)
 - **Every generation on a pod or a local ComfyUI failed** with `'NoneType' object has no attribute 'get'` since
   v2026.11.01.1: the change that reconnects ComfyUI's progress feed dropped the line that runs the render loop, so the

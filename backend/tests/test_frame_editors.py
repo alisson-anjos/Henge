@@ -71,7 +71,7 @@ class FrameEditorSelectionTests(unittest.TestCase):
             self.assertEqual(graph['1']['inputs']['unet_name'],workflows.QWEN21['base'])
             self.assertEqual(graph['9']['inputs']['lora_name'],workflows.QWEN21['turbo'])
             self.assertEqual(graph['6']['inputs']['model'],['9',0])
-            self.assertEqual((graph['6']['inputs']['steps'],graph['6']['inputs']['cfg'],graph['6']['inputs']['sampler_name']),(5,1.,'deis_2m'))
+            self.assertEqual((graph['6']['inputs']['steps'],graph['6']['inputs']['cfg'],graph['6']['inputs']['sampler_name']),(5,1.,'deis'))  # deis_2m only when ComfyUI lists it (RES4LYF)
             self.assertEqual(server.qwen21_lora(turbo_only),'')
             self.assertNotIn('9',server.editor_graph('qwen21','henge/job/frame.png',[],'Add fire effects.',7,info=turbo_only))
         with patch.object(workflows,'INSTALLED',{'LoraLoaderModelOnly':set()}):
@@ -105,7 +105,7 @@ class FrameEditorSelectionTests(unittest.TestCase):
         with patch.object(server,'frame_editors',return_value=[('fibo','FIBO 2.0 edit turbo'),('qwen21','Qwen-Image 2.1 Turbo')]), \
              patch.object(server,'execute_graph',return_value={}) as infer,patch.object(server,'image_from_output',side_effect=fake_image):
             client=TestClient(server.app)
-            for editor,sampler in (('fibo','euler'),('qwen21','deis_2m')):
+            for editor,sampler in (('fibo','euler'),('qwen21','deis')):
                 response=client.post('/frame-edit',data={'op':'add','instruction':'Add fire effects.','editor':editor},
                                      files={'frame':('frame.png',png(),'image/png')})
                 self.assertEqual(response.status_code,200,response.text)
