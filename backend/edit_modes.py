@@ -145,6 +145,39 @@ def swap_first_frame(prompt,edited,slot=None):
             ' and pose: start from it, continue from it and keep that look through the whole clip while following the guide\'s motion, timing'
             ' and camera.')
 
+# SolarRenderer's six-part prompt (ported from SolarRenderer skills/solarrenderer-caption/conditions.py, Apache-2.0).
+# Henge's guide is real footage, not one of the six trained structure types, so it uses SolarRenderer's own form for an
+# untrained structure ("custom"): what <Video 1> looks like, and what of its look is not shown.
+SOLAR_GUIDE=('the original video footage of the scene, from the same camera as the target video',
+             '(frame-by-frame layout, shapes, character poses and motion, camera): attribute_transfer - the layout, shapes, '
+             'poses, motion and camera are followed exactly; materials, colours and lighting are not given by {v} and are the '
+             'target video\'s own; the original appearance of {v} is not shown')
+SOLAR_DETAIL_INSTRUCTION=("This image is the edited first frame of a video; the video keeps the motion of its original footage. "
+    "Write the detailed description of the finished video for a video model, in English, 350 to 500 words: first the look "
+    "(style, materials, colours, light, weather), then '[Shot 1]' and what is seen, in order: the people or subjects as they "
+    "look in this frame, what they do, and how the camera moves. Describe only what this frame shows and what the request "
+    "asks; never name real people. Request: {request}. Output only the description.")
+
+def solar_prompt(summary,detail,first_frame=True,sound='N/A',music='N/A'):
+    """The six-part SolarRenderer prompt: <Video 1> is the guide (structure); <Video 2> the first frame, held still."""
+    what,kept=SOLAR_GUIDE
+    s_lab='<Video 1>';f_lab='<Video 2>' if first_frame else None
+    lines=[f'{s_lab} is {what}.'];keep=[f'{s_lab} {kept.format(v=s_lab)}.'];tasks=['reference generation']
+    detail=' '.join(str(detail).split()).strip()
+    if first_frame:
+        lines.append(f'{f_lab} is the first frame of [Shot 1], held still.')
+        keep.append(f'{f_lab} ([Shot 1] first frame): fully_preserved - the composition, subjects, materials, colours and '
+                    f'lighting of {f_lab} are the target video\'s first frame.')
+        tasks.insert(0,'keyframe completion')
+        head=f'The target video begins from {f_lab} and follows the frame-by-frame structure and motion of {s_lab}. '
+        detail=re.sub(r'\[Shot 1\]\s*',f'[Shot 1] The shot begins from {f_lab}. ',detail,count=1) if '[Shot 1]' in detail else f'[Shot 1] The shot begins from {f_lab}. '+detail
+    else:head=f'The target video follows the frame-by-frame structure and motion of {s_lab}. '
+    return ('subject_definitions:\n'+'\n'.join(lines)+'\n\n'
+            f"summary:\n[{' + '.join(tasks)}] {head}{' '.join(str(summary).split()).strip()}\n\n"
+            'retention_analysis:\n'+'\n'.join(keep)+'\n\n'
+            f'detailed_description:\n{detail}\n\n'
+            f'overall_soundscape:\n{sound}\n\nnon_diegetic_music:\n{music}')
+
 def first_frame_only_prompt(request=''):
     """Character Swap with an edited first frame and no reference pictures: who each person becomes is shown only in
     that frame. The v1.1 body_swap wording, with the first frame in place of <Picture 1>; the user's request follows."""

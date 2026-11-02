@@ -500,3 +500,7 @@ NODE_CLASS_MAPPINGS['HengeMolmo']=HengeMolmo
 
 from .temporal_windows import HengeH3PureWindows
 NODE_CLASS_MAPPINGS['HengeH3PureWindows']=HengeH3PureWindows
+
+from .solar import HengeSolarConditioning,HengeSolarModel
+NODE_CLASS_MAPPINGS['HengeSolarConditioning']=HengeSolarConditioning
+NODE_CLASS_MAPPINGS['HengeSolarModel']=HengeSolarModel

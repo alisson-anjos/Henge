@@ -7,6 +7,24 @@ This log starts with the 2026-10-28 updates; earlier commits remain in the Git h
 Render and RunPod have been updated; each entry records those states separately. Test results are described with
 their scope; CPU tests do not replace generation with the real models.
 
+## 2026-11-02
+
+### Motion Transfer SolarRenderer FFP runs on SolarRenderer's own conditioning
+- `motion_solar_ffp` no longer goes through Henge's H3 conditioning. SolarRenderer's nodes are ported into the Henge
+  node pack (Apache-2.0, see THIRD_PARTY_NOTICES.md), so workers need no extra node pack:
+  `HengeSolarConditioning` (the guide as structure `<Video 1>`, the edited frame as `<Video 2>` held still, both shown
+  to the text encoder at 2 fps and laid over frame 0 as keyframes) and `HengeSolarModel` (the soundtrack held at H3's
+  encoded silence, 100 KB asset shipped with the nodes). Sampling follows SolarRenderer: its 4-step LoRA under the
+  control LoRA, `lcm` on its shift-12 four-step sigmas, `BasicGuider`.
+- Its prompt is SolarRenderer's six-part format: the request as the summary, a 350-500 word detailed description of the
+  edited frame's look and the action written by the planner, and the fixed sentences, with the live-action guide
+  described in SolarRenderer's form for an untrained structure.
+- Shots are capped at 158 frames (its training length; the held silence covers 170). A continuing shot starts from the
+  rendered frame where it begins; after a camera cut the shot gets the structure only.
+- Validation: unit tests (graph, sigmas against SolarRenderer's, prompt format, shot cap) and a CPU run of the ported
+  conditioning node with a stub CLIP/VAE (frames snapped to 17n+5, both videos shown, two frame-0 keyframes, the AV
+  latent, silence long enough). **Needs a new worker image**; not yet rendered on a GPU.
+
 ## 2026-11-01
 
 ### Motion Transfer SolarRenderer FFP v1.0

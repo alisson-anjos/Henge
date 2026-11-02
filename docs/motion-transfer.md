@@ -91,9 +91,22 @@ turbo stays selectable under Advanced.
 **Motion Transfer SolarRenderer FFP v1.0** is SolarRenderer control on its own (`solar_control.safetensors`, the
 Enderfga/SolarRenderer control LoRA converted to ComfyUI H3 keys), without the VFX Edit LoRA. It is always listed but only
 for a clip that starts from an edited first frame: the studio and the bridge refuse to generate with it until a First
-Frame is attached, and attaching one still selects Motion Transfer FFP v1.0 by default. Its prompt is the same single
-sentence without the `vfx_edit:` trigger; guide latents only, standard DMAD 4-step turbo. Its weights are still in a
+Frame is attached, and attaching one still selects Motion Transfer FFP v1.0 by default. Its weights are still in a
 private dataset (`HF_TOKEN`).
+
+It runs on **SolarRenderer's own conditioning and sampler**, ported into the Henge nodes (`HengeSolarConditioning`,
+`HengeSolarModel`), not on Henge's H3 conditioning:
+
+- the prepared guide is the structure video `<Video 1>` and the edited frame is `<Video 2>`, held still; both are shown
+  to H3's text encoder at 2 fps and laid over the target from frame 0 as keyframes (the guide over every frame);
+- its four-step LoRA under the control LoRA, `lcm` on its shift-12 four-step grid with a `BasicGuider`, and the
+  soundtrack held at H3's encoded silence, as SolarRenderer was trained (the Turbo, Method and CFG settings do not apply);
+- its six-part prompt: `subject_definitions`, `summary` (your request), `retention_analysis`, `detailed_description`
+  (the planner describes the edited frame's look and the action, 350-500 words), soundscape and music. A live-action
+  guide is not one of its six trained structure types, so it is described with SolarRenderer's form for an untrained
+  structure;
+- shots are at most 158 frames (its training length). A continuing shot starts from the rendered frame where it begins;
+  a shot after a camera cut has the structure only.
 
 Motion Transfer TARA can also take a First Frame, and it often tracks it well — it is the multi-subject model, and it is
 multi-reference like Motion Transfer — but it was trained for binding several subjects, not for FFP: the clip can come out

@@ -339,6 +339,34 @@ class WorkflowContracts(unittest.TestCase):
   g=h3_graph('v.mp4',['f.png'],'Add rain.',512,288,107,107,'motion_solar_ffp',1,4,'original',[],'human',0,turbo=m['turbo_default'])
   self.assertEqual(g['3']['inputs']['lora_name'],'henge/solar_control.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
 
+ def test_solarrenderer_ffp_uses_solarrenderer_conditioning(self):
+  # SolarRenderer's own pipeline: its conditioning (guide = structure <Video 1>, the frame = <Video 2>), its 4-step LoRA
+  # under the control LoRA, the held silent soundtrack, lcm on its shift-12 grid, a BasicGuider, its six-part prompt.
+  import workflows
+  from edit_modes import solar_prompt
+  m=workflows.MODELS['motion_solar_ffp'];self.assertEqual(m['conditioning'],'solar')
+  g=h3_graph('v.mp4',['f.png'],'x',512,288,107,107,'motion_solar_ffp',1,4,'original',[],'human',0,turbo='solar4',cfg=2.,conditioning_mode='tara')
+  g=workflows.solar_graph(g,'P','henge/j/first.png',9)
+  self.assertEqual(g['9']['class_type'],'HengeSolarConditioning');self.assertEqual(g['9']['inputs']['structure'],['8',0]);self.assertEqual(g['9']['inputs']['first_frame'],['27',0])
+  self.assertEqual(g['27']['inputs']['image'],'henge/j/first.png');self.assertEqual(g['9']['inputs']['prompt'],'P')
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solar_control.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0]);self.assertIn(g['2']['inputs']['lora_name'],workflows.SOLAR_TURBOS)
+  self.assertEqual(g['28']['class_type'],'HengeSolarModel');self.assertEqual(g['28']['inputs']['seed'],9)
+  self.assertEqual(g['10'],{'class_type':'BasicGuider','inputs':{'model':['28',0],'conditioning':['9',0]}})
+  self.assertEqual(g['12']['inputs']['sampler_name'],'lcm');self.assertEqual(g['14']['inputs']['latent_image'],['9',1])
+  for gone in ('4','21','24'):self.assertNotIn(gone,g)
+  self.assertEqual([round(x,4) for x in workflows.solar_sigmas()],[1.0,0.973,0.9231,0.8,0.0])
+  self.assertNotIn('first_frame',workflows.solar_graph(h3_graph('v.mp4',[],'x',512,288,107,107,'motion_solar_ffp',1,4,'original',[],'human',0),'P',None)['9']['inputs'])
+  p=solar_prompt('A man waves.','The look is warm. [Shot 1] He waves.')
+  self.assertIn('<Video 2> is the first frame of [Shot 1], held still.',p);self.assertIn('[Shot 1] The shot begins from <Video 2>. He waves.',p)
+  self.assertTrue(p.startswith('subject_definitions:\n<Video 1> is the original video footage of the scene'))
+  self.assertNotIn('<Video 2>',solar_prompt('A','B',False))
+  # Its shots stop at the trained 158 frames.
+  import server
+  job={'request':{**self.request(),'mode':'motion','processing':{'requested_seconds_per_shot':15,'mode':'context_window','context_frames':22}},'options':{'profile':'motion_solar_ffp'}}
+  job['request']['video']={**job['request']['video'],'start_seconds':0,'end_seconds':20}
+  with patch.object(server,'camera_cuts',return_value=[]):shots,_=server.plan_shots(job)
+  self.assertTrue(shots and max(x['length'] for x in shots)<=158)
+
  def test_motion_model_list_and_first_frame_default(self):
   import json,workflows
   # The studio offers three Motion models: the two trained ones and the Edit merge. The superseded comparison LoRAs are

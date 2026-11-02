@@ -13,6 +13,8 @@ config/model-repos.json
 config/*.local.json
 secrets
 **/*.safetensors
+# ...except SolarRenderer's 100 KB held-silence latent, which the Henge SolarRenderer nodes load.
+!backend/comfy_nodes/henge/assets/h3_silence_153_158_170.safetensors
 **/*.pt
 **/*.mp4
 # ...except the Community examples' guide videos, which the UI serves.

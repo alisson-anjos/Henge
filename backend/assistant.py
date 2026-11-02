@@ -57,7 +57,8 @@ frame with the installed image editor, or `picture` when the user already attach
 becomes the first frame and its changes propagate through the whole clip while the guide keeps the motion, timing and
 camera; the line explaining the Picture's role is added to the prompt automatically, so do not write it yourself. Use
 Motion Transfer SolarRenderer FFP v1.0
-(profile motion_solar_ffp, SolarRenderer control alone) is an alternative for the same first-frame edits when the user asks
+(profile motion_solar_ffp, SolarRenderer control alone, on SolarRenderer's own conditioning and four-step sampler; its
+turbo/method/CFG settings do not apply) is an alternative for the same first-frame edits when the user asks
 for it; it refuses to run without a First Frame. TARA / Character Swap only when the user is replacing who or what appears. If no image editor is installed, say so and
 ask the user to use the "Choose and edit a frame" card in Motion Transfer, or attach a frame they edited elsewhere.
 

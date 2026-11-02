@@ -15,10 +15,10 @@ import moving_plate
 import app_updates
 import model_installer
 from model_installs import InstallManager
-from workflows import split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,bfs_graph,BFS,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
+from workflows import solar_graph,SOLAR_MAX_FRAMES,split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,bfs_graph,BFS,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements,comfy_listed
-from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,swap_first_frame,first_frame_only_prompt,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
+from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,swap_first_frame,first_frame_only_prompt,solar_prompt,SOLAR_DETAIL_INSTRUCTION,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -865,6 +865,14 @@ def planning(job):
         # FFP takes the same sentence without the trigger.
         first=r.get('first_frame_slot')
         sentence=ask(FFP_INSTRUCTION.format(request=r['prompt']),guide,'vlm_prompt',256) if job['options'].get('enhance_prompt',True) else r['prompt']
+        if ffp_model.get('conditioning')=='solar':
+            # SolarRenderer's six-part prompt: the request as the summary, the edited frame's look and the action as the
+            # detailed description; the guide is <Video 1>, the frame <Video 2>.
+            detail=clean_details(ask(SOLAR_DETAIL_INSTRUCTION.format(request=r['prompt']),dict(pictures)[first],'vlm_prompt',1024),4000) if job['options'].get('enhance_prompt',True) and first in dict(pictures) else r['prompt']
+            plan=fixed_plan('motion',solar_prompt(sentence,detail),'Render the guide from the edited first frame with SolarRenderer'+(f' (Picture {first}).' if first else '.'))
+            plan['solar']={'summary':sentence,'detail':detail}
+            plan['picture_roles']=[{'slot':s,'role':'style' if s==first else 'identity','description':'Edited first frame' if s==first else ''} for s in slots]
+            save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the SolarRenderer prompt before generating.',step=None,step_total=None);return
         plan=fixed_plan('motion',ffp_prompt(sentence,first,ffp_model.get('trigger','vfx_edit')),'Edit the guide video as requested'+(f'; Picture {first} is the edited first frame to propagate.' if first else '.'))
         plan['picture_roles']=[{'slot':s,'role':'style' if s==first else 'identity','description':'Edited first frame' if s==first else ''} for s in slots]
         save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the edit prompt before generating.',step=None,step_total=None);return
@@ -1028,6 +1036,8 @@ def plan_shots(job):
         if processing.get('mode')=='single':per=max(22,grid_frames(total))
         per=min(per,FULL_REFINE_CHUNK)
     elif processing.get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
+    # SolarRenderer was trained on 158-frame clips and its held silence covers 170: no longer shot.
+    if MODELS.get((job.get('options') or {}).get('profile'),{}).get('conditioning')=='solar':per=min(per,SOLAR_MAX_FRAMES)
     context=min(processing.get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17))
     # A single or causal render follows the guide straight through its cuts.
     if processing.get('mode')=='causal':return [{'start':0,'frames':total,'overlap':0,'length':grid_frames(total),'reset_context':True}],context
@@ -1162,7 +1172,7 @@ def generate(job):
     full_refine=full_refiner_enabled(options)
     segment_upscale=None if full_refine else upscale
     segment_windows=None if full_refine else options.get('temporal_windows')
-    pieces=[];guide_pieces=[];previous=None;save(job,shot_urls=[],shot_plans=[])
+    pieces=[];guide_pieces=[];previous=None;solar_prev=(0,0);save(job,shot_urls=[],shot_plans=[])
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         if shot.get('reset_context'):previous=None
@@ -1179,7 +1189,17 @@ def generate(job):
         shot_bindings=[{**s,**({'signature':follow[s['id']]['signature']} if follow[s['id']].get('signature') else {}),
                         **({'carry':follow[s['id']]['carry']} if follow[s['id']].get('carry') and not shot.get('reset_context') else {})} for s in bindings]
         graph=h3_graph(relative,refs,prompt,w,h,shot['length'],shot['frames'],options.get('profile','motion'),seed+i,int(options.get('steps',8)),plan['representation'],shot_bindings,plan['source_kind'],t,audio=bool(r.get('audio_conditioning',{}).get('enabled')),context_video=context_rel,context_count=context,clip_fps=options.get('clip_fps',2),preserve_objects=plan.get('preserve_objects',[]),conditioning_mode=options.get('conditioning_mode','guide'),reference_scale=options.get('reference_scale',1.),context_prompt=options.get('enhance_prompt',True),attention=options.get('attention','comfy kitchen attention'),turbo=options.get('turbo','dmd8'),base=options.get('base','h3'),cfg=options.get('cfg',1.),mask={**({**(options.get('mask') or {}),'mark_opacity':r.get('subject_guidance',{}).get('mark_opacity',1.),'labels':bool(r.get('subject_guidance',{}).get('mark_labels'))} if plan['representation']=='2d' else options.get('mask') or {}),**source_blur_settings(options)},lora_strength=options.get('lora_strength',1.),structure_cfg=options.get('structure_cfg',1.),causal={'chunk':options.get('causal_chunk',5),'window':options.get('causal_window',6)} if causal else None,upscale=segment_upscale,skip_frames=skip,guide_context={'on':True,'off':False}.get(options.get('guide_clip','auto')),gen_audio=bool(r.get('output_audio',{}).get('generate')),regional_attention=options.get('regional_attention'),temporal_windows=segment_windows,sampler_name=options.get('sampler_name','auto'));result_node,guide_node='17','18'
-        if i==0 and first_frame and first_frame_mode=='latent':
+        if MODELS.get(options.get('profile'),{}).get('conditioning')=='solar':
+            # SolarRenderer's own conditioning: shot 1 starts from the edited frame; a continuing shot from the rendered
+            # frame where it begins (the previous shot started skip frames late); after a cut, the structure alone.
+            opening=first_frame.relative_to(INPUT).as_posix() if i==0 and first_frame else None
+            if i and previous is not None:
+                still=inp/f'solar_first_{i:03d}.png';at=max(0,shot['start']-solar_prev[0]-solar_prev[1])
+                run(['ffmpeg','-v','error','-i',str(previous),'-vf',f"select='gte(n\\,{at})'",'-frames:v','1','-y',str(still)])
+                if still.is_file():opening=still.relative_to(INPUT).as_posix()
+            shot_prompt=plan['prompt'] if opening else solar_prompt(plan.get('solar',{}).get('summary',''),plan.get('solar',{}).get('detail',''),False)
+            graph=solar_graph(graph,shot_prompt,opening,seed+i)
+        elif i==0 and first_frame and first_frame_mode=='latent':
             graph['27']={'class_type':'LoadImage','inputs':{'image':first_frame.relative_to(INPUT).as_posix()}};graph['9']['inputs']['first_frame']=['27',0]
         per_shot_identities=r['mode'] in ('swap','motion') and bindings and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True)
         if per_shot_identities:
@@ -1236,7 +1256,7 @@ def generate(job):
         dup=frame_count(piece)-(shot['frames']-shot['overlap']) if shot['overlap'] and pieces else 0
         if dup>0:seam_join(pieces[-1],piece,dup)
         shot_audio(job,outputs,i,shot,piece)
-        pieces.append(piece);previous=rendered
+        pieces.append(piece);previous=rendered;solar_prev=(shot['start'],skip)
         # Each finished shot is viewable and downloadable while the next ones render.
         save(job,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
         guides=[g for g in guides if guide_available(g)]
