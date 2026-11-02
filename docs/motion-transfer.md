@@ -89,7 +89,8 @@ distillation turbo on top: it samples on the standard **DMAD 4-step** turbo (Kij
 turbo stays selectable under Advanced.
 
 **Motion Transfer SolarRenderer FFP v1.0** is SolarRenderer control on its own:
-[Enderfga/SolarRenderer](https://huggingface.co/Enderfga/SolarRenderer)'s control LoRA (Apache-2.0) converted to ComfyUI
+[Enderfga/SolarRenderer](https://huggingface.co/Enderfga/SolarRenderer)'s control LoRA (weights under the MiniMax H3 Community License, with its territorial restrictions; the
+SolarRenderer code is Apache-2.0) converted to ComfyUI
 H3 keys and compressed by per-module SVD keeping 99% of the Frobenius energy (`scripts/resize_lora_energy.py`), public
 in our repository as `loras/solarrenderer/solarrenderer_control_comfy_fro_dyn99.safetensors` (757 MB instead of 5.9 GB,
 model profiles `ffp` and `solar`; a volume that already has the full-rank file keeps using it). `HengeSolarLoraLoader` also loads the release as published (diffusers names). It is always listed

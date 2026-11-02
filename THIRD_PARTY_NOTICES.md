@@ -64,4 +64,5 @@ the FL2VA/Ref2VA adapters to Mellis, Inc. (2026). See [integration details](docs
 (`solar_prompt`) and `backend/comfy_nodes/henge/assets/h3_silence_153_158_170.safetensors` are adapted or copied from
 SolarRenderer (https://github.com/Enderfga/SolarRenderer), licensed under the Apache License, Version 2.0
 (https://www.apache.org/licenses/LICENSE-2.0). Copyright 2026 SolarRenderer authors. Changes: renamed to Henge nodes,
-the guide described with SolarRenderer's form for an untrained structure, integrated into Henge's shot pipeline.
+the structure is a surface-normal map of the guide described with SolarRenderer's form for an untrained structure, the held
+silence is stretched for clips past 170 frames, integrated into Henge's shot pipeline.

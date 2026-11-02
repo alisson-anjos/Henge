@@ -388,7 +388,7 @@
         "ffp",
         "solar"
       ],
-      "note": "Motion Transfer SolarRenderer FFP v1.0: SolarRenderer's control LoRA (Enderfga/SolarRenderer, Apache-2.0) converted to ComfyUI H3 keys and compressed (per-module SVD keeping 99% of the Frobenius energy, 757 MB; the full-rank 5.9 GB file is used when a volume already has it). Used alone, on SolarRenderer's own conditioning, for clips that start from an edited first frame."
+      "note": "Motion Transfer SolarRenderer FFP v1.0: SolarRenderer's control LoRA (Enderfga/SolarRenderer, MiniMax H3 Community License) converted to ComfyUI H3 keys and compressed (per-module SVD keeping 99% of the Frobenius energy, 757 MB; the full-rank 5.9 GB file is used when a volume already has it). Used alone, on SolarRenderer's own conditioning, for clips that start from an edited first frame."
     },
     {
       "id": "sharpness",
