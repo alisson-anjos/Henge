@@ -15,7 +15,7 @@ import moving_plate
 import app_updates
 import model_installer
 from model_installs import InstallManager
-from workflows import solar_graph,SOLAR_MAX_FRAMES,split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,bfs_graph,BFS,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
+from workflows import solar_graph,SOLAR_MAX_FRAMES,SOLAR_NORMALS,split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,bfs_graph,BFS,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements,comfy_listed
 from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,swap_first_frame,first_frame_only_prompt,solar_prompt,SOLAR_DETAIL_INSTRUCTION,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
@@ -1044,7 +1044,7 @@ def plan_shots(job):
         if processing.get('mode')=='single':per=max(22,grid_frames(total))
         per=min(per,FULL_REFINE_CHUNK)
     elif processing.get('mode')=='single' and total<=360:per=max(22,grid_frames(total))
-    # SolarRenderer was trained on 158-frame clips and its held silence covers 170: no longer shot.
+    # SolarRenderer renders one clip of up to 15 s (it was trained on 158 frames; HengeSolarModel stretches its silence).
     if MODELS.get((job.get('options') or {}).get('profile'),{}).get('conditioning')=='solar':per=min(per,SOLAR_MAX_FRAMES)
     context=min(processing.get('context_frames',22),per-17);context=max(5,5+17*((context-5)//17))
     # A single or causal render follows the guide straight through its cuts.
@@ -1570,7 +1570,9 @@ def health():
     # A mode is usable when ComfyUI lists its LoRAs and every base model is on disk.
     unets=comfy_choices(info,'UNETLoader','unet_name')
     if installed:workflows.INSTALLED={**workflows.INSTALLED,**{n:set(comfy_choices(info,n,key)) for n,key in workflows.LOADERS.items()}}
-    models={key:{**value,'available':unknown or (lora_installed(value['lora'],installed) or any(lora_installed(a,installed) for a in value.get('lora_alternatives',[]))) and lora_installed(value['adapter'],installed) and (not value.get('unet') or value['unet'] in unets) and mode_ready[key]} for key,value in MODELS.items()}
+    # SolarRenderer's structure is a MoGe-2 normal map. An inventory from an older worker does not list MoGe's files: unknown.
+    normals_ready='model_name' not in info.get('LoadMoGeModel',{}).get('input',{}).get('required',{}) or SOLAR_NORMALS in comfy_choices(info,'LoadMoGeModel','model_name')
+    models={key:{**value,'available':unknown or (lora_installed(value['lora'],installed) or any(lora_installed(a,installed) for a in value.get('lora_alternatives',[]))) and lora_installed(value['adapter'],installed) and (not value.get('unet') or value['unet'] in unets) and (value.get('conditioning')!='solar' or normals_ready) and mode_ready[key]} for key,value in MODELS.items()}
     turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or lora_installed(value['lora'],installed)} for key,value in TURBOS.items()}
     bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.

@@ -9,6 +9,31 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-02
 
+### SolarRenderer FFP: normal-map guide, 15-second shots, 4x smaller LoRAs
+
+- **Normal-map structure.** Motion Transfer SolarRenderer FFP no longer gets the guide footage as its structure video:
+  `solar_graph` turns the prepared guide into a surface-normal map with MoGe-2 (ComfyUI core `LoadMoGeModel` /
+  `MoGeInference` / `MoGeRender`, `geometry_estimation/moge_2_vitl_normal_fp16.safetensors`, now also in the `solar` and
+  `ffp` model profiles). The map keeps shapes, poses, motion and camera and drops the original person's clothes, colours
+  and light. The saved guide video shows the map, and the prompt describes `<Video 1>` as a normal map in SolarRenderer's
+  form for an untrained structure. The model picker shows a "normal map guide" tag that says so. `/health` lists the
+  model as available only when MoGe-2 is installed (workers now report MoGe's files in their inventory; an older worker's
+  inventory counts as unknown).
+- **Longer shots.** `HengeSolarModel` no longer stops at 170 frames: a longer clip stretches the stored silence, keeping
+  its onset and tail and repeating its steady middle between them. Shots now go up to 345 frames (15 s, H3's
+  single-clip bound) instead of 158; the shot length setting decides. Shots past about 6 s take much longer.
+- **Compressed SolarRenderer LoRAs.** New `scripts/resize_lora_energy.py` shrinks a LoRA by per-module SVD (QR on the
+  factors, so the full update is never formed), keeping a share of each module's Frobenius energy. At 99%:
+  `solarrenderer_4step_comfy_fro_dyn99.safetensors` (1.4 GB, mean rank 141, was 5.9 GB) and
+  `solarrenderer_control_comfy_fro_dyn99.safetensors` (757 MB, mean rank 83, was 5.9 GB), public in
+  `Alissonerdx/Minimax-H3-ComfyUI/loras/solarrenderer/`. They are now what the manifest installs. Model name aliases
+  in `legacy_loras.json` are followed as a chain, so a volume that already has the full-rank file (under its public or
+  old private name) keeps using it and downloads nothing.
+- Validation: unit tests (graph with the MoGe nodes, prompt, alias chain, shot cap); the stretched silence checked on
+  CPU (exact length, onset and tail kept); the resize script reproduced the existing control dyn99 file's ranks exactly
+  (min 1, max 373, mean 82.7). **Needs a new worker image**; the normal-map structure and long shots are not yet
+  rendered on a GPU.
+
 ### Each model gets the guide the way it was trained; Qwen-Image 2.1 / BFS on serverless
 - **Guide for the text encoder now defaults to Auto**: each model as it was trained (`clip_context`): Latents + CLIP
   for Motion Transfer v1.0 and TARA, **Latents only for Character Swap, Head Swap**, Sharpness and the First Frame

@@ -80,6 +80,19 @@ class HengeSolarConditioning:
         return (positive, latent)
 
 
+def held_silence(silence, length, edge=16):
+    """The encoded silence cut or stretched to `length` audio latents. The stored one covers 170 frames; a longer clip
+    keeps its first and last `edge` latents (the encoder's onset and tail) and fills between them with its steady
+    middle, repeated, so the soundtrack stays silence of any length."""
+    have = silence.shape[-1]
+    if length <= have:
+        return silence[..., :length]
+    steady = silence[..., edge:have - edge]
+    reps = -(-(length - 2 * edge) // steady.shape[-1])
+    middle = steady.repeat(*([1] * (steady.dim() - 1)), reps)[..., :length - 2 * edge]
+    return torch.cat((silence[..., :edge], middle, silence[..., have - edge:]), dim=-1)
+
+
 class _SilentSoundtrack:
     """Holds the audio stream at H3's encoded silence, noised to the step's audio time with one fixed draw."""
 
@@ -90,9 +103,7 @@ class _SilentSoundtrack:
         from comfy.ldm.minimax.model import time_shift_sigma
         video, audio = x[0], x[1]
         t = audio.shape[-1]
-        if self.silence.shape[-1] < t:
-            raise ValueError(f'the held silence covers 170 frames ({self.silence.shape[-1]} audio latents); this clip needs {t}')
-        clean = self.silence[..., :t].to(audio.device, torch.float32)
+        clean = held_silence(self.silence, t).to(audio.device, torch.float32)
         if self.noise is None or self.noise.shape != clean.shape:
             generator = torch.Generator('cpu').manual_seed(self.seed)
             self.noise = torch.randn(clean.shape, generator=generator, dtype=torch.float32)

@@ -31,8 +31,8 @@ MODELS={
  # It runs on SolarRenderer's own conditioning and sampler (solar_graph): the guide as the structure video <Video 1>,
  # the edited frame as <Video 2> held still, both laid over frame 0 as keyframes; its 4-step LoRA, lcm, shift-12 sigmas,
  # a held silent soundtrack, and its six-part prompt.
- 'motion_solar_ffp':{'label':'Motion Transfer SolarRenderer FFP v1.0','task':'motion','lora':'henge/solarrenderer_control_comfy.safetensors','lora_alternatives':['henge/solar_control.safetensors','henge/solarrenderer_control_lora.safetensors'],'adapter':None,'clip_context':False,'first_frame_only':True,'trigger':None,'conditioning':'solar','turbo_default':'solar4',
-   'tags':['ffp-only']},
+ 'motion_solar_ffp':{'label':'Motion Transfer SolarRenderer FFP v1.0','task':'motion','lora':'henge/solarrenderer_control_comfy_fro_dyn99.safetensors','lora_alternatives':['henge/solarrenderer_control_comfy.safetensors','henge/solar_control.safetensors','henge/solarrenderer_control_lora.safetensors'],'adapter':None,'clip_context':False,'first_frame_only':True,'trigger':None,'conditioning':'solar','turbo_default':'solar4',
+   'tags':['ffp-only','normal-map']},
  'character':{'task':'swap','label':'Character Swap v1.1','tags':['multi-ref-weak'],'lora':'henge/minimax_h3_character_swap_v1.1_ref2va_fro.safetensors','adapter':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','turbo':True,'clip_context':False},
  # Head Swap and Sharpness follow the published workflows: the whole source video is an
  # aligned Add Guide; Head Swap adds one face as a native reference, Sharpness none.
@@ -49,7 +49,7 @@ TURBOS={
  'pdmd2':{'label':'pDMD 2-step (Kijai, experimental)','lora':'henge/minimax_h3_pdmd_2step_lora_avg_rank_38_bf16.safetensors','steps':2},
  'lightx8':{'label':'lightx2v 8-step v1.1 (768p)','lora':'henge/minimax_h3_ref2v_turbo_8step_v1.1_768p_comfyui_bf16.safetensors','steps':8},
  'lightx4':{'label':'lightx2v 4-step v1.0 (768p)','lora':'henge/minimax_h3_ref2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors','steps':4},
- 'solar4':{'label':'SolarRenderer 4-step (ComfyUI keys)','lora':'henge/solarrenderer_4step_comfy.safetensors','steps':4},
+ 'solar4':{'label':'SolarRenderer 4-step (ComfyUI keys)','lora':'henge/solarrenderer_4step_comfy_fro_dyn99.safetensors','steps':4},
 }
 SAMPLING=json.loads((Path(__file__).resolve().parents[1]/'lib/h3-sampling.json').read_text())
 SAMPLERS=tuple(SAMPLING['samplers'])
@@ -76,11 +76,16 @@ def sampling_model(g,model):
 def resolve_model(node,name,installed=None):
     names=INSTALLED.get(node,set()) if installed is None else installed
     if not name or not names or name in names:return name
-    old=LEGACY_LORAS.get(name)
-    if old in names:return old
-    bases={name.rsplit('/',1)[-1]}|({old.rsplit('/',1)[-1]} if old else set())
-    hits=sorted(n for n in names if n.replace('\\','/').rsplit('/',1)[-1] in bases)
-    return hits[0] if hits else name
+    # Older names, followed as a chain (e.g. a compressed file -> the full-rank one it replaced -> its old short name).
+    olds=[]
+    while LEGACY_LORAS.get((olds or [name])[-1]) and len(olds)<4:olds.append(LEGACY_LORAS[(olds or [name])[-1]])
+    for old in olds:
+        if old in names:return old
+    for candidate in (name,*olds):
+        base=candidate.rsplit('/',1)[-1]
+        hits=sorted(n for n in names if n.replace('\\','/').rsplit('/',1)[-1]==base)
+        if hits:return hits[0]
+    return name
 def lora_installed(name,installed=None):
     names=INSTALLED.get('LoraLoaderModelOnly',set()) if installed is None else installed
     return not name or resolve_model('LoraLoaderModelOnly',name,names) in names
@@ -394,19 +399,22 @@ def bfs_graph(image,refs,instruction,seed,unet=None,lora='',sampler=None,**_):
     g['5']['inputs']['images.image_1']=['31',0];g['5']['inputs']['images.image_2']=['32',0]
     return g
 
-# SolarRenderer's four-step LoRA in ComfyUI keys: the converted copy on Henge volumes first, then the public one.
-SOLAR_TURBOS=('henge/turbo_solar_4step.safetensors','henge/solarrenderer_4step_comfy.safetensors')
-# SolarRenderer's control LoRA: our public copy converted to ComfyUI H3 keys (Alissonerdx/Minimax-H3-ComfyUI), the same
+# SolarRenderer's four-step LoRA in ComfyUI keys: our compressed public copy (per-module SVD, 99% of the Frobenius energy,
+# 1.4 GB instead of 5.9 GB), then the full-rank copies a volume may already hold.
+SOLAR_TURBOS=('henge/solarrenderer_4step_comfy_fro_dyn99.safetensors','henge/turbo_solar_4step.safetensors','henge/solarrenderer_4step_comfy.safetensors')
+# SolarRenderer's control LoRA: our compressed public copy (99% energy, 757 MB), the full-rank copy converted to ComfyUI H3
+# keys (Alissonerdx/Minimax-H3-ComfyUI), the same
 # file under its older private name, then the release as published by Enderfga/SolarRenderer (diffusers names).
 # HengeSolarLoraLoader loads any of them.
-SOLAR_CONTROLS=('henge/solarrenderer_control_comfy.safetensors','henge/solar_control.safetensors','henge/solarrenderer_control_lora.safetensors')
-SOLAR_MAX_FRAMES=158   # trained length; the held silence covers 170 frames
+SOLAR_CONTROLS=('henge/solarrenderer_control_comfy_fro_dyn99.safetensors','henge/solarrenderer_control_comfy.safetensors','henge/solar_control.safetensors','henge/solarrenderer_control_lora.safetensors')
+SOLAR_NORMALS='moge_2_vitl_normal_fp16.safetensors'   # geometry_estimation/, MoGe-2 with normals
+SOLAR_MAX_FRAMES=345   # 15 s, H3's single-clip bound; trained on 158, the held silence is stretched past its 170
 def solar_sigmas(steps=4,shift=12.):
     """SolarRenderer's four-step grid: linspace(1, 0) shifted by 12 (comfy_nodes/henge/solar.py has the same)."""
     base=[1-k/steps for k in range(steps+1)]
     return [shift*b/(1+(shift-1)*b) for b in base]
 def solar_graph(g,prompt,first_frame=None,seed=0):
-    """Turn an h3_graph into SolarRenderer's: HengeSolarConditioning (structure = the prepared guide, the first frame as
+    """Turn an h3_graph into SolarRenderer's: HengeSolarConditioning (structure = a normal map of the prepared guide, the first frame as
     <Video 2>), its 4-step LoRA under the control LoRA, the held silent soundtrack, lcm on its shift-12 sigmas with a
     BasicGuider. Loading, the guide, masks and saving stay as h3_graph built them."""
     turbo=next((t for t in SOLAR_TURBOS if lora_installed(t)),SOLAR_TURBOS[0])
@@ -416,7 +424,14 @@ def solar_graph(g,prompt,first_frame=None,seed=0):
     for key in ('4','21','24','25'):g.pop(key,None)
     g['28']=node('HengeSolarModel',model=['22',0],seed=int(seed))
     i=g['9']['inputs']
-    g['9']=node('HengeSolarConditioning',clip=['5',0],vae=['6',0],structure=['8',0],prompt=prompt,width=i['width'],height=i['height'],length=i['length'])
+    # The structure is a surface-normal map of the prepared guide (MoGe-2, ComfyUI core), not the footage itself: it keeps
+    # the shapes, poses, motion and camera and drops the original performer's clothes, colours and light, which would
+    # otherwise leak past the edited first frame. The saved guide video shows the map, i.e. what the model was given.
+    g['50']=node('LoadMoGeModel',model_name=SOLAR_NORMALS)
+    g['51']=node('MoGeInference',moge_model=['50',0],image=['8',0],resolution_level=6,fov_x_degrees=0.,batch_size=8,force_projection=True,apply_mask=False,refine_steps=0)
+    g['52']=node('MoGeRender',moge_geometry=['51',0],output='normal_opengl')
+    g['18']['inputs']['images']=['52',0]
+    g['9']=node('HengeSolarConditioning',clip=['5',0],vae=['6',0],structure=['52',0],prompt=prompt,width=i['width'],height=i['height'],length=i['length'])
     if first_frame:g['27']=node('LoadImage',image=first_frame);g['9']['inputs']['first_frame']=['27',0]
     else:g.pop('27',None)
     g['10']=node('BasicGuider',model=['28',0],conditioning=['9',0])

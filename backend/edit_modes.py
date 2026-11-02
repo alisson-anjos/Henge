@@ -146,12 +146,14 @@ def swap_first_frame(prompt,edited,slot=None):
             ' and camera.')
 
 # SolarRenderer's six-part prompt (ported from SolarRenderer skills/solarrenderer-caption/conditions.py, Apache-2.0).
-# Henge's guide is real footage, not one of the six trained structure types, so it uses SolarRenderer's own form for an
-# untrained structure ("custom"): what <Video 1> looks like, and what of its look is not shown.
-SOLAR_GUIDE=('the original video footage of the scene, from the same camera as the target video',
+# Henge sends SolarRenderer a surface-normal map of the guide (workflows.solar_graph). It is not one of the six trained
+# structure types, so it uses SolarRenderer's own form for an untrained structure ("custom"): what <Video 1> looks like,
+# and what of its look is not shown.
+SOLAR_GUIDE=('a surface-normal map of the scene, every surface coloured by the direction it faces (red left to right, green '
+             'up and down, blue toward the camera), frame by frame, from the same camera as the target video',
              '(frame-by-frame layout, shapes, character poses and motion, camera): attribute_transfer - the layout, shapes, '
              'poses, motion and camera are followed exactly; materials, colours and lighting are not given by {v} and are the '
-             'target video\'s own; the original appearance of {v} is not shown')
+             'target video\'s own; the normal-map colouring of {v} is not shown')
 SOLAR_DETAIL_INSTRUCTION=("This image is the edited first frame of a video; the video keeps the motion of its original footage. "
     "Write the detailed description of the finished video for a video model, in English, 350 to 500 words: first the look "
     "(style, materials, colours, light, weather), then '[Shot 1]' and what is seen, in order: the people or subjects as they "

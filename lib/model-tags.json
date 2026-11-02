@@ -23,6 +23,10 @@
   "ffp-only": {
    "tag": "first frame only",
    "tip": "Made only for a clip that starts from an edited first frame: it needs one, and the frame drives the whole look while the guide keeps the motion."
+  },
+  "normal-map": {
+   "tag": "normal map guide",
+   "tip": "It is sent a surface-normal map of the guide (MoGe-2) instead of the original video: it follows the shapes, poses, motion and camera, but not the original person's clothes, colours or light. The saved guide video shows the map."
   }
  },
  "pt": {
@@ -49,6 +53,10 @@
   "ffp-only": {
    "tag": "só com primeiro quadro",
    "tip": "Feito só para um clipe que começa de um primeiro quadro editado: ele exige o quadro, que define o visual enquanto o guia mantém o movimento."
+  },
+  "normal-map": {
+   "tag": "guia em normal map",
+   "tip": "Ele recebe um normal map do guia (MoGe-2) em vez do vídeo original: segue formas, poses, movimento e câmera, mas não a roupa, as cores ou a luz da pessoa original. O vídeo de guia salvo mostra o mapa."
   }
  },
  "es": {
@@ -75,6 +83,10 @@
   "ffp-only": {
    "tag": "solo con primer fotograma",
    "tip": "Hecho solo para un clip que empieza desde un primer fotograma editado: lo exige, y el fotograma define el aspecto mientras la guía mantiene el movimiento."
+  },
+  "normal-map": {
+   "tag": "guía en normal map",
+   "tip": "Recibe un mapa de normales de la guía (MoGe-2) en lugar del video original: sigue formas, poses, movimiento y cámara, pero no la ropa, los colores ni la luz de la persona original. El video de guía guardado muestra el mapa."
   }
  }
 }

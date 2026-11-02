@@ -979,7 +979,7 @@ a[aria-busy=true]:has(.comparison-download-status){cursor:progress}
    something without having been trained for it wears a warn tag, not a silent green one. */
 .model-tag{display:inline-block;margin-left:5px;padding:1px 5px;border-radius:999px;font:600 8.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.05em;text-transform:uppercase;border:1px solid color-mix(in oklab,var(--ink) 18%,transparent);background:color-mix(in oklab,var(--ink) 6%,transparent);color:color-mix(in oklab,var(--ink) 70%,transparent);cursor:help;vertical-align:2px}
 /* A tag that says "this model was trained for it" wears the accent; a tag that marks a limit wears amber. */
-.model-tag.ffp-strong,.model-tag.ffp-only,.model-tag.multi-ref{border-color:color-mix(in oklab,var(--accent) 40%,transparent);background:color-mix(in oklab,var(--accent) 12%,transparent);color:var(--accent)}
+.model-tag.ffp-strong,.model-tag.ffp-only,.model-tag.normal-map,.model-tag.multi-ref{border-color:color-mix(in oklab,var(--accent) 40%,transparent);background:color-mix(in oklab,var(--accent) 12%,transparent);color:var(--accent)}
 .model-tag.ffp-works,.model-tag.multi-ref-weak,.model-tag.single-ref{border-color:color-mix(in oklab,#f0a63c 45%,transparent);background:color-mix(in oklab,#f0a63c 12%,transparent);color:#f0a63c}
 .select-list li .model-tag{margin-left:6px}
 .select-value .model-tag{display:none}

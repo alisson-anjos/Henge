@@ -338,8 +338,8 @@ class WorkflowContracts(unittest.TestCase):
   import workflows
   from edit_modes import ffp_prompt
   m=workflows.MODELS['motion_solar_ffp']
-  self.assertEqual(m['label'],'Motion Transfer SolarRenderer FFP v1.0');self.assertEqual(m['lora'],'henge/solarrenderer_control_comfy.safetensors')
-  self.assertTrue(m['first_frame_only']);self.assertFalse(m.get('ffp'));self.assertEqual(m['tags'],['ffp-only'])
+  self.assertEqual(m['label'],'Motion Transfer SolarRenderer FFP v1.0');self.assertEqual(m['lora'],'henge/solarrenderer_control_comfy_fro_dyn99.safetensors')
+  self.assertTrue(m['first_frame_only']);self.assertFalse(m.get('ffp'));self.assertEqual(m['tags'],['ffp-only','normal-map'])
   # Always offered, but it cannot run without its edited frame; with one it is a normal choice.
   with self.assertRaises(ValueError):validate_request({**self.request(),'mode':'motion','prompt':'Add rain.'},{'profile':'motion_solar_ffp'},[1])
   validate_request({**self.request(),'mode':'motion','prompt':'Add rain.','first_frame_slot':1},{'profile':'motion_solar_ffp'},[1])
@@ -348,7 +348,19 @@ class WorkflowContracts(unittest.TestCase):
   # Its prompt is the FFP sentence without the VFX Edit trigger.
   self.assertEqual(ffp_prompt('Add rain.',None,None),'Add rain.');self.assertTrue(ffp_prompt('vfx_edit: Add rain.',2,None).startswith('Add rain. <Picture 2> is the edited first frame'))
   g=h3_graph('v.mp4',['f.png'],'Add rain.',512,288,107,107,'motion_solar_ffp',1,4,'original',[],'human',0,turbo=m['turbo_default'])
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solarrenderer_control_comfy.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solarrenderer_control_comfy_fro_dyn99.safetensors');self.assertFalse(g['9']['inputs']['guide_context'])
+
+ def test_compressed_solar_loras_fall_back_to_full_rank_files(self):
+  # The 99%-energy SolarRenderer LoRAs are the installed default; a volume that already holds the full-rank file (under
+  # its public or its old private name) keeps using it instead of downloading another copy.
+  import workflows
+  name='henge/solarrenderer_control_comfy_fro_dyn99.safetensors'
+  self.assertEqual(workflows.resolve_model('LoraLoaderModelOnly',name,{'henge/solar_control.safetensors'}),'henge/solar_control.safetensors')
+  self.assertEqual(workflows.resolve_model('LoraLoaderModelOnly',name,{'henge/solarrenderer_control_comfy.safetensors','x'}),'henge/solarrenderer_control_comfy.safetensors')
+  self.assertEqual(workflows.resolve_model('LoraLoaderModelOnly',name,{name,'henge/solar_control.safetensors'}),name)
+  self.assertEqual(workflows.resolve_model('LoraLoaderModelOnly','henge/solarrenderer_4step_comfy_fro_dyn99.safetensors',{'henge/turbo_solar_4step.safetensors'}),'henge/turbo_solar_4step.safetensors')
+  self.assertEqual(workflows.TURBOS['solar4']['lora'],'henge/solarrenderer_4step_comfy_fro_dyn99.safetensors')
+  self.assertEqual(workflows.SOLAR_TURBOS[0],workflows.TURBOS['solar4']['lora']);self.assertEqual(workflows.SOLAR_CONTROLS[0],name)
 
  def test_solarrenderer_ffp_uses_solarrenderer_conditioning(self):
   # SolarRenderer's own pipeline: its conditioning (guide = structure <Video 1>, the frame = <Video 2>), its 4-step LoRA
@@ -358,9 +370,13 @@ class WorkflowContracts(unittest.TestCase):
   m=workflows.MODELS['motion_solar_ffp'];self.assertEqual(m['conditioning'],'solar')
   g=h3_graph('v.mp4',['f.png'],'x',512,288,107,107,'motion_solar_ffp',1,4,'original',[],'human',0,turbo='solar4',cfg=2.,conditioning_mode='tara')
   g=workflows.solar_graph(g,'P','henge/j/first.png',9)
-  self.assertEqual(g['9']['class_type'],'HengeSolarConditioning');self.assertEqual(g['9']['inputs']['structure'],['8',0]);self.assertEqual(g['9']['inputs']['first_frame'],['27',0])
+  self.assertEqual(g['9']['class_type'],'HengeSolarConditioning');self.assertEqual(g['9']['inputs']['structure'],['52',0]);
+  # The structure is a MoGe-2 normal map of the prepared guide, and the saved guide video shows it.
+  self.assertEqual(g['50'],{'class_type':'LoadMoGeModel','inputs':{'model_name':workflows.SOLAR_NORMALS}});self.assertEqual(g['51']['inputs']['image'],['8',0])
+  self.assertEqual(g['52']['inputs'],{'moge_geometry':['51',0],'output':'normal_opengl'});self.assertEqual(g['18']['inputs']['images'],['52',0])
+  self.assertEqual(g['9']['inputs']['first_frame'],['27',0])
   self.assertEqual(g['27']['inputs']['image'],'henge/j/first.png');self.assertEqual(g['9']['inputs']['prompt'],'P')
-  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solarrenderer_control_comfy.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0]);self.assertIn(g['2']['inputs']['lora_name'],workflows.SOLAR_TURBOS)
+  self.assertEqual(g['3']['inputs']['lora_name'],'henge/solarrenderer_control_comfy_fro_dyn99.safetensors');self.assertEqual(g['3']['inputs']['model'],['2',0]);self.assertIn(g['2']['inputs']['lora_name'],workflows.SOLAR_TURBOS)
   self.assertEqual(g['28']['class_type'],'HengeSolarModel');self.assertEqual(g['28']['inputs']['seed'],9)
   self.assertEqual(g['10'],{'class_type':'BasicGuider','inputs':{'model':['28',0],'conditioning':['9',0]}})
   self.assertEqual(g['12']['inputs']['sampler_name'],'lcm');self.assertEqual(g['14']['inputs']['latent_image'],['9',1])
@@ -369,14 +385,14 @@ class WorkflowContracts(unittest.TestCase):
   self.assertNotIn('first_frame',workflows.solar_graph(h3_graph('v.mp4',[],'x',512,288,107,107,'motion_solar_ffp',1,4,'original',[],'human',0),'P',None)['9']['inputs'])
   p=solar_prompt('A man waves.','The look is warm. [Shot 1] He waves.')
   self.assertIn('<Video 2> is the first frame of [Shot 1], held still.',p);self.assertIn('[Shot 1] The shot begins from <Video 2>. He waves.',p)
-  self.assertTrue(p.startswith('subject_definitions:\n<Video 1> is the original video footage of the scene'))
+  self.assertTrue(p.startswith('subject_definitions:\n<Video 1> is a surface-normal map of the scene'));self.assertIn('the normal-map colouring of <Video 1> is not shown',p)
   self.assertNotIn('<Video 2>',solar_prompt('A','B',False))
-  # Its shots stop at the trained 158 frames.
+  # One shot holds up to 15 s (345 frames), H3's single-clip bound.
   import server
   job={'request':{**self.request(),'mode':'motion','processing':{'requested_seconds_per_shot':15,'mode':'context_window','context_frames':22}},'options':{'profile':'motion_solar_ffp'}}
   job['request']['video']={**job['request']['video'],'start_seconds':0,'end_seconds':20}
   with patch.object(server,'camera_cuts',return_value=[]):shots,_=server.plan_shots(job)
-  self.assertTrue(shots and max(x['length'] for x in shots)<=158)
+  self.assertTrue(shots and max(x['length'] for x in shots)<=345)
 
  def test_motion_model_list_and_first_frame_default(self):
   import json,workflows

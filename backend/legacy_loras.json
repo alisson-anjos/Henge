@@ -16,5 +16,7 @@
  "henge/minimax_h3_motion_transfer_v1.0_adapter_v2_solar05.safetensors": "henge/motion10500_plus_adapter_v2_solar05.safetensors",
  "henge/solarrenderer_control_comfy.safetensors": "henge/solar_control.safetensors",
  "henge/solarrenderer_4step_comfy.safetensors": "henge/turbo_solar_4step.safetensors",
- "henge/minimax_h3_motion_transfer_ffp_v1.0_solar05_dyn99.safetensors": "henge/vfx_ffp_solar05_fro_dyn99.safetensors"
+ "henge/minimax_h3_motion_transfer_ffp_v1.0_solar05_dyn99.safetensors": "henge/vfx_ffp_solar05_fro_dyn99.safetensors",
+ "henge/solarrenderer_control_comfy_fro_dyn99.safetensors": "henge/solarrenderer_control_comfy.safetensors",
+ "henge/solarrenderer_4step_comfy_fro_dyn99.safetensors": "henge/solarrenderer_4step_comfy.safetensors"
 }

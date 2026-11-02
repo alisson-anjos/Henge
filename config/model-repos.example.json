@@ -218,13 +218,13 @@
     },
     {
       "id": "turbo_solar4",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_4step_comfy.safetensors",
-      "destination": "loras/henge/solarrenderer_4step_comfy.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_4step_comfy_fro_dyn99.safetensors",
+      "destination": "loras/henge/solarrenderer_4step_comfy_fro_dyn99.safetensors",
       "profiles": [
         "solar",
         "ffp"
       ],
-      "note": "Turbo LoRA (4 steps): SolarRenderer 4-step converted to ComfyUI H3 keys. An optional speed LoRA, selectable in Advanced > Turbo LoRA; the First Frame model does not need it, it runs on the standard DMAD 4-step turbo."
+      "note": "Turbo LoRA (4 steps): SolarRenderer 4-step converted to ComfyUI H3 keys and compressed (per-module SVD keeping 99% of the Frobenius energy, 1.4 GB; a volume with the full-rank file keeps using it). An optional speed LoRA, selectable in Advanced > Turbo LoRA; the First Frame model does not need it, it runs on the standard DMAD 4-step turbo."
     },
     {
       "id": "klein3_text_encoder",
@@ -347,8 +347,11 @@
       "url": "https://huggingface.co/Comfy-Org/MoGe/resolve/main/geometry_estimation/moge_2_vitl_normal_fp16.safetensors",
       "destination": "geometry_estimation/moge_2_vitl_normal_fp16.safetensors",
       "profiles": [
-        "sam3d"
-      ]
+        "sam3d",
+        "solar",
+        "ffp"
+      ],
+      "note": "MoGe-2 ViT-L with normals (ComfyUI core). SAM 3D Body reads the camera from it; Motion Transfer SolarRenderer FFP turns the guide into a surface-normal map with it."
     },
     {
       "id": "audio",
@@ -379,13 +382,13 @@
     },
     {
       "id": "solar_control",
-      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_control_comfy.safetensors",
-      "destination": "loras/henge/solarrenderer_control_comfy.safetensors",
+      "url": "https://huggingface.co/Alissonerdx/Minimax-H3-ComfyUI/resolve/main/loras/solarrenderer/solarrenderer_control_comfy_fro_dyn99.safetensors",
+      "destination": "loras/henge/solarrenderer_control_comfy_fro_dyn99.safetensors",
       "profiles": [
         "ffp",
         "solar"
       ],
-      "note": "Motion Transfer SolarRenderer FFP v1.0: SolarRenderer's control LoRA (Enderfga/SolarRenderer, Apache-2.0) converted to ComfyUI H3 keys, public (5.9 GB). Used alone, on SolarRenderer's own conditioning, for clips that start from an edited first frame."
+      "note": "Motion Transfer SolarRenderer FFP v1.0: SolarRenderer's control LoRA (Enderfga/SolarRenderer, Apache-2.0) converted to ComfyUI H3 keys and compressed (per-module SVD keeping 99% of the Frobenius energy, 757 MB; the full-rank 5.9 GB file is used when a volume already has it). Used alone, on SolarRenderer's own conditioning, for clips that start from an edited first frame."
     },
     {
       "id": "sharpness",

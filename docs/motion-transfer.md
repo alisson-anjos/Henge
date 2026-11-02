@@ -90,23 +90,29 @@ turbo stays selectable under Advanced.
 
 **Motion Transfer SolarRenderer FFP v1.0** is SolarRenderer control on its own:
 [Enderfga/SolarRenderer](https://huggingface.co/Enderfga/SolarRenderer)'s control LoRA (Apache-2.0) converted to ComfyUI
-H3 keys, public in our repository as `loras/solarrenderer/solarrenderer_control_comfy.safetensors` (5.9 GB, model
-profiles `ffp` and `solar`). `HengeSolarLoraLoader` also loads the release as published (diffusers names). It is always listed
+H3 keys and compressed by per-module SVD keeping 99% of the Frobenius energy (`scripts/resize_lora_energy.py`), public
+in our repository as `loras/solarrenderer/solarrenderer_control_comfy_fro_dyn99.safetensors` (757 MB instead of 5.9 GB,
+model profiles `ffp` and `solar`; a volume that already has the full-rank file keeps using it). `HengeSolarLoraLoader` also loads the release as published (diffusers names). It is always listed
 but only for a clip that starts from an edited first frame: the studio and the bridge refuse to generate with it until a
 First Frame is attached, and attaching one still selects Motion Transfer FFP v1.0 by default.
 
 It runs on **SolarRenderer's own conditioning and sampler**, ported into the Henge nodes (`HengeSolarConditioning`,
 `HengeSolarModel`), not on Henge's H3 conditioning:
 
-- the prepared guide is the structure video `<Video 1>` and the edited frame is `<Video 2>`, held still; both are shown
+- the structure video `<Video 1>` is a **surface-normal map of the prepared guide** (MoGe-2, ComfyUI core,
+  `geometry_estimation/moge_2_vitl_normal_fp16.safetensors`), not the footage: it carries the shapes, poses, motion and
+  camera but not the original person's clothes, colours or light, which would otherwise leak past the edited frame. The
+  saved guide video shows the map. The edited frame is `<Video 2>`, held still; both are shown
   to H3's text encoder at 2 fps and laid over the target from frame 0 as keyframes (the guide over every frame);
 - its four-step LoRA under the control LoRA, `lcm` on its shift-12 four-step grid with a `BasicGuider`, and the
   soundtrack held at H3's encoded silence, as SolarRenderer was trained (the Turbo, Method and CFG settings do not apply);
 - its six-part prompt: `subject_definitions`, `summary` (your request), `retention_analysis`, `detailed_description`
-  (the planner describes the edited frame's look and the action, 350-500 words), soundscape and music. A live-action
+  (the planner describes the edited frame's look and the action, 350-500 words), soundscape and music. A normal map
   guide is not one of its six trained structure types, so it is described with SolarRenderer's form for an untrained
   structure;
-- shots are at most 158 frames (its training length). A continuing shot starts from the rendered frame where it begins;
+- a shot holds up to 15 s (345 frames) in one clip. It was trained on 158 frames and its stored silence covers 170, so
+  longer shots stretch that silence (the steady middle repeated between its onset and tail); past about 6 s a shot takes
+  much longer to render, especially at high resolutions. A continuing shot starts from the rendered frame where it begins;
   a shot after a camera cut has the structure only.
 
 Motion Transfer TARA can also take a First Frame, and it often tracks it well — it is the multi-subject model, and it is

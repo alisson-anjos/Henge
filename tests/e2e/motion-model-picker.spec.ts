@@ -11,7 +11,7 @@ const MODELS = {
   motion: {label: 'Motion Transfer v1.0', file: 'minimax_h3_motion_transfer_v1.0_ref2va'},
   tara: {label: 'Motion Transfer TARA v1.0', file: 'minimax_h3_motion_transfer_tara_v1.0_ref2va'},
   edit: {label: 'Motion Transfer FFP v1.0', file: 'minimax_h3_motion_transfer_ffp_v1.0_ref2va'},
-  solar: {label: 'Motion Transfer SolarRenderer FFP v1.0', file: 'solarrenderer_control_comfy'},
+  solar: {label: 'Motion Transfer SolarRenderer FFP v1.0', file: 'solarrenderer_control_comfy_fro_dyn99'},
 };
 // An edited opening frame (the editor's output shape): Picture 2 carries the edit the model must propagate.
 const EDITED_FRAME = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAaklEQVR4nGNgZ4AAOxYMBgZmEAwJYmBgZGRlAWJWhJwOILnNDST3PmBgYDzAwMDMwMDIwMyAhYMTBwcHB4uLi5uTkxMIBhgMDAwMDAwQwMDAwMDIyMjMzMzMwMDAwMDIyAgAABccCQb6UuYAAAAASUVORK5CYII=', 'base64');
