@@ -754,6 +754,21 @@ export default function Studio() {
     // Character Swap also needs the character picture: an edited First Frame alone is not an identity.
     // Character Swap with its own first frame needs no pictures: the characters are already in the video.
     : (pictures.length > 0 || mode === 'motion' || (mode === 'swap' && !!swapFirstFrame)) && !!prompt.trim() && !invalid.length && !subjectErrors);
+  // Why Generate/Export is disabled, in the same order as canExport, so the button never greys out without a reason.
+  const submitBlockers = canExport ? [] : [
+    ...(!ready ? [tr('Henge is still loading', 'O Henge ainda está carregando', 'Henge aún está cargando')] : []),
+    ...(!video?.range ? [tr('Add a guide video and select an interval', 'Adicione um vídeo guia e selecione um trecho', 'Añade un vídeo guía y selecciona un tramo')] : []),
+    ...(editingVideo ? [tr('Finish editing the guide video', 'Termine de editar o vídeo guia', 'Termina de editar el vídeo guía')] : []),
+    ...(busy || suggesting ? [tr('Wait for the current task to finish', 'Espere a tarefa atual terminar', 'Espera a que termine la tarea actual')] : []),
+    ...(fixedRecipe
+      ? activePictures.length !== maxPictures ? [tr(`Add ${maxPictures} picture(s)`, `Adicione ${maxPictures} imagem(ns)`, `Añade ${maxPictures} imagen(es)`)] : []
+      : [
+        ...(!(pictures.length > 0 || mode === 'motion' || (mode === 'swap' && !!swapFirstFrame)) ? [tr('Add a reference picture', 'Adicione uma imagem de referência', 'Añade una imagen de referencia')] : []),
+        ...(!prompt.trim() ? [tr('Write a prompt', 'Escreva um prompt', 'Escribe un prompt')] : []),
+        ...(invalid.length ? [tr(`The prompt mentions a missing picture: ${invalid.join(', ')}`, `O prompt cita uma imagem que não existe: ${invalid.join(', ')}`, `El prompt menciona una imagen que no existe: ${invalid.join(', ')}`)] : []),
+        ...(subjectErrors ? [tr('A marked subject is incomplete: it needs a picture and a mark inside the selected interval', 'Um sujeito marcado está incompleto: precisa de uma imagem e de uma marca dentro do trecho', 'Un sujeto marcado está incompleto: necesita una imagen y una marca dentro del tramo')] : []),
+      ]),
+  ];
   const selected = history.find(h => h.id === selectedId) || null;
   const filteredHistory = history.filter(h => historyFilter === 'all' || h.request.mode === historyFilter);
   const chosenTemplate = TEMPLATES.find(x => x.id === activeTemplate);
@@ -1191,7 +1206,7 @@ export default function Studio() {
             <div className="prompt-footer">{!fixedRecipe && <><span className="eyebrow muted">{t.insert}</span><div className="mention-chips">{mentions.map(tag => <button key={tag} className="chip mono nc" onClick={() => insertTag(tag)}>{tag}</button>)}{!mentions.length && <span className="muted">—</span>}</div></>}<div className="prompt-generation-actions" id="prompt-generation-actions"/></div>
           </section>
           <input hidden ref={importSettingsInput} type="file" accept="application/json,.json" onChange={e => {importSettings(e.target.files?.[0]); e.target.value = '';}}/>
-          <GenerationPanel firstFrame={mode === 'swap' ? swapFirstFrame?.file || null : null} background={mode === 'swap' || mode === 'motion' ? background?.file || null : null} key={importRevision} onEnhanceChange={setEnhanceOn} registerControls={controls => {panelControls.current = controls;}} freshRevision={freshRevision} requestedProfile={requestedProfile} onProfileChange={setPanelProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
+          <GenerationPanel firstFrame={mode === 'swap' ? swapFirstFrame?.file || null : null} background={mode === 'swap' || mode === 'motion' ? background?.file || null : null} key={importRevision} onEnhanceChange={setEnhanceOn} registerControls={controls => {panelControls.current = controls;}} freshRevision={freshRevision} requestedProfile={requestedProfile} onProfileChange={setPanelProfile} initialSettings={importedSettings} onSelectJob={selectServerJob} onImportSettings={() => importSettingsInput.current?.click()} onShareSettings={options => {const direction = makeRequest(); if (direction) downloadJSON({kind: 'henge_settings', schema_version: 1, direction, generation: options}, 'henge-shared-settings.json');}} mode={mode} request={makeRequest()} video={video?.file || null} pictures={activePictures} canSubmit={canExport} submitBlockers={submitBlockers} lang={lang} requestedJobId={pendingAutoPromptJob} onResult={job => {setGenerationJob(job); if (job.id === pendingAutoPromptJob && job.plan && job.status === 'awaiting_approval') {setPrompt(job.plan.prompt); setPendingAutoPromptJob(null);}}}/>
           </section>
         </section>
 

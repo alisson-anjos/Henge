@@ -7,6 +7,22 @@ This log starts with the 2026-10-28 updates; earlier commits remain in the Git h
 Render and RunPod have been updated; each entry records those states separately. Test results are described with
 their scope; CPU tests do not replace generation with the real models.
 
+## 2026-11-03
+
+### Generate no longer greys out without a reason
+
+- A Sharpness run with "Segments → full-video refiner windows" was saved in the browser and, after switching to
+  Motion Transfer, Character Swap or Head Swap, disabled Generate as a temporal-windows conflict. That strategy has no
+  option outside Sharpness, so the select showed "Standard processing" and there was nothing to switch off. Outside
+  Sharpness a stored or imported full-video refiner choice now falls back to standard processing.
+- When Generate is disabled, the reason is shown next to it (all reasons in its tooltip): backend offline or still
+  connecting, model installation running, model not installed, FFP-only model without a First Frame, missing guide
+  interval, picture or prompt, a prompt mentioning a missing picture, an incomplete marked subject, Open-H3 Refiner
+  requirements, temporal windows unsupported or in conflict.
+- Checked in a browser against a stub backend returning the deployed worker inventory, with the problematic saved
+  settings: Generate stayed disabled with a windows conflict before the change and is enabled after it; each blocker
+  above shows its message. Code published; the Render UI updates from the new tag.
+
 ## 2026-11-02
 
 ### Native Motion Transfer workflows: the guide is cut to a valid H3 length

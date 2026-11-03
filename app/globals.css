@@ -984,3 +984,4 @@ a[aria-busy=true]:has(.comparison-download-status){cursor:progress}
 .select-list li .model-tag{margin-left:6px}
 .select-value .model-tag{display:none}
 .motion-model-field small{display:block;margin-top:5px;color:var(--muted);line-height:1.5}
+.generate-blocker{font-size:11px;line-height:1.35;color:var(--warn,#e0a84a);max-width:340px;text-align:right}@media(max-width:700px){.generate-blocker{max-width:none;flex:1;text-align:left}}
