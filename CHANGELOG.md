@@ -9,6 +9,15 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-04
 
+### Tiled refine: no more noisy arcs at the frame borders
+
+- `HengeH3TiledDiffusion` blended tiles with a centred gaussian (sigma = tile/8). The frame borders, covered by a single
+  tile, got weights of ~1e-4 to 1e-7, and dividing by them in bf16 turned the sides and corners of 1080p/2K refines into
+  noisy, arc-shaped bands. Tiles now keep full weight and ramp linearly only across the overlap shared with a neighbour
+  (no ramp at the frame border), and predictions are accumulated in float32. The blend weights sum to exactly 1 over
+  the whole 1920x1088 latent (checked numerically).
+- The node runs on the worker: the RunPod template needs the new image.
+
 ### Open-H3 Refiner: tiled recipe by default
 
 - The Open-H3 Refiner (Sharpness at 1080p/2K) now follows a shared Open-H3 Regenerate 2K workflow that upscaled

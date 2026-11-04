@@ -467,6 +467,18 @@ def _ceil2(x):
     return (x + 1) // 2 * 2
 
 
+def _feather(length, before, after):
+    """1-D blend weight of one tile: 1 inside, a linear ramp only across the
+    overlap shared with the previous/next tile, and no ramp at the frame border
+    (only this tile covers it, so it keeps full weight)."""
+    w = torch.ones(length, dtype=torch.float32)
+    if before > 0:
+        w[:before] = torch.arange(1, before + 1, dtype=torch.float32) / (before + 1)
+    if after > 0:
+        w[length - after:] = torch.minimum(w[length - after:], torch.arange(after, 0, -1, dtype=torch.float32) / (after + 1))
+    return w
+
+
 def _tile_starts(total, tile, overlap):
     """Start offsets covering [0, total) with `tile`-unit tiles overlapping by
     `overlap`. Tile sizes and overlaps are multiples of 2 latent units (the H3
@@ -564,19 +576,25 @@ class _H3TiledDiffusionImpl:
                                 keyframes=keyframes, refs=refs)
 
         tiles, weights, payloads = [], [], []
-        for h0 in rows:
-            for w0 in cols:
-                h1, w1 = min(h0 + self.tile_h, H), min(w0 + self.tile_w, W)
+        ends = lambda starts, size, total: [min(a + size, total) for a in starts]
+        row_ends, col_ends = ends(rows, self.tile_h, H), ends(cols, self.tile_w, W)
+        for ri, h0 in enumerate(rows):
+            for ci, w0 in enumerate(cols):
+                h1, w1 = row_ends[ri], col_ends[ci]
                 th, tw = h1 - h0, w1 - w0
                 tiles.append((h0, w0, h1, w1))
                 if self.method == "gaussian":
-                    sigma = max(min(th, tw) / 8.0, 1e-6)
-                    yy = torch.arange(th, dtype=torch.float32) - (th - 1) / 2.0
-                    xx = torch.arange(tw, dtype=torch.float32) - (tw - 1) / 2.0
-                    w = torch.exp(-(yy[:, None] ** 2 + xx[None, :] ** 2) / (2.0 * sigma * sigma))
+                    # Feathered blend (kept under the old method name): full weight everywhere except a linear ramp
+                    # across each overlap with a neighbour. A centred gaussian left the frame borders, covered by one
+                    # tile only, at ~1e-4..1e-7 weight, and dividing by that in bf16 turned them into noisy arcs.
+                    top = row_ends[ri - 1] - h0 if ri > 0 else 0
+                    bottom = h1 - rows[ri + 1] if ri + 1 < len(rows) else 0
+                    left = col_ends[ci - 1] - w0 if ci > 0 else 0
+                    right = w1 - cols[ci + 1] if ci + 1 < len(cols) else 0
+                    w = _feather(th, max(top, 0), max(bottom, 0))[:, None] * _feather(tw, max(left, 0), max(right, 0))[None, :]
                 else:
                     w = torch.ones(th, tw, dtype=torch.float32)
-                weights.append(w.to(device=video.device, dtype=video.dtype))
+                weights.append(w.to(device=video.device))
 
                 p = dict(payload)
                 if keyframes:
@@ -638,8 +656,9 @@ class _H3TiledDiffusionImpl:
             self._cache = entry
         _, _, tiles, weights, payloads = entry
 
-        buf = torch.zeros_like(video)
-        wsum = torch.zeros((1, 1, 1, H, W), device=video.device, dtype=video.dtype)
+        # accumulate in float32: bf16 sums of weighted predictions lose precision at the seams
+        buf = torch.zeros(video.shape, device=video.device, dtype=torch.float32)
+        wsum = torch.zeros((1, 1, 1, H, W), device=video.device, dtype=torch.float32)
         audio_acc = None
         for (h0, w0, h1, w1), w, p in zip(tiles, weights, payloads):
             v_t = video[:, :, :, h0:h1, w0:w1]
@@ -653,12 +672,12 @@ class _H3TiledDiffusionImpl:
             else:
                 v_out = model_function(v_t, t, **c_t)
                 a_out = None
-            buf[:, :, :, h0:h1, w0:w1] += v_out * w[None, None, None]
+            buf[:, :, :, h0:h1, w0:w1] += v_out.float() * w[None, None, None]
             wsum[:, :, :, h0:h1, w0:w1] += w[None, None, None]
             if a_out is not None:
                 audio_acc = a_out if audio_acc is None else audio_acc + a_out
 
-        out_v = buf / wsum.clamp(min=1e-8)
+        out_v = (buf / wsum.clamp(min=1e-8)).to(video.dtype)
         if audio is None:
             return out_v
         # every tile saw the full audio stream; average its predictions
