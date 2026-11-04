@@ -7,6 +7,22 @@ This log starts with the 2026-10-28 updates; earlier commits remain in the Git h
 Render and RunPod have been updated; each entry records those states separately. Test results are described with
 their scope; CPU tests do not replace generation with the real models.
 
+## 2026-11-05
+
+### Fix audio conditioning: use ComfyUI's audio file loader
+
+- `HengeH3Conditioning` called `comfy.audio.load`, which does not exist. Enabling audio conditioning therefore raised
+  `module 'comfy.audio' has no attribute 'load'` before either Guide Latents or TARA could encode the reference audio.
+  Use `comfy_extras.nodes_audio.load`, the same loader used by ComfyUI's Load Audio node, preserving the waveform's
+  batch dimension and sample rate.
+- Validation: real Chrome generations through the Windows BAT launcher on an RTX 5090, first with Guide Latents and
+  generated audio, then with TARA and the source soundtrack without restarting Henge. A third Windows run with all
+  audio options off correctly produced a silent video. A cloud A6000 TARA generation through the Linux launcher also
+  passed. The downloaded 39-frame, 480x864 audio-enabled results played to completion in Chrome,
+  fully decoded, and contained non-silent stereo AAC audio at 48 kHz. This checks loading and delivery, not audio
+  quality or lip-sync accuracy.
+- Delivery: proposed source fix; not yet merged into upstream `main`, published in a Docker image, or deployed.
+
 ## 2026-11-04
 
 ### Tiled refine: no more noisy arcs at the frame borders
