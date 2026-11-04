@@ -421,7 +421,8 @@ def solar_graph(g,prompt,first_frame=None,seed=0):
     control=next((c for c in SOLAR_CONTROLS if lora_installed(c)),SOLAR_CONTROLS[0])
     g['2']=node('HengeSolarLoraLoader',model=['1',0],lora_name=turbo,strength=1.)
     g['3']=node('HengeSolarLoraLoader',model=['2',0],lora_name=control,strength=1.)
-    for key in ('4','21','24','25'):g.pop(key,None)
+    # SolarRenderer samples with its own model and sigmas: pure temporal windows from h3_graph would be left unconnected.
+    for key in ('4','21','24','25','80','81'):g.pop(key,None)
     g['28']=node('HengeSolarModel',model=['22',0],seed=int(seed))
     i=g['9']['inputs']
     # The structure is a surface-normal map of the prepared guide (MoGe-2, ComfyUI core), not the footage itself: it keeps

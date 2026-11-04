@@ -23,7 +23,7 @@ type Plan = {summary: string; prompt: string; source_kind: string; target_kind: 
 export type PanelControls = {submit: () => Promise<string>; setAutoApprove: (value: boolean) => void; setEnhancePrompt: (value: boolean) => void; selectJob: (id: string) => void;
   getOptions: () => Record<string, unknown>; applyOptions: (patch: Record<string, unknown>) => void; resetOptions: () => void};
 export type GenerationJob = {id: string; project: string; redone_shots?: Record<string, number>; run_seconds?: number; run_started?: number; updated?: number; mode?: string; duration?: number; quality?: string; options?: Record<string, unknown>; status: string; stage: string; message?: string; error?: string; progress: number; segment?: number; total_segments?: number; plan?: Plan; sampling_preview_url?: string; result_url?: string; comparison_url?: string; guide_preview_url?: string; adapted_preview_url?: string; created: number; step?: number; step_total?: number; eta_seconds?: number | null; prepared_reference_urls?: string[]; shot_urls?: string[]; mask_preview_url?: string; likeness_warning?: string; marks_preview_url?: string; marks_source_url?: string; seconds_per_step?: number | null};
-type Health = {model_install_active?: boolean; molmo?: 'local' | 'backend' | null; comfy_url?: string; provider?: string; online: boolean; training_busy: boolean; tara_ready?: boolean; temporal_windows_ready?: boolean; editor_ready: boolean; frame_editor?: string | null; models: Record<string, {label: string; task?: string; available?: boolean; method?: string; ffp?: boolean; first_frame_only?: boolean; clip_context?: boolean; hidden?: boolean; turbo_default?: string; tags?: string[]}>; turbos?: Record<string, {label: string; steps: number; available: boolean}>; upscalers?: {h3: boolean; nvidia: boolean; regenerate?: boolean; refiner_upscalers?: {base?: boolean; lms?: boolean}}; regenerate?: {available: boolean; message: string}; bases?: Record<string, {label: string; available: boolean}>};
+type Health = {model_install_active?: boolean; molmo?: 'local' | 'backend' | null; comfy_url?: string; provider?: string; online: boolean; training_busy: boolean; tara_ready?: boolean; temporal_windows_ready?: boolean; editor_ready: boolean; frame_editor?: string | null; models: Record<string, {label: string; task?: string; available?: boolean; method?: string; ffp?: boolean; first_frame_only?: boolean; conditioning?: string; clip_context?: boolean; hidden?: boolean; turbo_default?: string; tags?: string[]}>; turbos?: Record<string, {label: string; steps: number; available: boolean}>; upscalers?: {h3: boolean; nvidia: boolean; regenerate?: boolean; refiner_upscalers?: {base?: boolean; lms?: boolean}}; regenerate?: {available: boolean; message: string}; bases?: Record<string, {label: string; available: boolean}>};
 const relativeTime = (created: number, lang: Language) => {
   const minutes = Math.round((Date.now() / 1000 - created) / 60);
   if (minutes < 60) return new Intl.RelativeTimeFormat(lang, {numeric: 'auto'}).format(-minutes, 'minute');
@@ -215,7 +215,7 @@ export default function GenerationPanel({firstFrame, onEnhanceChange, registerCo
         // Settings saved before defaults_v5 carry the old forced "Latents + CLIP": it fed CLIP to Character Swap and Head
         // Swap, which were trained on latents only. Move them to Auto once; a choice made after this sticks.
         if (stored && typeof stored === 'object' && !stored.defaults_v5) stored.guide_clip = 'auto';
-        if (stored && typeof stored === 'object') applySettings(stored);
+        if (stored && typeof stored === 'object') {applySettings(stored); if (stored.windows_manual === true) manualWindows.current = true;}
       } catch {/* private mode */}
     }
     setRestored(true);
@@ -249,19 +249,22 @@ export default function GenerationPanel({firstFrame, onEnhanceChange, registerCo
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restored, profile, turbo, health?.models, health?.turbos]);
-  // Sharpness defaults to pure temporal windows when the worker supports them. Leaving Sharpness undoes only that
-  // automatic choice; a manual change of the processing strategy is kept.
+  // Pure temporal windows are the default in every mode (better quality) when the worker supports them. The automatic
+  // choice steps aside where windows cannot run (Causal, regional attention with a color guide, SolarRenderer's own
+  // sampler) instead of blocking Generate; a processing strategy picked by hand is kept, also across reloads.
   const autoWindows = useRef(false);
   const manualWindows = useRef(false);
+  const windowsUnsupported = String(request?.processing?.mode) === 'causal' || health?.models?.[profile]?.conditioning === 'solar' || (regionalAttention && mode === 'swap' && activeConditioning === 'guide' && ['2d','3d'].includes(request?.subject_guidance?.representation || ''));
   useEffect(() => {
-    if (!restored) return;
-    if (mode === 'sharpness' && !manualWindows.current && !temporalWindows.enabled && health?.temporal_windows_ready === true) {autoWindows.current = true; setTemporalWindows(v => ({...v, enabled: true, scope: 'all'}));}
-    else if (mode !== 'sharpness' && autoWindows.current) {autoWindows.current = false; setTemporalWindows(v => ({...v, enabled: false}));}
+    if (!restored || !health || manualWindows.current) return;
+    const wanted = health.temporal_windows_ready === true && !windowsUnsupported;
+    if (wanted && !temporalWindows.enabled) {autoWindows.current = true; setTemporalWindows(v => ({...v, enabled: true, scope: 'all'}));}
+    else if (!wanted && temporalWindows.enabled && temporalWindows.scope !== 'refiner_full') {autoWindows.current = false; setTemporalWindows(v => ({...v, enabled: false}));}
     // The full-video refiner exists only in Sharpness and has no option elsewhere: a stored or imported choice from a
     // Sharpness run would otherwise disable Generate in the other modes with nothing to switch off.
     if (mode !== 'sharpness' && temporalWindows.enabled && temporalWindows.scope === 'refiner_full') setTemporalWindows(v => ({...v, enabled: false, scope: 'all'}));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, restored, health?.temporal_windows_ready, temporalWindows.enabled, temporalWindows.scope]);
+  }, [mode, restored, !!health, health?.temporal_windows_ready, windowsUnsupported, temporalWindows.enabled, temporalWindows.scope]);
   useEffect(() => {setShowReferenceComparison(false); if (selected) try {localStorage.setItem(SELECTED_KEY, selected);} catch {/* private mode */}}, [selected]);
   useEffect(() => {
     let disposed = false, first = true, timer: ReturnType<typeof setTimeout>;
@@ -481,7 +484,7 @@ export default function GenerationPanel({firstFrame, onEnhanceChange, registerCo
     </div>{onImportSettings && <button className="quiet-button import-settings-button" onClick={onImportSettings}>{tr('Import settings', 'Importar configuração', 'Importar configuración')}</button>}</details>
   </div>;
   const shareOptions = {temporal_windows: temporalWindows, regional_attention: {enabled: regionalAttention && mode === 'swap' && activeConditioning === 'guide' && ['2d', '3d'].includes(request?.subject_guidance?.representation || ''), strength: .5, reference_budget: .35, layers: '10,25,40'}, profile, adapt, seed, steps, clip_fps: clipFps, conditioning_mode: conditioningMode, guide_clip: guideClip, reference_scale: referenceScale, enhance_prompt: enhancePrompt, auto_approve: autoApprove, sampler_name: samplerName, attention, source_blur: sourceBlur, source_blur_effect: sourceBlurEffect, turbo, prepare_references: prepareReferences, base, cfg, structure_cfg: structureCfg, mask: maskSettings, lora_strength: loraStrength, upscale_method: upscaleMethod, upscale_steps: upscaleSteps, upscale_denoise: upscaleDenoise, regenerate_steps: regenerateSteps, refiner_lms: refinerLms, refiner_lms_strength: refinerLmsStrength, refiner_upscaler: refinerUpscaler, regenerate_prompt: regeneratePrompt};
-  const storedOptions = JSON.stringify({...shareOptions, defaults_v4: true, defaults_v5: true});
+  const storedOptions = JSON.stringify({...shareOptions, defaults_v4: true, defaults_v5: true, ...(manualWindows.current ? {windows_manual: true} : {})});
   useEffect(() => {if (restored) try {localStorage.setItem(SETTINGS_KEY, storedOptions);} catch {/* private mode */}}, [restored, storedOptions]);
   // Every reason the Generate button is disabled, shown next to it instead of a silent grey button.
   const profileUnavailable = health?.models?.[profile]?.available === false;

@@ -1364,7 +1364,7 @@ def shot_audio(job,outputs,i,shot,piece):
 # 1952x1088 is ~34 GB of frames and killed a 56 GB worker. Longer videos are refined in chunks of at most this many
 # frames (~10 s, H3 17n+5 grid), with context windows inside each chunk.
 FULL_REFINE_CHUNK=243
-SHARPNESS_WINDOWS={'enabled':True,'scope':'all','window_frames':107,'overlap_frames':22}
+DEFAULT_WINDOWS={'enabled':True,'scope':'all','window_frames':107,'overlap_frames':22}
 FULL_REFINE_CONTEXT=22
 
 def refine_chunks(total,boundaries,limit=None,context=None):
@@ -1783,12 +1783,15 @@ async def create_job(request:Request):
             default=next((t for t in wanted if t in TURBOS and installed and workflows.lora_installed(TURBOS[t]['lora'],installed)),'dmd8')
             options['turbo']=default
             options.setdefault('steps',workflows.DEFAULT_STEPS if default==workflows.DEFAULT_TURBO else TURBOS[default]['steps'])
-        # Sharpness defaults to pure temporal windows when the caller (assistant, MCP, API) does not choose and the
-        # worker supports them; an explicit setting, including off, is kept.
-        if r.get('mode')=='sharpness' and 'temporal_windows' not in options:
+        # Pure temporal windows are the default in every mode (better quality) when the caller (assistant, MCP, API) does
+        # not choose and the worker supports them; an explicit setting, including off, is kept. Not where they cannot run:
+        # Causal, regional attention, SolarRenderer's own sampler.
+        if ('temporal_windows' not in options and r.get('processing',{}).get('mode')!='causal'
+                and not (options.get('regional_attention') or {}).get('enabled')
+                and MODELS.get(options.get('profile'),{}).get('conditioning')!='solar'):
             try:supported='HengeH3PureWindows' in comfy_info()
             except Exception:supported=False
-            if supported:options['temporal_windows']=dict(SHARPNESS_WINDOWS)
+            if supported:options['temporal_windows']=dict(DEFAULT_WINDOWS)
         validate_request(r,options,list(pictures))
         if (options.get('temporal_windows') or {}).get('enabled') and 'HengeH3PureWindows' not in comfy_info():raise HTTPException(409,'Pure temporal windows need the updated Henge worker (HengeH3PureWindows node)')
         if upscale_method(options)=='regenerate':

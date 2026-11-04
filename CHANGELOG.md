@@ -9,6 +9,18 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-04
 
+### Pure temporal windows are the default in every mode
+
+- Pure temporal windows give better quality and are now selected by default in Motion Transfer, Character Swap and
+  Head Swap too, not only in Sharpness, when the worker supports them. The automatic choice steps aside where windows
+  cannot run (Causal processing, regional attention with a color guide, SolarRenderer's own sampler) instead of
+  disabling Generate. A processing strategy chosen by hand is kept, also after a reload.
+- The bridge applies the same default to API, MCP and assistant requests that do not set `temporal_windows`; an
+  explicit setting, including off, is kept. The assistant instructions say the same.
+- SolarRenderer graphs no longer carry unconnected window nodes.
+- Checked in a browser against a stub backend with the deployed worker inventory: default Motion → pure windows;
+  SolarRenderer → standard; back to Motion → pure windows; a manual Standard choice survives a reload.
+
 ### Assistant: the original guide is the default, color marks and masks are not a first choice
 
 - Character Swap, Motion Transfer and Head Swap were trained on original guide videos only. The studio assistant now
