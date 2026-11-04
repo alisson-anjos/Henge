@@ -272,8 +272,8 @@ class HengeH3Conditioning:
         audio=None
         if audio_conditioning:
             if audio_vae is None:raise ValueError('Audio conditioning needs the H3 audio VAE')
-            import comfy.audio
-            waveform,sample_rate=comfy.audio.load(str(input_path(audio_video)))
+            from comfy_extras.nodes_audio import load
+            waveform,sample_rate=load(str(input_path(audio_video)))
             audio={'waveform':waveform.unsqueeze(0),'sample_rate':sample_rate}
         pictures={f'ref_image_{i+1}':r for i,r in enumerate(references)}
         if conditioning_mode=='tara':
