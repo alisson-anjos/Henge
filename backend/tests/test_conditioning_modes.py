@@ -40,6 +40,31 @@ class ConditioningModes(unittest.TestCase):
    self.assertEqual([name for name,_ in calls],['clip_context','native','guide','guide'])
    self.assertNotIn('ref_videos',calls[1][1])
 
+ def test_audio_conditioning_reads_the_file_with_comfy_audio_loader(self):
+  # comfy.audio has no file loader at the pinned ComfyUI revision; the Load Audio node's loader must be used (PR #5)
+  source=Path(__file__).resolve().parents[1]/'comfy_nodes/henge/__init__.py'
+  self.assertNotIn('comfy.audio.load',source.read_text())
+  cls=next(n for n in ast.parse(source.read_text()).body if isinstance(n,ast.ClassDef) and n.name=='HengeH3Conditioning')
+  calls=[]
+  class Native:
+   @classmethod
+   def execute(c,**kw):calls.append(('native',kw));return 'cond',{}
+  class Guide:
+   @classmethod
+   def execute(c,**kw):calls.append(('guide',kw));return ('guided',)
+  def load(path):calls.append(('load',path));return torch.ones(2,800),48000
+  scope={'torch':torch,'clip_with_video_context':lambda c,*a,**kw:c,'input_path':lambda name:'/input/'+name}
+  exec(compile(ast.Module(body=[cls],type_ignores=[]),str(source),'exec'),scope)
+  stubs={'comfy_extras.nodes_minimax_h3':SimpleNamespace(MiniMaxH3ReferenceToVideo=Native,MiniMaxH3AddGuide=Guide),'comfy_extras.nodes_audio':SimpleNamespace(load=load)}
+  with patch.dict(sys.modules,stubs):
+   video=torch.zeros(5,64,128,3)
+   args=dict(clip=object(),vae=object(),guide=video,references=[],prompt='test',width=128,height=64,length=5,clip_video_fps=2,reference_size='match',guide_context=False,audio_conditioning=True,audio_video='clip.mp4',audio_vae=object())
+   for mode,key in (('guide',None),('tara','ref_video_audios')):
+    calls.clear();scope['HengeH3Conditioning']().conditioning(**args,conditioning_mode=mode)
+    self.assertEqual(calls[0],('load','/input/clip.mp4'))
+    audio=calls[-1][1]['audio'] if key is None else calls[1][1][key]['ref_video_audio_1']
+    self.assertEqual(tuple(audio['waveform'].shape),(1,2,800));self.assertEqual(audio['sample_rate'],48000)
+
 if __name__=='__main__':unittest.main()
 
 class MotionModelSelection(unittest.TestCase):
