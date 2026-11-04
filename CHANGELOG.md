@@ -7,6 +7,16 @@ This log starts with the 2026-10-28 updates; earlier commits remain in the Git h
 Render and RunPod have been updated; each entry records those states separately. Test results are described with
 their scope; CPU tests do not replace generation with the real models.
 
+## 2026-11-04
+
+### Assistant: the original guide is the default, color marks and masks are not a first choice
+
+- Character Swap, Motion Transfer and Head Swap were trained on original guide videos only. The studio assistant now
+  starts every generation with the original guide, also for several people, and binds identities with the prompt and
+  subject marks. The 2D/3D color guides and masks are described as experimental: used when the user asks for them, or
+  2D offered (asking first) only after an original-guide result still mixed up identities with a clear prompt and marks.
+- Assistant instructions only; generation code is unchanged.
+
 ## 2026-11-03
 
 ### Generate no longer greys out without a reason
