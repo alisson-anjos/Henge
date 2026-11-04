@@ -8,9 +8,31 @@ import server
 from workflows import h3_graph, REGENERATE, REGENERATE_SIGMAS, BASES
 
 class RegenerateTests(unittest.TestCase):
-    def graph(self,steps=2):
+    def graph(self,steps=2,recipe='classic'):
         return h3_graph('clip.mp4',[],'LMS instruction',1344,768,22,22,'sharpness',42,8,'original',[],'human',0,
-                        upscale={'method':'regenerate','width':2560,'height':1440,'steps':steps,'prompt':'A person walks.'},gen_audio=True)
+                        upscale={'method':'regenerate','width':2560,'height':1440,'steps':steps,'prompt':'A person walks.','recipe':recipe},gen_audio=True)
+
+    def test_tiled_recipe_is_the_default(self):
+        import workflows
+        from workflows import TURBOS
+        with patch.dict(workflows.INSTALLED,{'LoraLoaderModelOnly':{REGENERATE['turbo_tiled'],REGENERATE['turbo'],REGENERATE['refiner'],REGENERATE['lms']}}):
+            g=h3_graph('clip.mp4',[],'p',960,544,22,22,'sharpness',42,8,'original',[],'human',0,
+                       upscale={'method':'regenerate','width':1920,'height':1088,'steps':3,'prompt':'A person walks.'})
+        # Pika Flex under refiner + LMS, Sol sparse attention, then 2x2 tiles covering 1920x1088 with 128 px overlap.
+        self.assertEqual(g['72']['inputs']['lora_name'],TURBOS['pika6']['lora'])
+        self.assertEqual(g['35']['inputs']['sampler_name'],'lcm')
+        self.assertEqual(g['33']['inputs']['sigmas'],REGENERATE_SIGMAS[3])
+        self.assertEqual(g['77']['class_type'],'BlockSparseAttention');self.assertEqual(g['77']['inputs']['model'],['74',0])
+        self.assertEqual(g['77']['inputs']['selection'],'sol-attn');self.assertEqual(g['77']['inputs']['selection.tau'],1.3)
+        t=g['78']['inputs'];self.assertEqual(g['78']['class_type'],'HengeH3TiledDiffusion');self.assertEqual(t['model'],['77',0])
+        self.assertEqual((2*t['tile_width']-t['tile_overlap'],2*t['tile_height']-t['tile_overlap']),(1920,1088))
+        self.assertEqual(g['34']['inputs']['model'],['78',0])
+        # 720p needs no tiles; without Pika installed the turbo falls back to DMAD.
+        with patch.dict(workflows.INSTALLED,{'LoraLoaderModelOnly':{REGENERATE['turbo']}}):
+            g=h3_graph('clip.mp4',[],'p',640,360,22,22,'sharpness',42,8,'original',[],'human',0,
+                       upscale={'method':'regenerate','width':1280,'height':720,'steps':3,'prompt':'A person walks.'})
+        self.assertNotIn('78',g);self.assertEqual(g['34']['inputs']['model'],['77',0])
+        self.assertEqual(g['72']['inputs']['lora_name'],REGENERATE['turbo'])
 
     def test_refiner_has_independent_base_and_text_conditioning(self):
         g=self.graph()
@@ -39,14 +61,14 @@ class RegenerateTests(unittest.TestCase):
     def test_lms_on_the_refiner_is_optional_with_a_strength(self):
         def graph(strength):
             return h3_graph('clip.mp4',[],'LMS instruction',1344,768,22,22,'sharpness',42,8,'original',[],'human',0,
-                            upscale={'method':'regenerate','width':2560,'height':1440,'steps':2,'prompt':'A person walks.','lms_strength':strength})
+                            upscale={'method':'regenerate','width':2560,'height':1440,'steps':2,'prompt':'A person walks.','lms_strength':strength,'recipe':'classic'})
         g=graph(.6);self.assertEqual(g['74']['inputs']['strength_model'],.6);self.assertEqual(g['34']['inputs']['model'],['74',0])
         g=graph(0.);self.assertNotIn('74',g);self.assertEqual(g['34']['inputs']['model'],['73',0])
         self.assertEqual(server.refiner_lms_strength({}),1.)
         self.assertEqual(server.refiner_lms_strength({'refiner_lms':True,'refiner_lms_strength':.7}),.7)
         self.assertEqual(server.refiner_lms_strength({'refiner_lms':False,'refiner_lms_strength':.7}),0.)
         from workflows import full_refiner_graph
-        g=full_refiner_graph('henge/t/first.mp4','henge/t/source.mp4','scene',1376,768,2560,1440,362,360,42,lms_strength=0.)
+        g=full_refiner_graph('henge/t/first.mp4','henge/t/source.mp4','scene',1376,768,2560,1440,362,360,42,lms_strength=0.,recipe='classic')
         self.assertNotIn('74',g);self.assertEqual(g['81']['inputs']['model'],['73',0])
 
     def test_refiner_latent_upscaler_can_be_ours(self):

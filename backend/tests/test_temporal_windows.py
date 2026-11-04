@@ -98,7 +98,7 @@ class PureWindowGraphTests(unittest.TestCase):
  def test_all_modes_route_patched_models_and_refiner_has_its_own_patch(self):
   from workflows import h3_graph
   for profile in ('character','headswap','motion','motion_tara','sharpness'):
-   tara=profile=='motion_tara';up={'method':'regenerate','steps':2,'width':1920,'height':1088} if profile=='sharpness' else None
+   tara=profile=='motion_tara';up={'method':'regenerate','steps':2,'width':1920,'height':1088,'recipe':'classic'} if profile=='sharpness' else None
    g=h3_graph('v.mp4',['ref.png'],'test',512,288,107,107,profile,42,8,'original',[],'human',0,conditioning_mode='tara' if tara else 'guide',upscale=up,temporal_windows={'enabled':True,'window_frames':107,'overlap_frames':22})
    self.assertEqual(g['10']['inputs']['model'],['80',0]);self.assertEqual(g['13']['inputs']['model'],['80',0]);self.assertEqual(g['80']['inputs']['model'],['21',0] if tara else ['4',0])
    if up:self.assertEqual(g['81']['inputs']['model'],['74',0]);self.assertEqual(g['34']['inputs']['model'],['81',0])
@@ -130,7 +130,7 @@ class PureWindowGraphTests(unittest.TestCase):
 class FullRefinerTests(unittest.TestCase):
  def test_full_refiner_runs_only_stage_two_on_assembled_frames(self):
   from workflows import full_refiner_graph,REGENERATE
-  g=full_refiner_graph('henge/test/first_pass_full.mp4','henge/test/source.mp4','scene',1376,768,2560,1440,362,360,42,temporal_windows={'enabled':True,'scope':'refiner_full'})
+  g=full_refiner_graph('henge/test/first_pass_full.mp4','henge/test/source.mp4','scene',1376,768,2560,1440,362,360,42,temporal_windows={'enabled':True,'scope':'refiner_full'},recipe='classic')
   self.assertNotIn('14',g);self.assertNotIn('9',g);self.assertNotIn('80',g)
   self.assertEqual(sum(n['class_type']=='SamplerCustomAdvanced' for n in g.values()),1)
   self.assertEqual(g['31']['inputs']['samples'],['94',0]);self.assertEqual(g['94']['inputs']['video_latent'],['91',0])

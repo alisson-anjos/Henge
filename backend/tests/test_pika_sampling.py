@@ -74,7 +74,7 @@ class PikaSamplingTests(unittest.TestCase):
         self.assertEqual(graph['34']['inputs']['steps'],2)
 
     def test_open_h3_stage_two_keeps_its_own_turbo_and_sampler(self):
-        graph=self.graph(profile='sharpness',sampler_name='heun',upscale={'method':'regenerate','steps':2})
+        graph=self.graph(profile='sharpness',sampler_name='heun',upscale={'method':'regenerate','steps':2,'recipe':'classic'})
         self.assertEqual(graph['12']['inputs']['sampler_name'],'heun')
         self.assertEqual(graph['35']['inputs']['sampler_name'],'er_sde')
         self.assertEqual(graph['33']['inputs']['sigmas'],REGENERATE_SIGMAS[2])

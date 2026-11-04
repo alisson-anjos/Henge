@@ -107,6 +107,7 @@ REGENERATE={
  'base':BASES['h3']['unet'],
  'refiner':'henge/minimax_h3_open_regenerate_2k_refiner_rank_16_bf16.safetensors',
  'turbo':TURBOS['dmad4']['lora'],
+ 'turbo_tiled':TURBOS[PIKA['turbo']]['lora'],
  'lms':MODELS['sharpness']['lora'],
  'upscaler':'minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors',
 }
@@ -226,7 +227,12 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             if count not in REGENERATE_SIGMAS:raise ValueError('Regenerate needs 2 or 3 refine steps')
             g['70']=node('UNETLoader',unet_name=REGENERATE['base'],weight_dtype='default')
             g['71']=node('ModelAttentionBackend',model=['70',0],attention=attention)
-            g['72']=node('LoraLoaderModelOnly',model=['71',0],lora_name=REGENERATE['turbo'],strength_model=1.)
+            # Default recipe (a shared Open-H3 Regenerate 2K workflow that upscaled best): Pika Flex turbo under the
+            # refiner and LMS, 3 lcm steps, Sol sparse attention and 2x2 spatial tiles at 2K. DMAD stays the fallback
+            # turbo when Pika is not installed; 'classic' keeps the earlier DMAD + er_sde recipe.
+            recipe=upscale.get('recipe','tiled')
+            turbo=REGENERATE['turbo_tiled'] if recipe=='tiled' and lora_installed(REGENERATE['turbo_tiled']) else REGENERATE['turbo']
+            g['72']=node('LoraLoaderModelOnly',model=['71',0],lora_name=turbo,strength_model=1.)
             g['73']=node('LoraLoaderModelOnly',model=['72',0],lora_name=REGENERATE['refiner'],strength_model=1.)
             # LMS on top of the refiner is optional, at the chosen strength (0 = refiner and turbo only).
             lms=float(upscale.get('lms_strength',1.))
@@ -239,8 +245,18 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             # LMS follows the source through Add Guide, at the final canvas size.
             g['75']=node('HengeLoadShot',video=video,pictures='[]',width=W,height=H,length=length)
             g['76']=node('MiniMaxH3AddGuide',positive=['32',0],latent=['31',0],vae=['6',0],image=['75',0],frame_idx=0)
-            g['34']=node('BasicGuider',model=['74' if lms>0 else '73',0],conditioning=['76',0])
-            g['35']=node('KSamplerSelect',sampler_name='er_sde')
+            refine_model=['74' if lms>0 else '73',0]
+            if recipe=='tiled':
+                g['77']=node('BlockSparseAttention',model=refine_model,**{'selection':'sol-attn','selection.tau':1.3},start_percent=.2,end_percent=1.,
+                             dense_blocks='',min_tokens=12288,extra_tokens=256,sink_conditioning='exact_kv_and_rows',verbose=False)
+                refine_model=['77',0]
+                if W*H>1_000_000:
+                    # 1080p and 2K: 2x2 overlapping tiles (128 px overlap), sized on the 32 px grid.
+                    tile=lambda side:-(-(side+128)//64)*32
+                    g['78']=node('HengeH3TiledDiffusion',model=refine_model,tile_width=tile(W),tile_height=tile(H),tile_overlap=128,method='gaussian')
+                    refine_model=['78',0]
+            g['34']=node('BasicGuider',model=refine_model,conditioning=['76',0])
+            g['35']=node('KSamplerSelect',sampler_name='lcm' if recipe=='tiled' else 'er_sde')
             g['36']=node('RandomNoise',noise_seed=seed)
             g['37']=node('SamplerCustomAdvanced',noise=['36',0],guider=['34',0],sampler=['35',0],sigmas=['33',0],latent_image=['31',0])
             g['38']=node('LTXVSeparateAVLatent',av_latent=['37',0])
@@ -282,7 +298,7 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
             g['36']['inputs']['model']=g['34']['inputs']['model']=['81',0]
     return g
 
-def full_refiner_graph(video,guide,prompt,width,height,output_width,output_height,length,trim_frames,seed,steps=2,attention="comfy kitchen attention",temporal_windows=None,lms_strength=1.,upscaler_model=None):
+def full_refiner_graph(video,guide,prompt,width,height,output_width,output_height,length,trim_frames,seed,steps=2,attention="comfy kitchen attention",temporal_windows=None,lms_strength=1.,upscaler_model=None,recipe='tiled'):
     """Refine the assembled first pass once, using a separate Ref2VA stack and global sampler.
 
     Persisted first-pass frames are re-encoded (not concatenated latent caches). The original
@@ -290,7 +306,7 @@ def full_refiner_graph(video,guide,prompt,width,height,output_width,output_heigh
     """
     windows={**(temporal_windows or {}),'enabled':True}
     g=h3_graph(guide,[],prompt,width,height,length,trim_frames,'sharpness',seed,4,'original',[],'human',0,
-               attention=attention,upscale={'method':'regenerate','width':output_width,'height':output_height,'steps':steps,'prompt':prompt,'lms_strength':lms_strength,**({'model':upscaler_model} if upscaler_model else {})})
+               attention=attention,upscale={'method':'regenerate','width':output_width,'height':output_height,'steps':steps,'prompt':prompt,'lms_strength':lms_strength,'recipe':recipe,**({'model':upscaler_model} if upscaler_model else {})})
     g['90']=node('HengeLoadShot',video=video,pictures='[]',width=width,height=height,length=length)
     g['91']=node('VAEEncodeTiled',pixels=['90',0],vae=['6',0],tile_size=512,overlap=64,temporal_size=64,temporal_overlap=8)
     g['92']=node('EmptyMiniMaxH3LatentAV',width=width,height=height,length=length)

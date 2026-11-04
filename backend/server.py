@@ -192,7 +192,8 @@ def validate_request(r,options,slots):
     if upscale_method(options)=='regenerate':
         if r['mode']!='sharpness':raise ValueError('Open-H3 Regenerate is a Sharpness option')
         if r['quality'] not in ('1080p','1440p'):raise ValueError('Open-H3 Regenerate currently supports 1080p or 2K output')
-        if options.get('regenerate_steps',2) not in (2,3):raise ValueError('Regenerate needs 2 or 3 refine steps')
+        if options.get('regenerate_steps',3) not in (2,3):raise ValueError('Regenerate needs 2 or 3 refine steps')
+        if options.get('refiner_recipe','tiled') not in ('tiled','classic'):raise ValueError('Refiner recipe must be tiled or classic')
         if not isinstance(options.get('refiner_lms',True),bool):raise ValueError('refiner_lms must be true or false')
         clamp_float(options.get('refiner_lms_strength',1.),.1,1.5,'refiner LMS strength')
         if options.get('refiner_upscaler','base') not in workflows.REGENERATE_UPSCALERS:raise ValueError('refiner_upscaler must be base or lms')
@@ -1156,7 +1157,7 @@ def generate(job):
             # Native resize targets the final canvas explicitly, not an assumed 2x ratio.
             w,h=size(768)
             W,H=size(short)
-            upscale={'method':method,'width':W,'height':H,'model':refiner_upscaler(options),'steps':options.get('regenerate_steps',2),'prompt':plan.get('regenerate_prompt') or options.get('regenerate_prompt',''),'lms_strength':refiner_lms_strength(options)}
+            upscale={'method':method,'width':W,'height':H,'model':refiner_upscaler(options),'steps':options.get('regenerate_steps',3),'recipe':options.get('refiner_recipe','tiled'),'prompt':plan.get('regenerate_prompt') or options.get('regenerate_prompt',''),'lms_strength':refiner_lms_strength(options)}
         elif method=='h3':
             choices=comfy_choices(comfy_info(),'HengeH3LatentUpscale','model_name')
             upscale['model']=next((m for m in H3_UPSCALERS if m in choices),None)
@@ -1399,7 +1400,7 @@ def refine_full_video(job,joined,W,H,pieces=()):
     start,end=r['video']['start_seconds'],r['video']['end_seconds']
     run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/job['assets']['video']),'-t',str(end-start),'-vf',f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2','-an','-c:v','libx264','-threads','2','-crf','17','-y',str(guide)])
     def refine(video,guide_video,count,stage,dest):
-        graph=workflows.full_refiner_graph(video.relative_to(INPUT).as_posix(),guide_video.relative_to(INPUT).as_posix(),job['plan'].get('regenerate_prompt') or options.get('regenerate_prompt') or job['plan']['prompt'],size['width'],size['height'],W,H,grid_frames(count),count,int(options.get('seed',42)),steps=options.get('regenerate_steps',2),attention=options.get('attention','comfy kitchen attention'),temporal_windows=options.get('temporal_windows'),lms_strength=refiner_lms_strength(options),upscaler_model=refiner_upscaler(options))
+        graph=workflows.full_refiner_graph(video.relative_to(INPUT).as_posix(),guide_video.relative_to(INPUT).as_posix(),job['plan'].get('regenerate_prompt') or options.get('regenerate_prompt') or job['plan']['prompt'],size['width'],size['height'],W,H,grid_frames(count),count,int(options.get('seed',42)),steps=options.get('regenerate_steps',3),attention=options.get('attention','comfy kitchen attention'),temporal_windows=options.get('temporal_windows'),lms_strength=refiner_lms_strength(options),upscaler_model=refiner_upscaler(options),recipe=options.get('refiner_recipe','tiled'))
         outputs=execute_graph(job,graph,stage)
         results=output_files(outputs,'17','videos')
         if not results:raise ValueError('ComfyUI finished without the full-video refinement')
@@ -2130,7 +2131,7 @@ def job_settings(job):
     parts=[(job.get('mode') or '').replace('_',' ').title(),'LoRA '+model.get('label',o.get('profile',''))]
     if job.get('mode')=='sharpness' and QUALITY.get(job.get('quality'),0)>UPSCALE_ABOVE:
         method=upscale_method(o)
-        parts.append({'h3':f"H3 upscale x2 ({o.get('upscale_steps',1)} steps, denoise {o.get('upscale_denoise',.15)})",'nvidia':'NVIDIA RTX VSR x2','regenerate':f"Open-H3 Regenerate rank16 ({o.get('regenerate_steps',2)} steps)"}.get(method,'no upscale'))
+        parts.append({'h3':f"H3 upscale x2 ({o.get('upscale_steps',1)} steps, denoise {o.get('upscale_denoise',.15)})",'nvidia':'NVIDIA RTX VSR x2','regenerate':f"Open-H3 Regenerate rank16 ({o.get('regenerate_steps',3)} steps, {o.get('refiner_recipe','tiled')})"}.get(method,'no upscale'))
     if job.get('mode')!='sharpness':
         parts+=[f"guidance {o.get('conditioning_mode','guide').upper()}",f"turbo {TURBOS.get(o.get('turbo','dmd8'),{}).get('label',o.get('turbo'))}",f"CFG {o.get('cfg',1)}",f"sampler {o.get('sampler_name','auto')}"]
         if o.get('base','h3')!='h3':parts.append(BASES.get(o['base'],{}).get('label',o['base']))

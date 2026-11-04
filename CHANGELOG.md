@@ -9,6 +9,19 @@ their scope; CPU tests do not replace generation with the real models.
 
 ## 2026-11-04
 
+### Open-H3 Refiner: tiled recipe by default
+
+- The Open-H3 Refiner (Sharpness at 1080p/2K) now follows a shared Open-H3 Regenerate 2K workflow that upscaled
+  best, with the LMS LoRA: Pika H3 Flex turbo under the refiner and LMS LoRAs, 3 `lcm` steps
+  (`0.909375, 0.857143, 0.666667, 0`), Sol sparse attention (ComfyUI core `BlockSparseAttention`, tau 1.3 from 20%),
+  and 2x2 spatial tiles with 128 px overlap at 1080p and above (our `HengeH3TiledDiffusion`, no third-party node).
+  The source video stays the Add Guide control and the planned scene prompt is kept.
+- Without the Pika LoRA installed the refiner turbo falls back to DMAD. The earlier recipe (DMAD, `er_sde`, 2 steps)
+  stays available as Advanced → Refiner recipe → Classic, or `refiner_recipe: "classic"`.
+- Saved browser settings move once to the tiled recipe and 3 refiner steps. The Pika LoRA is now also listed in the
+  `regenerate` model profile.
+- Graph contracts covered by CPU tests (46 passed); no GPU generation with this recipe yet.
+
 ### Pure temporal windows are the default in every mode
 
 - Pure temporal windows give better quality and are now selected by default in Motion Transfer, Character Swap and
