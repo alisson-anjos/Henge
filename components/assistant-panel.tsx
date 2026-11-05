@@ -14,7 +14,8 @@ type Message =
   | {role: 'user'; text: string; images?: string[]}
   | {role: 'assistant'; text: string; tool_calls?: StudioCall[]; native?: unknown; native_provider?: string}
   | {role: 'tool'; results: Result[]};
-type Config = {provider: 'anthropic' | 'openai' | 'local'; model: string; base_url: string; effort: string; has_key: boolean; key_hint: string; marking?: 'sam' | 'vision'; planner?: 'local' | 'assistant'};
+type Config = {provider: 'anthropic' | 'openai' | 'local'; model: string; base_url: string; effort: string; has_key: boolean; key_hint: string;
+  image_enabled?: boolean; image_model?: string; image_quality?: string; has_image_key?: boolean; image_key_hint?: string; image_ready?: boolean; marking?: 'sam' | 'vision'; planner?: 'local' | 'assistant'};
 type JobMention = {id: string; project?: string; mode?: string; status: string; created: number};
 // An image is a generation reference (loaded as a Picture) or only explains something to the assistant (a marked
 // screenshot, a sketch): those stay in the chat and never reach the studio.
@@ -45,6 +46,8 @@ const label = (name: string, input: Record<string, unknown>) => {
     case 'set_quality': return `set_quality · ${v('quality')}`;
     case 'wait_for_job': return `wait_for_job · ${v('until')}`;
     case 'view_job_video': return `view_job_video · ${v('which')}`;
+    case 'review_job': return `review_job${Array.isArray(input.shots) && input.shots.length ? ' · shots ' + input.shots.join(', ') : ''}`;
+    case 'redo_shot': return `redo_shot · ${v('shot')}${input.seed !== undefined ? ' seed ' + v('seed') : ''}`;
     default: return name;
   }
 };
@@ -61,7 +64,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   // The settings center / first-run wizard asks the assistant to show its own settings.
   useEffect(() => {const show = () => {setOpen(true); setSettings(true);}; addEventListener('henge:assistant-settings', show); return () => removeEventListener('henge:assistant-settings', show);}, []);
   const [config, setConfig] = useState<Config | null>(null);
-  const [draft, setDraft] = useState<Partial<Config> & {api_key?: string}>({});
+  const [draft, setDraft] = useState<Partial<Config> & {api_key?: string; image_api_key?: string}>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [recentJobs, setRecentJobs] = useState<JobMention[]>([]);
@@ -112,6 +115,17 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
   const [models, setModels] = useState<{id: string; name: string}[] | null>(null);
   const [modelsError, setModelsError] = useState('');
   const [typeModel, setTypeModel] = useState(false);
+  // GPT Image (OpenAI): reference images for the assistant and an editor in the frame editor's picker.
+  const [imageModels, setImageModels] = useState<{id: string; name: string}[] | null>(null);
+  const [imageModelsError, setImageModelsError] = useState('');
+  async function loadImageModels() {
+    setImageModels(null); setImageModelsError('');
+    try {
+      const r = await fetch('/api/backend/assistant/image-models', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({image_api_key: draft.image_api_key || ''})});
+      const reply = await r.json(); if (!r.ok) throw Error(reply.detail || `HTTP ${r.status}`);
+      setImageModels(reply);
+    } catch (e) {setImageModels([]); setImageModelsError(e instanceof Error ? e.message : String(e));}
+  }
   async function loadModels() {
     setModels(null); setModelsError('');
     try {
@@ -261,7 +275,7 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         <small className="muted mono">{jobId ? `#${jobId.slice(0, 8)}${config ? ` · ${config.model}` : ''}` : config ? `${config.model}` : ''}</small>
         <span><button type="button" className="quiet-button" onClick={newChat} disabled={!!busy}>{tr('New chat', 'Nova conversa', 'Nueva conversación')}</button>
           <button type="button" className="quiet-button" aria-pressed={expanded} title={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} aria-label={expanded ? tr('Smaller', 'Diminuir', 'Reducir') : tr('Expand', 'Expandir', 'Ampliar')} onClick={toggleExpanded}>{expanded ? '⤡' : '⤢'}</button>
-          <button type="button" className="quiet-button" aria-pressed={settings} onClick={() => setSettings(s => !s)}>⚙</button></span></header>
+          <button type="button" className="quiet-button assistant-settings-button" aria-pressed={settings} title={tr('Assistant settings', 'Configurações do assistente', 'Ajustes del asistente')} aria-label={tr('Assistant settings', 'Configurações do assistente', 'Ajustes del asistente')} onClick={() => setSettings(s => !s)}>⚙</button></span></header>
       {settings && config && <div className="assistant-settings">
         <label>{tr('Model provider', 'Provedor do modelo', 'Proveedor del modelo')}<Select value={presetOf(draft)} onChange={e => {const p = PRESETS[e.target.value]; if (p) setDraft(d => ({...d, ...p}));}}>
           <option value="local">{tr('Henge VLM (built-in, no key)', 'Henge VLM (embutido, sem chave)', 'Henge VLM (integrado, sin clave)')}</option><option value="claude">Claude (Anthropic API)</option><option value="openai">OpenAI (GPT)</option><option value="lmstudio">LM Studio ({tr('local', 'local', 'local')})</option><option value="ollama">Ollama ({tr('local', 'local', 'local')})</option><option value="custom">{tr('Other OpenAI-compatible API', 'Outra API compatível com OpenAI', 'Otra API compatible con OpenAI')}</option></Select></label>
@@ -282,6 +296,22 @@ export default function AssistantPanel({controller, lang, jobId}: {controller: S
         {draft.provider === 'anthropic' && <label>{tr('Effort', 'Esforço', 'Esfuerzo')}<Select value={draft.effort ?? 'medium'} onChange={e => setDraft(d => ({...d, effort: e.target.value}))}>{['low', 'medium', 'high'].map(v => <option key={v} value={v}>{v}</option>)}<option value="">{tr('model default', 'padrão do modelo', 'predeterminado')}</option></Select></label>}
         <label>{tr('Who writes the automatic prompts and analyses', 'Quem escreve os prompts automáticos e as análises', 'Quién escribe los prompts automáticos y los análisis')}<Select value={draft.planner ?? 'local'} onChange={e => setDraft(d => ({...d, planner: e.target.value as 'local' | 'assistant'}))}><option value="local">{tr('The local planner (Qwen in ComfyUI, free)', 'O planner local (Qwen no ComfyUI, grátis)', 'El planificador local (Qwen en ComfyUI, gratis)')}</option><option value="assistant">{tr('This assistant model', 'Este modelo do assistente', 'Este modelo del asistente')}</option></Select><small className="muted">{tr('Picture descriptions, the guide analysis, the plan and the final H3 prompt. With the assistant model they are usually better and free the GPU, but each generation spends a few API requests.', 'Descrição das Pictures, análise do guia, o plano e o prompt final do H3. Com o modelo do assistente costumam sair melhores e liberam a GPU, mas cada geração gasta algumas chamadas da API.', 'Descripción de las Pictures, análisis de la guía, el plan y el prompt final de H3. Con el modelo del asistente suelen salir mejor y liberan la GPU, pero cada generación gasta algunas llamadas a la API.')}</small></label>
         <label>{tr('Who marks the people', 'Quem marca as pessoas', 'Quién marca a las personas')}<Select value={draft.marking ?? 'sam'} onChange={e => setDraft(d => ({...d, marking: e.target.value as 'sam' | 'vision'}))}><option value="sam">{tr('SAM 3.1 detects and numbers them', 'O SAM 3.1 detecta e numera', 'SAM 3.1 las detecta y numera')}</option><option value="vision">{tr('The assistant, with its own vision', 'O assistente, com a própria visão', 'El asistente, con su propia visión')}</option></Select><small className="muted">{tr('With the assistant, it points at each person (checking the dot on the frame); SAM 3.1 still cuts out and tracks them in every frame when generating.', 'Com o assistente, ele aponta cada pessoa (conferindo o ponto no quadro); o SAM 3.1 continua recortando e seguindo cada uma em todos os quadros na geração.', 'Con el asistente, señala a cada persona (comprobando el punto en el fotograma); SAM 3.1 sigue recortándolas y siguiéndolas en todos los fotogramas al generar.')}</small></label>
+        <fieldset className="assistant-image-settings"><legend>GPT Image</legend>
+          <div className="ffp-normals-row"><button type="button" id="gpt-image-on" className="toggle" role="switch" aria-checked={!!draft.image_enabled} aria-label={tr('Enable GPT Image (OpenAI)', 'Ativar GPT Image (OpenAI)', 'Activar GPT Image (OpenAI)')} onClick={() => {const on = !draft.image_enabled; setDraft(d => ({...d, image_enabled: on})); if (on && imageModels === null) void loadImageModels();}}><span/></button><label htmlFor="gpt-image-on">{tr('Enable GPT Image (OpenAI)', 'Ativar GPT Image (OpenAI)', 'Activar GPT Image (OpenAI)')}</label></div>
+          <small className="muted">{tr('Shows up as an editor in the frame editor (keyframes, first frame, pictures) and lets the assistant generate images. Runs on OpenAI\'s API, billed to your key.', 'Aparece como editor no editor de quadros (keyframes, primeiro quadro, imagens) e deixa o assistente gerar imagens. Roda na API da OpenAI, cobrado na sua chave.', 'Aparece como editor en el editor de fotogramas (keyframes, primer fotograma, imágenes) y deja al asistente generar imágenes. Usa la API de OpenAI, cobrada a tu clave.')}</small>
+          {draft.image_enabled && <>
+            <label>{tr('Image model', 'Modelo de imagem', 'Modelo de imagen')}
+              {imageModels?.length ? <Select value={draft.image_model || ''} onChange={e => setDraft(d => ({...d, image_model: e.target.value}))}>
+                  {draft.image_model && !imageModels.some(m => m.id === draft.image_model) && <option value={draft.image_model}>{draft.image_model} ({tr('not listed', 'não listado', 'no listado')})</option>}
+                  {imageModels.map(m => <option key={m.id} value={m.id}>{m.id}</option>)}</Select>
+                : <input value={draft.image_model || ''} placeholder="gpt-image-1" onChange={e => setDraft(d => ({...d, image_model: e.target.value}))}/>}
+              {imageModels === null && <small className="muted">{tr('Loading models…', 'Carregando modelos…', 'Cargando modelos…')}</small>}
+              {imageModelsError && <small className="muted">{imageModelsError} <button type="button" className="quiet-button" onClick={loadImageModels}>↻</button></small>}</label>
+            <label>{tr('Quality', 'Qualidade', 'Calidad')}<Select value={draft.image_quality || 'medium'} onChange={e => setDraft(d => ({...d, image_quality: e.target.value}))}>{['low', 'medium', 'high', 'auto'].map(v => <option key={v} value={v}>{v}</option>)}</Select></label>
+            <label>{tr('OpenAI key for images (optional)', 'Chave da OpenAI para imagens (opcional)', 'Clave de OpenAI para imágenes (opcional)')}<input type="password" autoComplete="off" value={draft.image_api_key || ''} placeholder={config.has_image_key ? `${tr('saved', 'salva', 'guardada')} ${config.image_key_hint}` : tr('uses the assistant key when the assistant is on OpenAI', 'usa a chave do assistente quando ele está na OpenAI', 'usa la clave del asistente cuando está en OpenAI')} onChange={e => setDraft(d => ({...d, image_api_key: e.target.value}))} onBlur={() => {if (draft.image_api_key) void loadImageModels();}}/></label>
+            {config.image_enabled && !config.image_ready && <small className="warn">{tr('No OpenAI key yet: add one here or use OpenAI as the assistant provider.', 'Ainda sem chave da OpenAI: adicione aqui ou use a OpenAI como provedor do assistente.', 'Aún sin clave de OpenAI: añádela aquí o usa OpenAI como proveedor del asistente.')}</small>}
+          </>}
+        </fieldset>
         <small className="muted">{tr('The key stays on the bridge (assistant.json in its data folder); the browser never receives it. The model needs vision and tool calling.', 'A chave fica no bridge (assistant.json na pasta de dados); o navegador nunca a recebe. O modelo precisa de visão e de chamada de ferramentas.', 'La clave queda en el bridge (assistant.json en su carpeta de datos); el navegador nunca la recibe. El modelo necesita visión y llamadas a herramientas.')}</small>
         <div className="plan-actions"><button type="button" className="primary" onClick={saveSettings}>{tr('Save', 'Salvar', 'Guardar')}</button></div>
       </div>}

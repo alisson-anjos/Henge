@@ -9,7 +9,8 @@ export async function captureFrame(url: string, time: number): Promise<{blob: Bl
   const video = document.createElement('video');
   video.muted = true; video.playsInline = true; video.preload = 'auto'; video.src = url;
   await new Promise<void>((resolve, reject) => {video.onloadeddata = () => resolve(); video.onerror = () => reject(Error('Unable to read the video'));});
-  await new Promise<void>(resolve => {video.onseeked = () => resolve(); video.currentTime = Math.min(Math.max(0, time), Math.max(0, video.duration - .05));});
+  // Seeking to where the video already is (0 s) fires no 'seeked': aim a millisecond in, as the frame editor does.
+  await new Promise<void>(resolve => {video.onseeked = () => resolve(); video.currentTime = Math.min(Math.max(0, time) + .001, Math.max(0, video.duration - .05));});
   const canvas = document.createElement('canvas');
   canvas.width = video.videoWidth; canvas.height = video.videoHeight;
   canvas.getContext('2d')?.drawImage(video, 0, 0);

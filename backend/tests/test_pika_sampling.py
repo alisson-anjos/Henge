@@ -90,7 +90,7 @@ class PikaSamplingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'sampler'):
             server.validate_request(request,{'sampler_name':'invented'},[1])
         with self.assertRaisesRegex(ValueError,'Ref2VA'):
-            server.validate_request(request,{'turbo':'pika6','base':'omniref'},[1])
+            server.validate_request(request,{'turbo':'pika6','base':'fl2va'},[1])
 
     def test_default_download_includes_adapter_and_notices(self):
         spec=importlib.util.spec_from_file_location('download_models',ROOT/'scripts/download_models.py')

@@ -1,0 +1,9 @@
+Source: @SRC@, the whole clip. Character Swap: the person in the centre of the first shot becomes the character in
+@PICTURE1@ - whole person: face, hair, build and outfit. Everyone else stays as they are. The clip has camera cuts: the
+character must be the same person in every shot, so make a keyframe after each cut where they are visible.
+
+Budget: 6 image edits. Render at 480p. Review every shot, do at most one fix round per shot where AGENTS.md says it is
+worth it, then download the result and save_result.
+
+Final message: the mp4 path, the overall grade, image edits used, the keyframes you pinned and why, remaining flaws by
+time range, and the tool friction you hit (anything slow, confusing, or that made you redo work).

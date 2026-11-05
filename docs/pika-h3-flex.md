@@ -2,7 +2,7 @@
 
 Pika is an optional **Turbo LoRA** selection, downloaded by default. It does not replace Henge's task LoRAs or
 change the existing default turbo. Henge uses the Comfy-format **Ref2VA** adapter at strength 1.0 with its existing
-H3 Ref2VA base; FL2VA and FastH3 OmniRef are not used for this option.
+H3 Ref2VA base; FL2VA is not used for this option.
 
 ## Sampling
 

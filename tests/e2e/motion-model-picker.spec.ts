@@ -128,13 +128,13 @@ test('the model picker offers the four models and follows the First Frame', asyn
 
   if (!await uploadGuide(page)) {expect(true, 'no guide clip: skipping the First Frame checks').toBeTruthy(); return;}
   // The First Frame card starts collapsed: open it, then ask for the frame editor.
-  await page.locator('.ffp-card summary').click();
+  await page.locator('.ffp-card > summary').click();
   await expect(page.locator('.ffp-card .first-frame-button')).toBeVisible();
   await page.locator('.ffp-card .first-frame-button').click();
   const modal = page.locator('.first-frame-modal');
   await expect(modal).toBeVisible();
-  // The modal names the image editors this backend has, in the order it prefers them: FIBO 2.0 keeps the frame.
-  await expect(modal.locator('.edit-editors button').first()).toHaveText(/FIBO 2\.0/);
+  // The modal offers the image editors this backend has (a picker when there are several).
+  await expect(modal.getByRole('button', {name: /Edit with|Editar com|Editar con/})).toBeVisible({timeout: 60_000});
   const what = modal.getByLabel(/What do you replace|O que você vai substituir|Qué reemplazas/);
   if (await what.count()) await what.fill('the hoodie');
   await modal.getByLabel(/With what|Pelo quê|Por qué/).fill('a luminous blue jacket');

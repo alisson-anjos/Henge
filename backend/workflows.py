@@ -42,7 +42,7 @@ MODELS={
 # Swappable speed LoRAs. Swap modes load it in place of an adapter; Motion stacks it on training
 # adapter V2 (what the motion LoRAs were trained on).
 TURBOS={
- 'none':{'label':'None (for distilled bases such as FastH3 OmniRef)','lora':None,'steps':8},
+ 'none':{'label':'None','lora':None,'steps':8},
  'dmd8':{'label':'DMD 8-step (drbaph)','lora':'henge/minimax_h3_dmd_ref2va_8step_turbo_pruned.safetensors','steps':8},
  'dmad4':{'label':'DMAD 4-step (Kijai)','lora':'henge/minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors','steps':4},
  'pdmd4':{'label':'pDMD 4-step (Kijai, experimental)','lora':'henge/minimax_h3_pdmd_4step_lora_avg_rank_57_bf16.safetensors','steps':4},
@@ -94,10 +94,14 @@ def localize_loras(graph):
         key=LOADERS.get(n.get('class_type'))
         if key and isinstance(n.get('inputs',{}).get(key),str):n['inputs'][key]=resolve_model(n['class_type'],n['inputs'][key])
     return graph
-# Base diffusion models. OmniRef (FastVideo) is already distilled to 8 steps: pair it with turbo 'none'.
+# Base diffusion models.
 BASES={
  'h3':{'label':'MiniMax H3 ref2va','unet':'minimax_h3_ref2va_pruned_int8_convrot.safetensors'},
- 'omniref':{'label':'FastH3 OmniRef 8-step (FastVideo)','unet':'fasth3_omniref_8step_pruned_int8_convrot.safetensors'},
+ # The FL2VA base transformer (Viggle Remake's LoRAs were trained on it): the same graph and references; our LoRAs were
+ # trained on ref2va, so this is the experiment of running them on fl2va, e.g. with pinned keyframes.
+ 'fl2va':{'label':'MiniMax H3 fl2va (experimental with our LoRAs)','unet':'minimax_h3_fl2va_pruned_int8_convrot.safetensors'},
+ # fl2va plus Kijai's ref LoRA (the ref2va − fl2va difference, rank 256): a stand-in for ref2va built on fl2va, to compare.
+ 'fl2va_ref':{'label':'MiniMax H3 fl2va + ref LoRA (experimental)','unet':'minimax_h3_fl2va_pruned_int8_convrot.safetensors','lora':'minimax_h3_ref_lora_rank_256_bf16.safetensors'},
 }
 # Sharpness above 720p renders at half the output size, then doubles it with one of two upscalers (henge/upscale.py):
 # h3: learned H3 latent upscaler, then a short partial-denoise refine by the same H3 model (tiled above ~2 MP);
@@ -296,6 +300,11 @@ def h3_graph(video,refs,prompt,width,height,length,trim_frames,profile,seed,step
         elif upscale and upscale['method']=='h3':
             g['81']=node('HengeH3PureWindows',model=g['36']['inputs']['model'],**window_args)
             g['36']['inputs']['model']=g['34']['inputs']['model']=['81',0]
+    if BASES[base].get('lora'):
+        # A base made of a diffusion model plus a LoRA: everything that read the diffusion model reads the LoRA'd one.
+        for n in g.values():
+            if n['inputs'].get('model')==['1',0]:n['inputs']['model']=['26',0]
+        g['26']=node('LoraLoaderModelOnly',model=['1',0],lora_name=BASES[base]['lora'],strength_model=1.)
     return g
 
 def full_refiner_graph(video,guide,prompt,width,height,output_width,output_height,length,trim_frames,seed,steps=2,attention="comfy kitchen attention",temporal_windows=None,lms_strength=1.,upscaler_model=None,recipe='tiled'):
@@ -415,6 +424,64 @@ def bfs_graph(image,refs,instruction,seed,unet=None,lora='',sampler=None,**_):
     g['5']['inputs']['images.image_1']=['31',0];g['5']['inputs']['images.image_2']=['32',0]
     return g
 
+# H3 Image: PrunaAI's P-H3-Image LoRA and VAE (PrunaAI/P-H3-Image-Comfy, Apache-2.0) on the same H3 DiT the videos use, so
+# one base model edits frames and renders. Pruna's LoRA-edit recipe: bypass LoRA, shift 1, eight manual sigmas, BasicGuider,
+# PH3ImageConditioning reading the frame (<Picture 1>) and the references (<Picture 2>...). A person swap (`swap`) runs
+# Henge's Character Swap LoRA instead, the guide-latent way on a one-frame H3 latent: PH3ImageConditioning without images
+# gives the latent, Add Guide anchors the frame at 0, Reference to Video (length 5) carries the prompt and the character,
+# with the Molmo2 H3 encoder (ComfyUI-Molmo2-H3) as the text encoder: with the Qwen3-VL 32B encoder the LoRA leaves the frame
+# unchanged. Either way it runs on a crop around the clicked person, pasted back through the grown mask.
+H3IMAGE={'lora':'henge/p-h3-image_lora_bf16.safetensors','vae':'p-h3-image_vae_bf16.safetensors',
+         'sigmas':'1.0, 0.984753, 0.967905, 0.951688, 0.925372, 0.881923, 0.810083, 0.528718, 0.0',
+         'swap_prompt':'body_swap: Replace the character with the character on the <Picture 1>'}
+def h3image_graph(image,refs,instruction,seed,swap=False,**_):
+    g={'1':node('UNETLoader',unet_name=BASES['h3']['unet'],weight_dtype='default'),
+       '2':node('LoraLoaderBypassModelOnly',model=['1',0],lora_name=H3IMAGE['lora'],strength_model=1.),
+       '3':node('MiniMaxH3SigmaShift',model=['2',0],shift_video=1.,shift_audio=1.),
+       '4':node('CLIPLoader',clip_name='qwen3vl_32b_minimax_h3_int8_convrot.safetensors',type='minimax',device='default'),
+       '5':node('VAELoader',vae_name=H3IMAGE['vae']),
+       '10':node('LoadImage',image=image),
+       # About 1 MP on the 32 px grid the P-H3-Image latent needs (16x compression, 2x2 patches).
+       '11':node('ImageScaleToTotalPixels',image=['10',0],upscale_method='lanczos',megapixels=1.,resolution_steps=32),
+       '12':node('GetImageSize',image=['11',0]),
+       '30':node('PH3ImageConditioning',clip=['4',0],vae=['5',0],prompt=instruction,width=['12',0],height=['12',1],**{'images.image_1':['11',0]}),
+       '7':node('ManualSigmas',sigmas=H3IMAGE['sigmas']),'9':node('KSamplerSelect',sampler_name='euler'),'13':node('RandomNoise',noise_seed=seed),
+       '8':node('BasicGuider',model=['3',0],conditioning=['30',0]),
+       '14':node('SamplerCustomAdvanced',noise=['13',0],guider=['8',0],sampler=['9',0],sigmas=['7',0],latent_image=['30',1]),
+       '15':node('VAEDecode',samples=['14',0],vae=['5',0]),
+       '16':node('SaveImage',images=['15',0],filename_prefix=image.rsplit('.',1)[0]+'_h3image')}
+    for i,r in enumerate(refs):g[str(40+i)]=node('LoadImage',image=r);g['30']['inputs'][f'images.image_{i+2}']=[str(40+i),0]
+    if not swap:return g
+    if not refs:raise ValueError('An H3 Image swap needs the character picture')
+    g['2']=node('LoraLoaderModelOnly',model=['1',0],lora_name=H3IMAGE['lora'],strength_model=1.)
+    g['6']=node('LoraLoaderModelOnly',model=['2',0],lora_name=MODELS['character']['lora'],strength_model=1.);g['3']['inputs']['model']=['6',0]
+    g['4']=node('MolmoH3EncoderLoader')
+    g['11']['inputs']['megapixels']=2.4
+    g['30']=node('PH3ImageConditioning',clip=['4',0],prompt='',width=['12',0],height=['12',1])
+    g['31']=node('MiniMaxH3ReferenceToVideo',clip=['4',0],vae=['5',0],prompt=instruction,width=['12',0],height=['12',1],length=5,ref_image_size='max',
+                 **{f'ref_images.ref_image_{i}':[str(40+i),0] for i in range(len(refs))})
+    g['32']=node('MiniMaxH3AddGuide',positive=['31',0],latent=['30',1],vae=['5',0],image=['11',0],frame_idx=0)
+    g['8']['inputs']['conditioning']=['32',0]
+    return g
+
+# BFS Body Swap Selective (Magenta) V1.0 for Qwen-Image 2.1 (Alissonerdx/BFS-Best-Face-Swap, MIT): three images, the scene,
+# the same scene with the person to replace tinted magenta at 30 %, and the character; only the marked person changes and
+# everyone else stays, keeping the pose, head angle and expression. It needs the whole frame (it is what keeps the other
+# people), so Henge does not crop for it; the server pastes the result back through the grown mark.
+BFS_SELECTIVE={'lora':'henge/bfs_body_swap_selective_magenta_v1.0_qwen_2.1.safetensors','mark':(255,0,255),'opacity':.3,
+     'prompt':('body_swap: replace only the person highlighted in magenta in the second image with the character from the third'
+               ' image - face, hair, body and outfit. Keep the first image\'s scene, lighting, colours, camera and every other person'
+               ' unchanged, and keep the exact pose, head angle and facial expression of the replaced person. The replaced person\'s'
+               ' original hair must not remain; use only the hairstyle of the character from the third image. No magenta in the result.')}
+def bfs_selective_graph(image,refs,instruction,seed,unet=None,lora='',sampler=None,**_):
+    if len(refs)<2:raise ValueError('BFS Body Swap Selective needs the marked frame and the character picture')
+    g=qwen21_graph(image,refs[:2],instruction or BFS_SELECTIVE['prompt'],seed,unet=unet,lora=lora,prefix=image.rsplit('.',1)[0]+'_bfs_selective',sampler=sampler)
+    g['30']=node('LoraLoaderModelOnly',model=['9',0] if lora else ['1',0],lora_name=BFS_SELECTIVE['lora'],strength_model=1.);g['6']['inputs']['model']=['30',0]
+    # The scene and its marked copy have one size, so they stay aligned; the character at the same area.
+    for key,src,slot in (('31','10',1),('32','22',2),('33','23',3)):
+        g[key]=node('ImageScaleToTotalPixels',image=[src,0],upscale_method='lanczos',megapixels=1.,resolution_steps=16);g['5']['inputs'][f'images.image_{slot}']=[key,0]
+    return g
+
 # SolarRenderer's four-step LoRA in ComfyUI keys: our compressed public copy (per-module SVD, 99% of the Frobenius energy,
 # 1.4 GB instead of 5.9 GB), then the full-rank copies a volume may already hold.
 SOLAR_TURBOS=('henge/solarrenderer_4step_comfy_fro_dyn99.safetensors','henge/turbo_solar_4step.safetensors','henge/solarrenderer_4step_comfy.safetensors')
@@ -425,6 +492,36 @@ SOLAR_TURBOS=('henge/solarrenderer_4step_comfy_fro_dyn99.safetensors','henge/tur
 SOLAR_CONTROLS=('henge/solarrenderer_control_comfy_fro_dyn99.safetensors','henge/solarrenderer_control_comfy.safetensors','henge/solar_control.safetensors','henge/solarrenderer_control_lora.safetensors')
 SOLAR_NORMALS='moge_2_vitl_normal_fp16.safetensors'   # geometry_estimation/, MoGe-2 with normals
 SOLAR_MAX_FRAMES=345   # 15 s, H3's single-clip bound; trained on 158, the held silence is stretched past its 170
+def normal_guide(g):
+    """Normal-map guide for Character Swap with an edited first frame: the prepared guide (HengeGuide, Original) goes through
+    MoGe-2, so H3 gets shapes, poses, motion and camera without anyone's colours, clothes or light; the edited frame supplies
+    every look (see pin_opening). The saved guide video shows the map, i.e. what the model was given."""
+    g['50']=node('LoadMoGeModel',model_name=SOLAR_NORMALS)
+    g['51']=node('HengeNormalMap',images=['8',0],moge_model=['50',0],batch_size=2)
+    g['9']['inputs']['guide']=['51',0];g['18']['inputs']['images']=['51',0]
+    return g
+def pin_opening(g,image):
+    """Pin `image` as a keyframe at frame 0 on top of the guide clip (Add Guide), as the opening of the shot; it is also a
+    reference picture (the caller adds it to the pictures). Everything that read the conditioning reads the pinned one."""
+    g['27']=node('LoadImage',image=image)
+    g['28']=node('MiniMaxH3AddGuide',positive=['9',0],latent=['9',1],vae=['6',0],image=['27',0],frame_idx=0)
+    for key,n in g.items():
+        if key=='28':continue
+        for name,value in n['inputs'].items():
+            if value==['9',0]:n['inputs'][name]=['28',0]
+    return g
+def pin_frames(g,pins):
+    """Pin edited frames of the target video inside a shot: each (image, frame_idx) is one more Add Guide keyframe on the
+    conditioning the sampler reads (after the guide clip and any opening pin); the caller also adds them as references."""
+    for n,(image,frame_idx) in enumerate(pins):
+        current=g['10']['inputs']['positive'];key=f'pin{n}'
+        g[key+'_image']=node('LoadImage',image=image)
+        g[key]=node('MiniMaxH3AddGuide',positive=current,latent=['9',1],vae=['6',0],image=[key+'_image',0],frame_idx=int(frame_idx))
+        for name,n_ in g.items():
+            if name==key or n_['class_type']=='MiniMaxH3AddGuide':continue
+            for field,value in n_['inputs'].items():
+                if value==current:n_['inputs'][field]=[key,0]
+    return g
 def solar_sigmas(steps=4,shift=12.):
     """SolarRenderer's four-step grid: linspace(1, 0) shifted by 12 (comfy_nodes/henge/solar.py has the same)."""
     base=[1-k/steps for k in range(steps+1)]

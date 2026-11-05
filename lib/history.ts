@@ -30,6 +30,10 @@ export type DirectionRequest = {
   first_frame_slot?: number;
   /** Character Swap: an edited first frame (sent as the `first_frame` file) replaces frame 0 of the guide. */
   guide_first_frame?: boolean;
+  /** Character Swap with an edited first frame: the guide becomes a MoGe-2 normal map, the frame a reference pinned at frame 0. */
+  guide_normals?: boolean;
+  /** Pinned keyframes: edited frames of the target video at their time (files `keyframe_<slot>`). */
+  keyframes?: {time_seconds: number; slot: number}[];
   /** How an edited first frame is used: frame 0 of the guide, its first latent (default), or a reference picture only. */
   first_frame_mode?: 'latent' | 'reference';
   generation_status: 'not_submitted';

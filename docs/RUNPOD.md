@@ -57,7 +57,7 @@ To build your own template instead, RunPod → **My Templates → New Template**
 |---|---|
 | Container image | `ghcr.io/alisson-anjos/henge:latest` |
 | Container disk | 30 GB |
-| Volume disk | 180 GB (default profiles including OmniRef and the FIBO 2.0 editor) |
+| Volume disk | 160 GB (default profiles, including the H3 Image editor) |
 | Volume mount path | `/workspace` |
 | Expose HTTP ports | `8188` (add `8189` to open ComfyUI too) |
 | Expose TCP ports | `22` |
@@ -66,7 +66,7 @@ Environment variables (all optional):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,regenerate,omniref,fibo,sam2d,sam3d,audio` | Comma list: `character`, `regenerate` (Open-H3 refiner and native H3 latent upscaler for the default Sharpness method), `omniref` (+22 GB base), `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0 and Motion Transfer FFP v1.0, the First Frame model, plus the SolarRenderer 4-step turbo as an option), `solar` (that SolarRenderer 4-step turbo alone, 5.9 GB), `fibo` (the default image editor, FIBO 2.0 edit turbo), and the optional editors `qwen21` (Qwen-Image 2.1 Turbo), `klein` (FLUX.2 Klein 4B), `klein3` (FLUX.3 [image klein], gated) |
+| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,regenerate,h3image,sam2d,sam3d,audio` | Comma list: `character`, `regenerate` (Open-H3 refiner and native H3 latent upscaler for the default Sharpness method), `sam2d`, `sam3d`, `audio`, `motion` (Motion Transfer v1.0, TARA v1.0 and Motion Transfer FFP v1.0, the First Frame model, plus the SolarRenderer 4-step turbo as an option), `solar` (that SolarRenderer 4-step turbo alone, 5.9 GB), `fibo` (the default image editor, FIBO 2.0 edit turbo), and the optional editors `qwen21` (Qwen-Image 2.1 Turbo), `klein` (FLUX.2 Klein 4B), `klein3` (FLUX.3 [image klein], gated) |
 | `HF_TOKEN` | — | Not needed for the default profiles. Only for the optional `klein3` profile (FLUX.3 [image klein], gated: accept its license at huggingface.co/black-forest-labs/flux-3-image-klein-comfy) or an override that points at a private repository |
 | `HENGE_MODEL_OVERRIDES` | — | JSON that replaces a model URL or destination from the bundled manifest |
 | `HENGE_VLM_CLIP` | `qwen3.5_9b_w4a8_gptq.safetensors` | Prompt planner / VLM |
@@ -99,8 +99,8 @@ The image uses PyTorch 2.14 + CUDA 13.0, so the host driver must support CUDA 13
 ## 4. First boot
 
 Open **Connect → HTTP 8188**: the Henge setup screen lists every model with its progress and opens the studio by
-itself when they are ready (about 10 minutes on RunPod's network). The first boot downloads ≈ 127 GB with the default profiles (H3 21 GB + H3 text encoder 27 GB + VAE
-5 GB + Qwen3.5 planner 7 GB + OmniRef 22 GB + the FIBO 2.0 editor ≈ 14 GB + SAM ≈ 4 GB + the task, turbo and Motion Transfer LoRAs);
+itself when they are ready (about 10 minutes on RunPod's network). The first boot downloads ≈ 105 GB with the default profiles (H3 21 GB + H3 text encoder 27 GB + VAE
+5 GB + Qwen3.5 planner 7 GB + the FIBO 2.0 editor ≈ 14 GB + SAM ≈ 4 GB + the task, turbo and Motion Transfer LoRAs);
 fewer profiles download less. When ComfyUI and the UI are up, open **Connect → HTTP 8188**
 (`https://<pod-id>-8188.proxy.runpod.net`).
 
@@ -120,14 +120,6 @@ restarting in a loop.
 ```
 
 Set `HENGE_WORKSPACE=off` to keep everything inside the container instead.
-
-## Optional base model: FastH3 OmniRef
-
-Add `omniref` to `HENGE_MODEL_PROFILES` to download
-[FastVideo/FastH3-Omni-Comfy](https://huggingface.co/FastVideo/FastH3-Omni-Comfy)
-(`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; with the default profiles use a 180 GB volume). Pick it in
-**Advanced → Base model**; it is already distilled to 8 steps, so Turbo LoRA switches to
-**None**. The task LoRAs (Character Swap, Head Swap, Motion) still load on top.
 
 ## Serverless (UI on your PC, GPU only while a job runs)
 

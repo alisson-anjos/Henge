@@ -42,7 +42,7 @@ The prompt planner / VLM is Qwen3.5 9B (W4A8 GPTQ), running inside ComfyUI.
 | Variable | Default | Purpose |
 |---|---|---|
 | `HF_TOKEN` | — | **Not needed** for the default profiles. Only for the optional `klein3` (FLUX.3 [image klein], gated: accept its license on Hugging Face first) |
-| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,regenerate,omniref,fibo,sam2d,sam3d,audio` | `motion` = every Motion Transfer LoRA, FFP included; `regenerate` = Open-H3 refiner and native latent upscaler (default Sharpness method); `fibo` = the default image editor (FIBO 2.0 edit turbo); optional editors `qwen21`, `klein`, `klein3`; also `solar` (~25 GB) |
+| `HENGE_MODEL_PROFILES` | `character,motion,headswap,sharpness,regenerate,h3image,sam2d,sam3d,audio` | `motion` = every Motion Transfer LoRA, FFP included; `regenerate` = Open-H3 refiner and native latent upscaler (default Sharpness method); `h3image` = the default image editor (H3 Image: PrunaAI's P-H3-Image LoRA and VAE on the H3 model, a few GB); optional editors `qwen21` (with BFS Body Swap and BFS Body Swap Selective), `fibo`, `klein`, `klein3`; also `solar` (~25 GB) |
 | `HENGE_MODEL_OVERRIDES` | — | JSON to replace a model URL, e.g. `{"motion_transfer_tara_v1":{"url":"https://…"}}` |
 | `HENGE_COMFY_ARGS` | `--lowvram` | Extra ComfyUI flags. Leave the default: ComfyUI's dynamic VRAM loads and offloads models as needed. Do not use `--highvram` or `--gpu-only`, even on 80 GB GPUs: they keep the 32B text encoder and the VLM on the GPU next to H3 and run out of memory. (`--normalvram` does not exist in this ComfyUI and stops it from starting.) |
 | `HENGE_EXPOSE_COMFY` | — | `1` also serves ComfyUI on port 8189 |
@@ -59,14 +59,6 @@ the pod keeps running.
 ```
 
 Source, setup and license (MIT): https://github.com/alisson-anjos/Henge
-
-## Optional base model: FastH3 OmniRef
-
-Add `omniref` to `HENGE_MODEL_PROFILES` to download
-[FastVideo/FastH3-Omni-Comfy](https://huggingface.co/FastVideo/FastH3-Omni-Comfy)
-(`fasth3_omniref_8step_pruned_int8_convrot`, 22 GB; with the default profiles use a 180 GB volume). Pick it in
-**Advanced → Base model**; it is already distilled to 8 steps, so Turbo LoRA switches to
-**None**. The task LoRAs (Character Swap, Head Swap, Motion) still load on top.
 
 ### Enable Refiner + LMS
 

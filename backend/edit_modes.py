@@ -134,13 +134,25 @@ def character_swap_prompt(details,slot=1):
     prompt=CHARACTER_SWAP_PROMPT.format(details=text)
     return prompt if slot==1 else prompt.replace('<Picture 1>',f'<Picture {slot}>')
 
-def swap_first_frame(prompt,edited,slot=None):
+# Normal-map guide (Character Swap with an edited first frame): the guide carries no appearance, so the prompt says where
+# the look comes from, and the VLM describes the edited frame (place, light, every person) for the text.
+NORMALS_NOTE=(' The guide video is a surface-normal map of the source: it gives only the shapes, body poses, motion and camera,'
+              ' not anyone\'s colours, clothes or light. The look of every person and of the place comes from the edited first'
+              ' frame; the people who are not replaced keep exactly the look they have there.')
+MOTION_NORMALS_NOTE=(' <Video 1> is a surface-normal map of the source performance: it gives only the shapes, body poses, motion'
+                     ' and camera, not the performer\'s colours, clothes, hair or light. Every look comes from the pictures and the'
+                     ' prompt, and the place from the environment picture or the first frame when there is one.')
+FIRST_FRAME_SCENE_INSTRUCTION=('This is the first frame of a video. A video model will see only the shapes and motion of the scene, so describe'
+    ' its look for it, in English, as one paragraph of short comma-separated phrases: first the place, the light and the main'
+    ' colours; then every person or animal from left to right, each with position, hair, skin, clothing with colours and'
+    ' accessories. Describe only what is visible; no names, no guesses, no camera words.')
+def swap_first_frame(prompt,edited,slot=None,normals=False):
     """Character Swap with an edited first frame. By default it replaces frame 0 of the guide (its first latent), so
-    the guide opens on it; `slot` (reference mode) names it as <Picture slot> instead."""
+    the guide opens on it; `slot` (reference mode, always with the normal-map guide) names it as <Picture slot> instead."""
     if not edited:return prompt
     if slot:return (prompt+f' <Picture {slot}> is the edited first frame of the video: it already shows the replacement in the'
                     ' guide\'s scene and pose. Start from it and keep that look through the whole clip while following the guide\'s'
-                    ' motion, timing and camera; it is a frame of the video, not another character.')
+                    ' motion, timing and camera; it is a frame of the video, not another character.'+(NORMALS_NOTE if normals else ''))
     return (prompt+' The guide video opens on an edited first frame that already shows the replacement in the guide\'s scene'
             ' and pose: start from it, continue from it and keep that look through the whole clip while following the guide\'s motion, timing'
             ' and camera.')

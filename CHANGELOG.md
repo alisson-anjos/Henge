@@ -7,6 +7,156 @@ This log starts with the 2026-10-28 updates; earlier commits remain in the Git h
 Render and RunPod have been updated; each entry records those states separately. Test results are described with
 their scope; CPU tests do not replace generation with the real models.
 
+## 2026-11-05
+
+### Experimental bases: fl2va, and fl2va + ref LoRA
+
+- Two experimental choices under Base model, to compare our ref2va-trained LoRAs on the FL2VA transformer (the base
+  Viggle Remake's LoRAs were trained on), e.g. with pinned keyframes: `fl2va` (`minimax_h3_fl2va_pruned_int8_convrot`)
+  and `fl2va_ref`, fl2va plus Kijai's `minimax_h3_ref_lora_rank_256_bf16` (the ref2va − fl2va difference) under every
+  other LoRA. ref2va stays the default; nothing is decided.
+- `scripts/resize_lora_energy.py` keeps modules stored in fp32 (a model's input/output projections) in fp32.
+- Removed the FastH3 OmniRef base: the `omniref` base, download profile and catalogue entry, and its docs. The RunPod
+  default volume drops from 180 GB to 160 GB (first boot ≈ 105 GB). A new job without a turbo gets the default turbo on
+  every base.
+
+### Agent remakes: review every shot, a grade per shot, examples to run unattended
+
+- New `GET /jobs/{id}/review?shots=1,2`: per shot of a finished job, a strip with source frames on top and the same frames
+  of the result below (`KEY` marks a pinned keyframe), and where the result's camera cuts land against the source's:
+  each source cut on time, early or late by n frames, or dropped, plus the extra cuts the result added.
+- The studio assistant has `review_job` and is told to review every finished render, grade each shot OK/MINOR/BAD by
+  strict rules, and spend at most one fix round per shot (a new seed for a dropped or late cut; a keyframe and a new
+  generation for a shot that opens on a cut without one). Its `redo_shot` can rewrite the shot's prompt.
+- MCP: `review_job`, `redo_shot`, `shot_prompt`, `save_result` (a `<reference>_result.json` with the agent's grade per
+  shot, keyframes, redos and remaining problems) and `characters`, a character library in `HENGE_CHARS` (photo, sheet,
+  description, outfit; `lib:Name` works as a picture path).
+- `mcp/AGENTS.md`: the rules an agent follows to remake a clip end to end (read the clip, cast, keyframes after every
+  cut with a consistency check, render, review, one fix round, deliver). `mcp/examples/`: Claude Code and codex
+  configs, task examples and `run_claude.sh`, which runs a task unattended with the MCP and those rules.
+- Tested: CPU tests for the cut timing and the review strips (`test_review`).
+- Assistant settings: with OpenAI chosen and no key yet, the model list says to type the key (it loads when you leave
+  the field) instead of OpenAI's raw 401; a saved key is reused whether the base URL is blank or the default one.
+- Fixed: the assistant's settings did not scroll, so the GPT Image section and Save were cut off below the panel;
+  they now scroll inside it (desktop and phone). The ⚙ button has a label.
+- The missing-models checklist shows once: "Continue with…" is remembered in the browser, and Settings → Models
+  has "Show the model checklist" to bring it back.
+- Frame editor: with Batch on for only the current frame, a hint says to open another frame on the timeline and turn
+  Batch on there too (the batch buttons show from two frames); frames in the batch get a dot on the timeline.
+- Fixed: moving to another frame in the frame editor (a cut, the timeline, the slider) left the previous frame and its
+  people clickable until the new frame loaded, so a click picked a person of the frame being left and the pick then
+  vanished. Until the new frame is read the people are hidden ("Reading this frame…"), and SAM runs on each new frame.
+- Fixed: going back to a frame before the one being loaded had arrived let that late frame replace the restored one
+  (the 9 s frame shown at 0 s). Only the frame last asked for is shown.
+- Frames edited in the frame editor but not pinned no longer pass unnoticed: only pinned frames reach the generation,
+  so the editor shows "N other edited frames are not pinned yet" with "Pin all N edited", and the Keyframes card shows
+  "⚠ N edited frames not pinned", which opens the editor on them. (Two jobs went out with only the first frame after
+  three frames had been edited.)
+- Keyframes card: with many keyframes the thumbnails (and the count badge) stay inside the card and scroll there
+  instead of running over the next column (the card's grid column could grow to fit them),
+  and each one's × (remove) is fully visible, larger, turns red on hover and is labelled "Remove the keyframe at N s".
+- Frame editor: a pinned keyframe (or the first frame) shows a trash icon button next to its time on the timeline to
+  remove it, instead of a text link.
+
+### Keyframes: pin edited frames anywhere in the clip
+
+- Character Swap and Motion Transfer take any number of pinned keyframes (`keyframes: [{time_seconds, slot}]`, up to
+  64, files `keyframe_{slot}`): each is an edited frame of the result at its time. It goes in as a reference picture and
+  as an Add Guide keyframe in the shot that renders that frame (a frame in a continuing shot's overlap belongs to the
+  shot before it). A keyframe at a shot's first frame replaces the rendered opening frame.
+- New `POST /shot-plan` (guide video + draft direction): the render's own shot split and the camera cuts, cached per
+  video and interval, so the studio previews where shots start before a job exists.
+- The First Frame card is now a compact Keyframes card: the pinned frames (thumbnails), a link to the camera cuts
+  without a keyframe, the normal-map switch and the details under "How it works". It fits a phone without sideways
+  scrolling.
+- The frame editor has the keyframe timeline under the frames, full width so many cuts still fit: the shots, camera cuts
+  (orange ticks), pinned frames (◆), a suggestion (◇) at every cut without a pin, a playhead, and ‹ › to jump between
+  the suggestions.
+- Like FFP, the start comes first: with no first frame yet, the card shows an empty slot at 0 s and the timeline a ◇
+  there; a frame pinned at the start becomes the first frame (normal-map guide on by default), later ones keyframes.
+- Past the start, the frame editor asks what the frame is for: "Pin as a keyframe" (the start stays) or "Start the
+  clip here" (it becomes the first frame and the interval starts on it, for a clip whose person is not in frame 0;
+  keyframes before the new start are dropped). The first frame can be redone from its thumbnail or removed with ×.
+- Swap character with a general editor (FLUX Klein, Qwen-Image, FIBO) says it redraws the whole frame (face, style and
+  background can drift) and points to BFS Body Swap Selective; an uploaded reference's "image N" label no longer sits
+  under its remove button.
+- The frame editor edits several frames in one sitting: each frame (the first frame, every keyframe and frames not
+  pinned yet) keeps everything done on it (the person clicked, editor, references, prompt, paint, result) and comes
+  back as it was left, also after closing the editor. Click a ◆ to move to it, an empty spot of the timeline to add a
+  frame, "Remove this keyframe" to drop one. A Batch checkbox collects frames, "Edit N frames" runs all their edits (GPT
+  Image three at a time) and "Pin N edited" pins them at once.
+- Going back to a frame by clicking near it (not exactly on its ◆) returns to that frame with its edit instead of
+  starting a new one; the first frame shows its ◆ while it is being edited, before it is pinned. A frame saved before its
+  guide frame had loaded gets it when the batch runs or pins.
+- Batch, "Guide as a normal map" and "Enable GPT Image" use the studio's switch instead of a bare checkbox.
+- Fixed: capturing the guide frame at 0 s (assistant edits, batch) waited forever: a seek to where the video already
+  is fires no event.
+- Fixed: a keyframe opened on the first frame of the interval instead of its own time, so SAM segmented (and the editor
+  edited) the wrong frame; a slower SAM answer for a frame already left no longer lands on the new one.
+- GPT Image (OpenAI API) is an image editor: turn it on in the assistant settings (GPT Image: enable, model from the
+  account's image models, quality, an optional key of its own; else the assistant's OpenAI key). It then shows up in
+  the frame editor's picker and reads the clicked person as a mask; everything outside it stays pixel-exact.
+- Assistant: new tools get_keyframes (shots, cuts, cuts without a keyframe), view_keyframes (every pinned frame, to
+  check consistency), remove_keyframe, set_guide_normals and edit_frames (several edits at once); use_frame pins an edit
+  as a keyframe (as='keyframe'); edit_frame and swap_first_frame take editor 'gpt_image'. The system prompt explains
+  when to pin keyframes and to check that characters match across them before generating.
+- MCP: shot_plan, edit_frame, view_images, generate_image, and create_job keyframes=[{time, image}]. The bridge has
+  POST /generate-image for it.
+- The frame editor says it is looking for the image editors instead of "no image editor" while the list loads.
+- Opened for a keyframe, the frame editor says it pins a keyframe ("Pin this frame") and starts at that time; the
+  "no image editor" note no longer lists old editor names.
+- The frame editor is reorganised: the edit (Swap character / Describe) on top, then Frame, Who, Character and Editor
+  (a picker with one line on what the chosen editor does). SAM 3.1 finds the people as soon as the frame shows, so a
+  click picks who is replaced. "Who do you replace", the editor prompt and "Find the people again" moved under Advanced.
+  The next step is the primary button (Edit, then Use); on a phone the footer takes two rows.
+- Dropdowns inside a dialog (e.g. the frame editor's Editor picker) open above it; they used to render behind the modal.
+
+### Character Swap and Motion Transfer First Frame: the normal-map guide
+
+- New guide option `guide_normals`: the guide goes through MoGe-2 (`HengeNormalMap`, a new node) and H3 reads a
+  surface-normal map, i.e. the shapes, poses, motion and camera of the guide without anyone's colours, clothes or light.
+  The look of every person and of the place then comes from the edited first frame, so the original performers cannot
+  come back after the first frames. Best for swapping several people (swap each of them in the first frame) and for a
+  new background (edit it in the frame too).
+- Character Swap: on by default once a first frame is set (First Frame card, "Guide as a normal map"); it needs the
+  Original guide representation. The frame goes in as a reference picture and as a keyframe at frame 0 (Add Guide), not
+  as the guide's first latent. A continuing shot opens on the rendered frame where it begins; after a cut, the frame
+  stays a reference and the normal map drives the shot. The planner adds a note that the guide is a normal map and a
+  VLM description of the edited frame (the place, the light and every person), never of the original performers.
+- Motion Transfer: available in the FFP card and turned on when a First Frame is set (Guide Latents and TARA; not for
+  SolarRenderer, which already reads a normal map). Motion LoRAs were trained on the original video, so it is marked
+  experimental without a First Frame.
+- `HengeNormalMap` frees VRAM before MoGe and runs it two frames at a time: ComfyUI sizes MoGe by its weights alone,
+  so with a cached H3 the batched inference ran out of memory on a 32 GB card (the same risk exists in the SolarRenderer
+  graph, which still batches by 8).
+- The comparison shows guide | normal map | result, and the comparison with references includes the edited first frame.
+- Assistant and MCP: `guide_normals` on `swap_first_frame`, `use_frame`, `set_first_frame` and `create_job` (default
+  on with a first frame), and the assistant recommends it for several people, a new background and FFP.
+- Validation: local Character Swap through the UI (Playwright, `tests/e2e/swap-normal-guide.spec.ts`): BFS Body Swap
+  Selective edit of the first frame, normal-map default, job rendered with HengeNormalMap, the frame pinned at frame 0
+  and the scene description in the prompt. Earlier same-clip tests (Character Swap v1.1, two multi-person clips): with
+  the normal map the non-replaced people stayed intact, and a detailed prompt was needed in a fight scene; a short
+  prompt that described the original performer brought him back. CPU tests: `tests/test_normal_guide.py`.
+- Delivery: local only, not on `main` yet.
+
+### First Frame editors: BFS Body Swap Selective and H3 Image
+
+- BFS Body Swap Selective (Qwen-Image 2.1, `bfs_body_swap_selective_magenta_v1.0_qwen_2.1`): replaces only the clicked
+  person on the whole frame (clean frame, the same frame with the person tinted magenta, the character) and keeps
+  everyone else; the result is pasted back through the grown mark. Preferred for person swaps when installed.
+- H3 Image (PrunaAI P-H3-Image LoRA and VAE, Apache-2.0) on the same H3 model as the videos: the default editor for
+  replace, remove, add and free edits. A person swap runs the Character Swap LoRA on a one-frame H3 latent (Add Guide)
+  on a crop around the clicked person when the Molmo2 H3 encoder (ComfyUI-Molmo2-H3) is installed; with the Qwen3-VL
+  32B or P-H3-Image text encoder that path left the frame unchanged or copied the reference picture, so without Molmo2
+  the swap uses P-H3-Image's own edit, which keeps the pose less reliably.
+- Image editors are optional in the setup: Settings → Models lists them with one Install button each, and the default
+  model profiles (Dockerfile, RunPod template) install `h3image` instead of `klein`/`fibo`.
+- A job's edited first frame is served again (`/jobs/{id}/source/first_frame`) and shown when the job is reopened.
+- Validation: local frame edits through the bridge (`/frame-edit`): the Selective editor and the H3 Image swap (with
+  Molmo2) replaced the clicked person in a three-person frame keeping the others; an H3 Image free edit added an object.
+  Not yet run through the full UI end to end with H3 Image.
+- Delivery: local only, not on `main` yet.
+
 ## 2026-11-04
 
 ### Fix audio conditioning: use ComfyUI's audio file loader (PR #5, thanks @FurkanGozukara)

@@ -39,7 +39,9 @@ def main():
             scale=1. if alpha is None else alpha/down.shape[0]
             if down.dim()!=2:raise SystemExit(f'{module}: only linear LoRA modules are supported')
             new_down,new_up,k=resize(down,up,scale,args.energy,args.max_rank);ranks.append(k)
-            out[module+dn]=new_down.to(dtype).contiguous();out[module+un]=new_up.to(dtype).contiguous()
+            # A module stored in fp32 (e.g. a model's input/output projection) stays fp32; the rest uses --dtype.
+            keep=torch.float32 if torch.float32 in (down.dtype,up.dtype) else dtype
+            out[module+dn]=new_down.to(keep).contiguous();out[module+un]=new_up.to(keep).contiguous()
         known={m+s for m,dn,un in pairs(keys) for s in (dn,un,'.alpha')}
         for key in keys:
             if key not in known:out[key]=f.get_tensor(key)

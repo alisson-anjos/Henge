@@ -37,9 +37,15 @@ export default function Select({value, onChange, children, disabled, className, 
   const typed = useRef({text: '', at: 0});
   const id = useId();
 
+  // Inside a modal <dialog> the list must render in the dialog: the top layer covers anything appended to <body>.
+  const [host, setHost] = useState<HTMLElement | null>(null);
   const position = () => {
     const b = button.current; if (!b) return;
-    const r = b.getBoundingClientRect(), below = innerHeight - r.bottom - 12, above = r.top - 12;
+    const dialog = b.closest('dialog');
+    setHost(dialog ?? document.body);
+    // A transformed dialog is the containing block of fixed children: place the list relative to it.
+    const shift = dialog && getComputedStyle(dialog).transform !== 'none' ? dialog.getBoundingClientRect() : null;
+    const r0 = b.getBoundingClientRect(), r = shift ? {left: r0.left - shift.left, top: r0.top - shift.top, bottom: r0.bottom - shift.top, width: r0.width} : r0, below = innerHeight - r.bottom - 12, above = r.top - 12;
     const up = below < 220 && above > below;
     setPlace({left: Math.min(r.left, innerWidth - Math.max(r.width, 180) - 8), width: Math.max(r.width, 180), maxHeight: Math.min(320, up ? above : below),
       ...(up ? {bottom: innerHeight - r.top + 6} : {top: r.bottom + 6}), accent: getComputedStyle(b).getPropertyValue('--accent')});
@@ -102,6 +108,6 @@ export default function Select({value, onChange, children, disabled, className, 
           className={(i === active ? 'active ' : '') + (o.value === current ? 'chosen' : '')} onMouseEnter={() => setActive(i)} onMouseDown={e => e.preventDefault()} onClick={() => choose(o)}>
           <span>{o.label}</span>{o.value === current && <span className="select-check" aria-hidden="true">✓</span>}
         </li>)}
-      </ul>, document.body)}
+      </ul>, host ?? document.body)}
   </>;
 }

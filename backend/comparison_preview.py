@@ -14,7 +14,7 @@ def settings_block(settings,prompt,width,small):
         draw.text((14,y),line,font=small,fill='#d6d0ea' if settings and i==0 else '#9a94b0');y+=16
     return image
 
-def reference_header(references,width,settings='',prompt=''):
+def reference_header(references,width,settings='',prompt='',labels=('Guide video','Generated result')):
     """references: (slot, path) for a user picture, or (label, path, True) for an image generated from them (adapted reference),
     drawn with an accent label and frame."""
     columns=min(6,max(1,len(references)));cell=width//columns;rows=math.ceil(len(references)/columns)
@@ -32,8 +32,8 @@ def reference_header(references,width,settings='',prompt=''):
             draw.rectangle((left-3,top-3,left+thumb.width+2,top+thumb.height+2),outline='#a78bfa',width=3)
             draw.text((x+10,y+3),str(slot),font=font,fill='#c4b5fd')
         else:draw.text((x+10,y+3),f'Picture {slot}',font=font,fill='white')
-    draw.text((14,height-23),'Guide video',font=font,fill='#bbb1db')
-    draw.text((width//2+14,height-23),'Generated result',font=font,fill='#bbb1db')
+    # One label over each column of the comparison below (guide | result, or guide | what the model read | result).
+    for i,label in enumerate(labels):draw.text((i*width//len(labels)+14,height-23),label,font=font,fill='#bbb1db')
     if not (settings or prompt):return image
     try:small=ImageFont.truetype('DejaVuSans.ttf',11)
     except OSError:small=ImageFont.load_default()
@@ -44,7 +44,7 @@ def reference_header(references,width,settings='',prompt=''):
     out.paste(body,(0,0));out.paste(info,(0,body.height));out.paste(labels,(0,body.height+info.height))
     return out
 
-def create_comparison_with_refs(comparison,result,references,destination,settings='',prompt=''):
+def create_comparison_with_refs(comparison,result,references,destination,settings='',prompt='',labels=('Guide video','Generated result')):
     comparison,result,destination=map(Path,(comparison,result,destination))
     # Reuse the cached video only while it is newer than its sources (a redone shot rebuilds comparison/result).
     if destination.is_file() and destination.stat().st_mtime>=max(comparison.stat().st_mtime,result.stat().st_mtime):return destination
@@ -52,7 +52,7 @@ def create_comparison_with_refs(comparison,result,references,destination,setting
     video=next(s for s in meta['streams'] if s['codec_type']=='video')
     width=min(1600,int(video['width']));width-=width%4
     height=round(int(video['height'])*width/int(video['width'])/2)*2
-    header=destination.with_suffix('.header.png');reference_header(references,width,settings,prompt).save(header)
+    header=destination.with_suffix('.header.png');reference_header(references,width,settings,prompt,labels).save(header)
     tmp=destination.with_name(destination.stem+'.tmp.mp4')
     args=['ffmpeg','-v','error','-i',str(comparison),'-loop','1','-framerate',video['r_frame_rate'],'-i',str(header),'-i',str(result),'-filter_complex',f'[0:v]scale={width}:{height},setsar=1[b];[1:v][b]vstack=inputs=2:shortest=1[v]','-map','[v]','-map','2:a?','-c:v','libx264','-threads','2','-crf','20','-pix_fmt','yuv420p','-c:a','aac','-t',meta['format']['duration'],'-movflags','+faststart','-y',str(tmp)]
     run=subprocess.run(args,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=300)

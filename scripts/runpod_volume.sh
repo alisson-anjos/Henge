@@ -13,7 +13,7 @@ set -euo pipefail
 DATACENTER=${DATACENTER:-EU-RO-1}
 VOLUME_GB=${VOLUME_GB:-180}
 IMAGE=${IMAGE:-ghcr.io/alisson-anjos/henge:latest}
-PROFILES=${PROFILES:-character,motion,headswap,sharpness,regenerate,omniref,fibo,sam2d,sam3d,audio}
+PROFILES=${PROFILES:-character,motion,headswap,sharpness,regenerate,fibo,sam2d,sam3d,audio}
 # REMOVE: optional comma-separated model paths (relative to models/) to delete from the volume, e.g. retired files.
 # OVERRIDES: JSON for HENGE_MODEL_OVERRIDES (e.g. a link newer than the image's manifest).
 ENV_JSON=$(PROFILES=$PROFILES REMOVE=${REMOVE:-} OVERRIDES=${OVERRIDES:-} python3 -c 'import json,os;e={"HENGE_MODEL_PROFILES":os.environ["PROFILES"]};e.update({"HENGE_REMOVE_MODELS":os.environ["REMOVE"]} if os.environ["REMOVE"] else {});e.update({"HENGE_MODEL_OVERRIDES":os.environ["OVERRIDES"]} if os.environ["OVERRIDES"] else {});e.update({"HF_TOKEN":os.environ["HF_TOKEN"]} if os.environ.get("HF_TOKEN") else {});print(json.dumps(e))')
@@ -49,7 +49,7 @@ rows=d["requirements"];done=sum(r["state"]=="installed" for r in rows);failed=[r
 busy=d["setup"]["downloading"]
 print("failed "+",".join(failed) if failed and not busy else "ready" if not busy and done==len(rows) else f"{done}/{len(rows)} installed")' 2>/dev/null || echo starting)
   echo "$(date +%H:%M) $state"
-  # The checklist covers the modes only; optional files (e.g. the omniref base) finish when the downloader exits.
+  # The checklist covers the modes only; optional files finish when the downloader exits.
   # The downloader ends with 'model downloads finished', or with a warning when a file has no link (it never retries).
   if [ "$state" = ready ] && ! runpodctl pod logs "$POD" --source container --tail 5000 --max-wait 10s 2>/dev/null | grep -Eq 'model downloads finished|some models failed to download'; then
     state='checklist ready, downloader still running'
