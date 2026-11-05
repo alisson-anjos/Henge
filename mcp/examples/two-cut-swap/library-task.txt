@@ -1,0 +1,6 @@
+Source: @SRC@, from 0 to 12 s. Character Swap with two library characters: the man on the left becomes Vela and the
+woman on the right becomes Oren (characters(["Vela", "Oren"]); use their descriptions and outfits as they are). Both
+keep their own outfits from the library in every shot; extras and passers-by stay.
+
+Budget: 8 image edits. Render at 480p. Review every shot, at most one fix round per shot, then download the result and
+save_result. Final message as in AGENTS.md, plus the tool friction you hit.

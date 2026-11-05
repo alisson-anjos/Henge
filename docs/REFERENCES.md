@@ -41,7 +41,6 @@ Everything Henge builds on, in one place. Exact downloadable weights, destinatio
   [Kijai](https://huggingface.co/Kijai/MiniMax-H3-experimental) (DMAD, pDMD),
   [lightx2v](https://huggingface.co/lightx2v/Minimax-h3-Turbo),
   [Pika H3 Flex](https://huggingface.co/Pika-Labs/Pika-H3-Flex) (Ref2VA Comfy adapter and six-step workflow).
-- FastH3 OmniRef — [FastVideo](https://huggingface.co/FastVideo/FastH3-Omni-Comfy).
 - SAM 3.1 and SAM 3D Body (Meta), BiRefNet, MoGe 2, NVIDIA RTX Video Super Resolution (`nvidia-vfx`).
 - **Image editors**: FIBO 2.0 edit turbo (default) — [briaai/Fibo-2.0-edit-turbo](https://huggingface.co/briaai/Fibo-2.0-edit-turbo),
   repackaged by [Comfy-Org/Fibo-2.0](https://huggingface.co/Comfy-Org/Fibo-2.0); optional Qwen-Image 2.1 Turbo —

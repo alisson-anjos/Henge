@@ -509,6 +509,8 @@ from .temporal_windows import HengeH3PureWindows
 NODE_CLASS_MAPPINGS['HengeH3PureWindows']=HengeH3PureWindows
 
 from .solar import HengeSolarConditioning,HengeSolarModel,HengeSolarLoraLoader
+from .normals import HengeNormalMap
+NODE_CLASS_MAPPINGS['HengeNormalMap']=HengeNormalMap
 NODE_CLASS_MAPPINGS['HengeSolarLoraLoader']=HengeSolarLoraLoader
 NODE_CLASS_MAPPINGS['HengeSolarConditioning']=HengeSolarConditioning
 NODE_CLASS_MAPPINGS['HengeSolarModel']=HengeSolarModel

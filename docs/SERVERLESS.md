@@ -64,8 +64,8 @@ Choose the model profiles (comma list), as on a normal pod:
 | `sharpness` | Sharpness (H3 + Little More Sharpness LoRA; 2K/4K with the H3 or NVIDIA RTX upscaler) | ~1 GB (LoRA + H3 latent upscaler) |
 | `regenerate` | Sharpness default: Ref2VA + DMAD + rank-16 refiner + LMS + native upscale | Optional install; top up the volume and update the worker; no FL2VA |
 | `audio` | Generated audio and audio conditioning (H3 audio VAE) | ~0.3 GB |
-| `omniref` | OmniRef base | +22 GB |
-| `fibo` | **Default image editor**: FIBO 2.0 edit turbo (Bria, int8). First-frame and reference edits — replace, remove or add, optionally only in a painted area. `TextEncodeFibo2` is a core ComfyUI node, no custom node pack | ~14 GB |
+| `h3image` | **Default image editor**: H3 Image, PrunaAI's P-H3-Image LoRA and VAE (Apache-2.0) on the same H3 model as the videos. Edits with `PH3ImageConditioning` (replace, remove, add, free text); a person swap edits a crop around the clicked person and pastes it back, but BFS Body Swap Selective keeps the pose more reliably. |
+| `fibo` | Optional image editor: FIBO 2.0 edit turbo (Bria, int8). First-frame and reference edits — replace, remove or add, optionally only in a painted area. `TextEncodeFibo2` is a core ComfyUI node, no custom node pack | ~14 GB |
 | `qwen21` | Optional editor: Qwen-Image 2.1, the strongest instruction following of the three. Pick it in the First Frame modal. The 7.3 GB Turbo checkpoint is optional: the 335 MB 5-step LoRA reaches the same short schedule on the full checkpoint | ~17 GB |
 | `klein` | Optional alternative editor: FLUX.2 [klein] 4B (Black Forest Labs, Apache-2.0), 4 steps | ~12 GB |
 | `klein3` | Optional alternative editor: FLUX.3 [image klein]. **Gated**: accept the FLUX Kommunity License at [black-forest-labs/flux-3-image-klein-comfy](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy) and set `HF_TOKEN` | ~5 GB |
@@ -239,7 +239,7 @@ accepts requests signed with your API key, and that key lives only in the bridge
 Every stage of a job is one request to the endpoint:
 
 1. **Plan**: the VLM describes the pictures and writes the prompt (one request per question).
-2. **Reference preparation**: background removal, and the image editor (FIBO 2.0 by default) when enabled.
+2. **Reference preparation**: background removal, and the image editor (H3 Image by default) when enabled.
 3. **Each shot**: one H3 render. The bridge cuts the guide into shots, sends each one with its
    references, and joins the results.
 

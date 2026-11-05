@@ -15,10 +15,10 @@ import moving_plate
 import app_updates
 import model_installer
 from model_installs import InstallManager
-from workflows import solar_graph,SOLAR_MAX_FRAMES,SOLAR_NORMALS,split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,bfs_graph,BFS,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
+from workflows import solar_graph,normal_guide,pin_opening,pin_frames,bfs_selective_graph,BFS_SELECTIVE,h3image_graph,H3IMAGE,SOLAR_MAX_FRAMES,SOLAR_NORMALS,split_at_points,klein_graph,klein3_graph,KLEIN,KLEIN3,fibo_graph,FIBO,qwen21_graph,QWEN21,bfs_graph,BFS,lora_installed,localize_loras,plate_mask_graph,find_people_graph,subject_looks_graph,split_at_every_cut,MODELS,TURBOS,BASES,UPSCALE_METHODS,H3_UPSCALERS,REGENERATE,mask_graph,mask_preview_graph,marks_preview_graph,h3_graph,plan_graph,split_frames,grid_frames,split_on_cuts,FFP_PROFILE
 from prompt_policy import validate_h3_prompt
 from requirements_check import check as check_requirements,comfy_listed
-from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,swap_first_frame,first_frame_only_prompt,solar_prompt,SOLAR_DETAIL_INSTRUCTION,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
+from edit_modes import clean_details,LMS_CAPTION,MODES,FIXED_RECIPE,FFP_INSTRUCTION,ffp_prompt,character_figure_instruction,FACE_INSTRUCTION,CHARACTER_INSTRUCTION,character_swap_prompt,swap_first_frame,first_frame_only_prompt,FIRST_FRAME_SCENE_INSTRUCTION,MOTION_NORMALS_NOTE,solar_prompt,SOLAR_DETAIL_INSTRUCTION,head_swap_prompt,multi_swap_prompt,shot_swap_plan,fixed_plan,head_reference,character_reference
 from vlm_pipeline import prompt_pipeline
 from sampling_preview import preview_jpeg
 from comparison_preview import create_comparison_with_refs
@@ -179,6 +179,17 @@ def validate_request(r,options,slots):
     if first is not None and r['mode']!='motion':raise ValueError('A first-frame Picture is a Motion Transfer option; Character Swap takes its first frame inside the guide')
     if r.get('first_frame_mode','latent') not in ('latent','reference'):raise ValueError('first_frame_mode must be latent or reference')
     if r.get('guide_first_frame') and r['mode']!='swap':raise ValueError('Replacing the guide\'s first frame is a Character Swap option')
+    # Normal-map guide: the edited first frame supplies everyone's look, so it needs one, and it replaces the guide representation.
+    if r.get('guide_normals') and r['mode'] not in ('swap','motion'):raise ValueError('The normal-map guide is a Character Swap and Motion Transfer option')
+    # Keyframes: edited frames of the target video pinned at their time (each one a reference and an Add Guide keyframe).
+    keyframes=r.get('keyframes') or []
+    if keyframes and r['mode'] not in ('swap','motion'):raise ValueError('Keyframes are a Character Swap and Motion Transfer option')
+    if not isinstance(keyframes,list) or len(keyframes)>64 or any(not isinstance(k,dict) or not isinstance(k.get('slot'),int) or not isinstance(k.get('time_seconds'),(int,float)) for k in keyframes):
+        raise ValueError('keyframes must be up to 64 {time_seconds, slot} entries')
+    if len({k['slot'] for k in keyframes})!=len(keyframes):raise ValueError('Each keyframe needs its own slot')
+    if r.get('guide_normals') and r['mode']=='swap' and not r.get('guide_first_frame'):raise ValueError('The normal-map guide needs Character Swap with an edited first frame: that frame supplies everyone\'s look')
+    if r.get('guide_normals') and MODELS.get(options.get('profile'),{}).get('conditioning')=='solar':raise ValueError('SolarRenderer already reads a normal map of the guide')
+    if r.get('guide_normals') and r.get('subject_guidance',{}).get('representation','original')!='original':raise ValueError('The normal-map guide is a guide representation of its own; set the guide to Original')
     if not low<=len(slots)<=high:raise ValueError('Attach exactly one face picture' if r['mode']=='headswap' else 'Sharpness uses only the video; remove the reference pictures' if r['mode']=='sharpness' else 'Attach 1–11 reference images')
     if r.get('quality') not in QUALITY:raise ValueError('Choose 480p, 720p, 1080p, 2K or 4K')
     if r['quality'] in ('1440p','2160p') and r['mode']!='sharpness':raise ValueError('2K and 4K output are only for Sharpness')
@@ -387,10 +398,20 @@ def qwen21_lora(info=None):
 # itself and conditions positive AND negative on it, so the composition and the performer survive the edit. FLUX.3
 # [image klein] is last: it resizes the frame to about a megapixel and samples an empty latent, so it re-draws the
 # shot instead of editing it, and the First Frame model then propagates every difference through the whole clip.
-EDITORS=(('fibo','FIBO 2.0 edit turbo'),('qwen21','Qwen-Image 2.1 Turbo'),('klein','FLUX.2 [klein] 4B'),('klein3','FLUX.3 [image klein]'),('bfs','Qwen-Image 2.1 + BFS Body Swap'))
-EDITOR_GRAPHS={'fibo':fibo_graph,'klein':klein_graph,'klein3':klein3_graph,'qwen21':qwen21_graph,'bfs':bfs_graph}
+EDITORS=(('h3image','H3 Image (Pruna P-H3-Image)'),('fibo','FIBO 2.0 edit turbo'),('qwen21','Qwen-Image 2.1 Turbo'),('klein','FLUX.2 [klein] 4B'),('klein3','FLUX.3 [image klein]'),('bfs','Qwen-Image 2.1 + BFS Body Swap'),('bfs_selective','Qwen-Image 2.1 + BFS Body Swap Selective'),('gpt_image','GPT Image (OpenAI API)'))
+EDITOR_GRAPHS={'h3image':h3image_graph,'fibo':fibo_graph,'klein':klein_graph,'klein3':klein3_graph,'qwen21':qwen21_graph,'bfs':bfs_graph,'bfs_selective':bfs_selective_graph}
 # BFS is a Character Swap tool, never the general default: it is listed last and only does person swaps.
 def bfs_available(info):return qwen21_available(info) and BFS['lora'] in comfy_choices(info,'LoraLoaderModelOnly','lora_name')
+def h3image_available(info):
+    """H3 Image: the H3 base Henge renders with, the P-H3-Image LoRA and VAE, and ComfyUI's PH3ImageConditioning."""
+    return ('PH3ImageConditioning' in info and BASES['h3']['unet'] in comfy_choices(info,'UNETLoader','unet_name')
+            and H3IMAGE['lora'] in comfy_choices(info,'LoraLoaderBypassModelOnly','lora_name') and H3IMAGE['vae'] in comfy_choices(info,'VAELoader','vae_name'))
+def h3image_swap_ready(info=None):
+    """H3 Image swaps with the Character Swap LoRA when the Molmo2 H3 encoder node (ComfyUI-Molmo2-H3) is installed."""
+    try:info=comfy_info() if info is None else info
+    except Exception:return False
+    return 'MolmoH3EncoderLoader' in info and lora_installed(MODELS['character']['lora'],set(comfy_choices(info,'LoraLoaderModelOnly','lora_name')))
+def bfs_selective_available(info):return qwen21_available(info) and BFS_SELECTIVE['lora'] in comfy_choices(info,'LoraLoaderModelOnly','lora_name')
 
 def editor_order(info=None):
     """Editor keys in the order Henge prefers them, with HENGE_FRAME_EDITOR moved to the front."""
@@ -399,12 +420,19 @@ def editor_order(info=None):
     if forced in order:order.remove(forced);order.insert(0,forced)
     return order
 
+def gpt_image_ready():
+    """GPT Image (OpenAI API) edits without ComfyUI once it is enabled in the assistant settings with a key."""
+    try:return assistant.gpt_image_ready(assistant.load_config(ASSISTANT_CONFIG))
+    except Exception:return False
+
 def frame_editors(info=None):
     """Installed editors as [(key,label)] in preference order. HENGE_FRAME_EDITOR=fibo|qwen21|klein|klein3 moves one
-    editor to the front without changing what the picker offers."""
+    editor to the front without changing what the picker offers. GPT Image runs on OpenAI's API, so it is listed even
+    when ComfyUI does not answer."""
+    labels=dict(EDITORS)
     try:info=comfy_info() if info is None else info
-    except Exception:return []
-    ready={'fibo':fibo_available(info),'qwen21':qwen21_available(info),'klein':klein_available(info),'klein3':klein3_available(info),'bfs':bfs_available(info)}
+    except Exception:return [('gpt_image',labels['gpt_image'])] if gpt_image_ready() else []
+    ready={'gpt_image':gpt_image_ready(),'h3image':h3image_available(info),'fibo':fibo_available(info),'qwen21':qwen21_available(info),'klein':klein_available(info),'klein3':klein3_available(info),'bfs':bfs_available(info),'bfs_selective':bfs_selective_available(info)}
     labels=dict(EDITORS)
     return [(key,labels[key]) for key in editor_order(info) if ready[key]]
 
@@ -413,17 +441,19 @@ def frame_editor_choices(info=None, assume=False):
     `assume=True` is for serverless workers, which list their models only after their first job: until then the studio
     offers the editors the image was built with instead of hiding the frame edit."""
     ready=dict(frame_editors(info))
-    return [{'id':key,'label':labels,'installed':True if assume else bool(ready.get(key))} for key,labels in EDITORS]
+    # GPT Image does not live on the worker: it is there only when enabled with a key, assumed or not.
+    return [{'id':key,'label':labels,'installed':gpt_image_ready() if key=='gpt_image' else True if assume else bool(ready.get(key))} for key,labels in EDITORS]
 
 def frame_editor(info=None):
     """Which image editor edits frames and pictures: FIBO 2.0 when installed, then Qwen-Image 2.1, then FLUX Klein."""
     return (frame_editors(info) or [(None,None)])[0][0]
 
-def editor_graph(editor,image,refs,instruction,seed,info=None):
+def editor_graph(editor,image,refs,instruction,seed,info=None,op=None):
     """Build the edit graph for one editor, picking the Qwen-Image 2.1 checkpoint that is actually on disk."""
     build=EDITOR_GRAPHS.get(editor)
-    if build is None:raise ValueError('Frame editing needs an image editor (FIBO 2.0, Qwen-Image 2.1 or FLUX Klein)')
-    return build(image,refs,instruction,seed,**({'unet':qwen21_model(info),'lora':qwen21_lora(info),'sampler':qwen21_sampler(info)} if editor in ('qwen21','bfs') else {}))
+    if build is None:raise ValueError('Frame editing needs an image editor (H3 Image, FIBO 2.0, Qwen-Image 2.1 or FLUX Klein)')
+    if editor=='h3image':return build(image,refs,instruction,seed,swap=op=='swap' and h3image_swap_ready(info))
+    return build(image,refs,instruction,seed,**({'unet':qwen21_model(info),'lora':qwen21_lora(info),'sampler':qwen21_sampler(info)} if editor in ('qwen21','bfs','bfs_selective') else {}))
 
 # First-frame edit instructions per operation; the painted area (when given) is the only part that changes.
 EDIT_OPS={'replace':'Replace {what} with {target}.','remove':'Remove {what} and fill the space naturally with what would be behind it.',
@@ -781,6 +811,7 @@ def planning(job):
         label=(f"Describing Picture {stage.rsplit('_',1)[-1]} independently" if stage.startswith('vlm_picture_') else
                'Analyzing guide performance and setting' if stage=='vlm_guide' else
                'Checking whether Picture 1 is a person or an animal' if stage=='vlm_species' else
+               'Describing the edited first frame for the normal-map guide' if stage=='vlm_first_frame_scene' else
                'Writing the final H3 prompt' if stage=='vlm_prompt' else
                'Checking the references for real public figures' if stage.startswith('vlm_likeness_') else 'Planning runtime options')
         save(job,stage=stage,message=label)
@@ -816,16 +847,27 @@ def planning(job):
     # Character Swap with an edited first frame: that image replaces frame 0 of the guide clip (see generate), so it is
     # not a Picture; the prompt only says the guide already opens on the swapped character.
     first=r['mode']=='swap' and bool(r.get('guide_first_frame')) and bool(job['assets'].get('first_frame'))
+    # Normal-map guide: the guide has no appearance, so the frame goes in as a reference (and a keyframe at frame 0, see generate).
+    normals=first and bool(r.get('guide_normals'))
     # Reference mode: the frame is sent after the character pictures, as Picture len+1.
-    first_slot=len(pictures)+1 if first and r.get('first_frame_mode','latent')=='reference' else None
+    first_slot=len(pictures)+1 if first and (r.get('first_frame_mode','latent')=='reference' or normals) else None
+    # With the normal-map guide the text has to carry the look of the place and of every person: the VLM describes the frame.
+    scene=''
+    if normals and job['options'].get('enhance_prompt',True):
+        still=INPUT/'henge'/job['id']/'vlm_first_frame.jpg'
+        with Image.open(INPUT/job['assets']['first_frame']) as image:ImageOps.contain(image.convert('RGB'),(1024,1024)).save(still,quality=90)
+        scene=clean_details(ask(FIRST_FRAME_SCENE_INSTRUCTION,still,'vlm_first_frame_scene',1024),2000)
+    def opening(prompt):
+        prompt=swap_first_frame(prompt,first,first_slot,normals)
+        return prompt+(f' The edited first frame shows: {scene}.' if scene else '')
     if r['mode']=='swap' and first and not pictures:
         # No pictures: the edited first frame is the only source of the new characters' look.
-        plan=fixed_plan('swap',swap_first_frame(first_frame_only_prompt(r['prompt']),True,first_slot),'Keep the characters of the edited first frame through the whole clip, following the guide\'s performance (no reference pictures).')
+        plan=fixed_plan('swap',opening(first_frame_only_prompt(r['prompt'])),'Keep the characters of the edited first frame through the whole clip, following the guide\'s performance (no reference pictures).')
         save(job,plan=plan,status='awaiting_approval',stage='plan_ready',progress=0,message='Review the prompt before generating.',step=None,step_total=None);return
     if r['mode']=='swap' and len(pictures)==1 and len(bindings)<=1 and job['options'].get('enhance_prompt',True):
         # One character, no bindings: the Character Swap v1.1 training-format prompt.
         details=clean_details(ask(CHARACTER_INSTRUCTION,pictures[0][1],'vlm_picture_1',1024),2000)
-        plan=fixed_plan('headswap',swap_first_frame(character_swap_prompt(details),first,first_slot),'Replace the main subject of the guide video with the character from Picture 1, keeping scene, camera and performance (Character Swap v1.1 prompt format)'+('; the guide opens on the edited first frame.' if first else '.'),details)
+        plan=fixed_plan('headswap',opening(character_swap_prompt(details)),'Replace the main subject of the guide video with the character from Picture 1, keeping scene, camera and performance (Character Swap v1.1 prompt format)'+('; the guide opens on the edited first frame.' if first else '.'),details)
         # An edited first frame already shows the character in the guide's pose, so no humanoid figure is prepared.
         if not first and job['options'].get('adapt','auto')!='off' and frame_editor():
             # An animal reference for a human performer: the image editor can redraw it as one upright humanoid figure.
@@ -854,7 +896,7 @@ def planning(job):
             subjects.append((s['color'],s['picture_slots'],clean_details(ask(CHARACTER_INSTRUCTION,image,f'vlm_picture_{slot}',1024),2000)))
         plan=fixed_plan('swap',multi_swap_prompt(subjects,guidance['representation'],bool(guidance.get('mark_labels'))),'Replace each marked person with the character bound to their color, keeping scene, camera and performance (multi-person Character Swap).')
         plan['picture_roles']=[{'slot':slot,'role':'identity','description':next((d for c,sl,d in subjects if slot in sl),'')} for slot in slots]
-        plan['prompt']=swap_first_frame(plan['prompt'],first,first_slot)
+        plan['prompt']=opening(plan['prompt'])
         plan['representation']=guidance['representation']
         raw=ask('Look at these frames of a video. Which of these objects do the people hold or play: phone, microphone, guitar, ukulele, cup, bottle, bicycle, torch, piano, keyboard? Answer with a JSON array of the matching words only, for example ["guitar"], or [] if none.',guide,'vlm_guide',64)
         plan['preserve_objects']=sorted(set(re.findall(r'phone|microphone|guitar|ukulele|cup|bottle|bicycle|torch|piano|keyboard',raw.lower())))
@@ -893,7 +935,7 @@ def planning(job):
     raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw.strip());plan=json.loads(raw)
     plan['prompt']=strip_timecodes(evidence['prompt'])
     plan=validate_plan(plan,slots,job['options'],r)
-    if first:plan['prompt']=swap_first_frame(plan['prompt'],first,first_slot)
+    if first:plan['prompt']=opening(plan['prompt'])
     if (plan['adapt_reference'] or plan['preparation_recommended']) and not frame_editor():
         plan['adapt_reference']=plan['preparation_recommended']=False
         plan['warnings'].append('Reference adaptation needs an image editor (FLUX.3 / FLUX.2 Klein), not installed on this ComfyUI; the original pictures are used.')
@@ -1018,21 +1060,28 @@ def cut_mode(job):
         if mode in CUT_MODES:return 'every' if (marked or pure) and mode=='fit' else mode
     return ('every' if pure else 'fit') if options.get('detect_cuts',True) else 'off'
 
+def detect_camera_cuts(path,start,end):
+    """Scene-change frames (24 fps, from `start`) of a video."""
+    run_=subprocess.run(['ffmpeg','-v','info','-ss',str(start),'-i',str(path),'-t',str(end-start),'-vf',"select='gt(scene,0.35)',showinfo",'-an','-f','null','-'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=300)
+    if run_.returncode:raise ValueError('Camera-cut analysis failed')
+    frames=[round(float(t)*24) for t in re.findall(r'pts_time:([0-9.]+)',run_.stderr.decode(errors='replace'))]
+    return frames
+
 def camera_cuts(job):
     """Scene-change frames (24 fps, from the selected start), detected once per interval and kept on the job."""
     r=job['request'];start,end=r['video']['start_seconds'],r['video']['end_seconds'];key=f'{start}:{end}'
     if (job.get('camera_cuts') or {}).get('interval')==key:return job['camera_cuts']['frames']
-    run_=subprocess.run(['ffmpeg','-v','info','-ss',str(start),'-i',str(INPUT/job['assets']['video']),'-t',str(end-start),'-vf',"select='gt(scene,0.35)',showinfo",'-an','-f','null','-'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=300)
-    if run_.returncode:raise ValueError('Camera-cut analysis failed')
-    frames=[round(float(t)*24) for t in re.findall(r'pts_time:([0-9.]+)',run_.stderr.decode(errors='replace'))]
+    frames=detect_camera_cuts(INPUT/job['assets']['video'],start,end)
     # Cached on the job; a finished or cancelled job only gets a preview.
     try:save(job,camera_cuts={'interval':key,'frames':frames})
     except InterruptedError:pass
     return frames
 
-def plan_shots(job):
+def plan_shots(job,cuts=None):
     """The shot split a render uses (and the approval screen previews): [{start, frames, overlap, length, reset_context}]
-    in 24 fps frames from the selected start, plus the context length carried between continuing shots."""
+    in 24 fps frames from the selected start, plus the context length carried between continuing shots. `cuts`: camera-cut
+    frames already detected (the studio's keyframe timeline previews a draft that has no job yet)."""
+    detected=(lambda:cuts) if cuts is not None else (lambda:camera_cuts(job))
     r=job['request'];processing=r['processing']
     start,end=r['video']['start_seconds'],r['video']['end_seconds'];total=max(1,round((end-start)*24))
     per=max(22,min(362,5+17*math.floor((round(processing['requested_seconds_per_shot']*24)-5)/17)))
@@ -1053,10 +1102,10 @@ def plan_shots(job):
     mode=cut_mode(job)
     # Suggested points (Molmo2 or the user) end shots inside a take; camera cuts still start clean shots.
     points=[round(float(x)*24) for x in processing.get('split_points') or [] if 0<float(x)*24<total]
-    if points:return split_at_points(total,per,context,camera_cuts(job) if mode!='off' else [],points,every_cut=mode=='every'),context
+    if points:return split_at_points(total,per,context,detected() if mode!='off' else [],points,every_cut=mode=='every'),context
     # A short interval is one shot, except when a shot at every camera cut is asked for (or implied by marked people).
     if mode=='off' or (processing.get('mode')=='single' and mode!='every') or (mode=='fit' and total<=per):return split_frames(total,per,context),context
-    return (split_on_cuts if mode=='fit' else split_at_every_cut)(total,per,context,camera_cuts(job)),context
+    return (split_on_cuts if mode=='fit' else split_at_every_cut)(total,per,context,detected()),context
 
 def shot_preview(job):
     start=job['request']['video']['start_seconds'];shots,_=plan_shots(job)
@@ -1111,6 +1160,24 @@ def frame_count(path):
     out=subprocess.run(['ffprobe','-v','error','-select_streams','v:0','-count_packets','-show_entries','stream=nb_read_packets','-of','csv=p=0',str(path)],capture_output=True,text=True)
     try:return int(out.stdout.strip())
     except ValueError:return -1
+
+def shot_keyframes(keyframes,shot,i,start):
+    """The pinned keyframes a shot renders: those whose time falls in the frames this shot adds (a continuing shot's
+    first `overlap` frames belong to the previous one), as (image, frame index in the shot, seconds from start)."""
+    first=shot['start']+(shot['overlap'] if i else 0);out=[]
+    for k in keyframes:
+        f=round((k['time']-start)*24)
+        if first<=f<shot['start']+shot['frames']:out.append((k['image'],f-shot['start'],k['time']-start))
+    return out
+
+def opening_frame(i,first_frame,previous,shot,prev_span,inp):
+    """The frame a shot opens on (SolarRenderer, normal-map guide): shot 1 the edited first frame, a continuing shot the
+    rendered frame where it begins (the previous shot started prev_span[1] frames late), after a cut none."""
+    if i==0:return first_frame.relative_to(INPUT).as_posix() if first_frame else None
+    if previous is None:return None
+    still=inp/f'opening_{i:03d}.png';at=max(0,shot['start']-prev_span[0]-prev_span[1])
+    run(['ffmpeg','-v','error','-i',str(previous),'-vf',f"select='gte(n\\,{at})'",'-frames:v','1','-y',str(still)])
+    return still.relative_to(INPUT).as_posix() if still.is_file() else None
 
 def first_frame_image(r,assets):
     """The edited first frame a job opens on, or None. Character Swap sends it as its own file; Motion's First Frame
@@ -1177,11 +1244,16 @@ def generate(job):
     # Edited first frame: frame 0 of shot 1's guide (its first latent) by default; as a reference picture only when asked (Motion's
     # First Frame is already a Picture; Character Swap's is added after the character pictures).
     first_frame=first_frame_image(r,assets);first_frame_mode=r.get('first_frame_mode','latent')
-    if first_frame and r['mode']=='swap' and first_frame_mode=='reference':refs=refs+[first_frame.relative_to(INPUT).as_posix()]
+    # Normal-map guide: the frame is a reference picture and the pinned opening of shot 1 (the latent mode does not apply).
+    # Motion Transfer: the pictures (and its First Frame Picture, pinned at frame 0 when there is one) supply the look.
+    normals=bool(r.get('guide_normals')) and (r['mode']=='motion' or (r['mode']=='swap' and bool(first_frame)))
+    keyframes=assets.get('keyframes') or []
+    if first_frame and r['mode']=='swap' and (first_frame_mode=='reference' or normals):refs=refs+[first_frame.relative_to(INPUT).as_posix()]
+    if normals and r['mode']=='motion' and options.get('enhance_prompt',True):prompt+=MOTION_NORMALS_NOTE
     full_refine=full_refiner_enabled(options)
     segment_upscale=None if full_refine else upscale
     segment_windows=None if full_refine else options.get('temporal_windows')
-    pieces=[];guide_pieces=[];previous=None;solar_prev=(0,0);save(job,shot_urls=[],shot_plans=[])
+    pieces=[];guide_pieces=[];previous=None;prev_span=(0,0);save(job,shot_urls=[],shot_plans=[])
     for i,shot in enumerate(shots):
         if load(job['id'])['status']=='cancelled':raise InterruptedError('Cancelled')
         if shot.get('reset_context'):previous=None
@@ -1201,13 +1273,16 @@ def generate(job):
         if MODELS.get(options.get('profile'),{}).get('conditioning')=='solar':
             # SolarRenderer's own conditioning: shot 1 starts from the edited frame; a continuing shot from the rendered
             # frame where it begins (the previous shot started skip frames late); after a cut, the structure alone.
-            opening=first_frame.relative_to(INPUT).as_posix() if i==0 and first_frame else None
-            if i and previous is not None:
-                still=inp/f'solar_first_{i:03d}.png';at=max(0,shot['start']-solar_prev[0]-solar_prev[1])
-                run(['ffmpeg','-v','error','-i',str(previous),'-vf',f"select='gte(n\\,{at})'",'-frames:v','1','-y',str(still)])
-                if still.is_file():opening=still.relative_to(INPUT).as_posix()
+            opening=opening_frame(i,first_frame,previous,shot,prev_span,inp)
             shot_prompt=plan['prompt'] if opening else solar_prompt(plan.get('solar',{}).get('summary',''),plan.get('solar',{}).get('detail',''),False)
             graph=solar_graph(graph,shot_prompt,opening,seed+i)
+        elif normals:
+            # Shot 1 opens on the edited frame; a continuing shot on the rendered frame where it begins; after a cut, the
+            # first frame stays a reference and the normal map alone drives the shot. A keyframe pinned at the shot's first
+            # frame is its opening instead.
+            normal_guide(graph)
+            opening=None if any(idx==0 for _,idx,_ in shot_keyframes(keyframes,shot,i,start)) else opening_frame(i,first_frame,previous,shot,prev_span,inp)
+            if opening:pin_opening(graph,opening)
         elif i==0 and first_frame and first_frame_mode=='latent':
             graph['27']={'class_type':'LoadImage','inputs':{'image':first_frame.relative_to(INPUT).as_posix()}};graph['9']['inputs']['first_frame']=['27',0]
         per_shot_identities=r['mode'] in ('swap','motion') and bindings and plan['representation'] in ('2d','3d') and options.get('enhance_prompt',True)
@@ -1249,6 +1324,16 @@ def generate(job):
             # HengeGuide runs again only when reference numbering changed, preserving label correctness.
             shot_plans.append({'shot':i+1,'subjects':[subject['id'] for subject in active],'prompt':local_prompt,'action':'generate'})
             save(job,shot_plans=shot_plans,shot_warnings=shot_warnings)
+        pins=[] if MODELS.get(options.get('profile'),{}).get('conditioning')=='solar' else shot_keyframes(keyframes,shot,i,start)
+        if pins:
+            # Each keyframe is a reference picture of this shot and an Add Guide keyframe at its frame.
+            local=json.loads(graph['7']['inputs']['pictures'])
+            for image,idx,t in pins:
+                local.append(image)
+                graph['9']['inputs']['prompt']+=(f' <Picture {len(local)}> is an edited frame of the target video at {t:.2f} s (frame {idx} of this shot):'
+                                                 ' it shows the characters and the place exactly as they look at that moment; keep that look through the shot.')
+            graph['7']['inputs']['pictures']=json.dumps(local);pin_frames(graph,[(image,idx) for image,idx,_ in pins])
+            print(f'[Henge] shot {i+1}: {len(pins)} pinned keyframe(s) at frames {[idx for _,idx,_ in pins]}',flush=True)
         outputs=execute_graph(job,graph,f'h3_segment_{i:03d}')
         if bindings and plan['representation']!='original' and not per_shot_identities:
             nxt=shots[i+1] if i+1<len(shots) else None
@@ -1265,7 +1350,7 @@ def generate(job):
         dup=frame_count(piece)-(shot['frames']-shot['overlap']) if shot['overlap'] and pieces else 0
         if dup>0:seam_join(pieces[-1],piece,dup)
         shot_audio(job,outputs,i,shot,piece)
-        pieces.append(piece);previous=rendered;solar_prev=(shot['start'],skip)
+        pieces.append(piece);previous=rendered;prev_span=(shot['start'],skip)
         # Each finished shot is viewable and downloadable while the next ones render.
         save(job,shot_urls=[f"/api/backend/jobs/{job['id']}/files/{p.name}" for p in pieces])
         guides=[g for g in guides if guide_available(g)]
@@ -1460,7 +1545,9 @@ def finalize(job,pieces,guide_pieces,W,H):
         run(['ffmpeg','-v','error','-f','concat','-safe','1','-i',str(gl),'-c','copy','-movflags','+faststart','-y',str(guide_full)])
         save(job,guide_preview_url=f"/api/backend/jobs/{job['id']}/files/guide_preview.mp4?v={int(time.time())}")
     compare=work/'comparison.mp4';fit=f'fps=24,scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2'
-    if guide_full and plan['representation']!='original':
+    # The middle column shows what the model read when it is not the footage itself: marks, the mask region, or the
+    # normal map (Character Swap / Motion First Frame with the normal-map guide).
+    if guide_full and (plan['representation']!='original' or (job.get('request') or {}).get('guide_normals')):
         run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(guide_full),'-i',str(output),'-filter_complex',f'[0:v]{fit}[a];[1:v]{fit}[g];[a][g][2:v]hstack=inputs=3:shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
     else:
         run(['ffmpeg','-v','error','-ss',str(start),'-i',str(INPUT/assets['video']),'-i',str(output),'-filter_complex',f'[0:v]{fit}[a];[a][1:v]hstack=shortest=1[v]','-map','[v]','-an','-t',str(end-start),'-c:v','libx264','-threads','2','-crf','20','-movflags','+faststart','-y',str(compare)])
@@ -1575,7 +1662,7 @@ def health():
     normals_ready='model_name' not in info.get('LoadMoGeModel',{}).get('input',{}).get('required',{}) or SOLAR_NORMALS in comfy_choices(info,'LoadMoGeModel','model_name')
     models={key:{**value,'available':unknown or (lora_installed(value['lora'],installed) or any(lora_installed(a,installed) for a in value.get('lora_alternatives',[]))) and lora_installed(value['adapter'],installed) and (not value.get('unet') or value['unet'] in unets) and (value.get('conditioning')!='solar' or normals_ready) and mode_ready[key]} for key,value in MODELS.items()}
     turbos={key:{'label':value['label'],'steps':value['steps'],'available':unknown or lora_installed(value['lora'],installed)} for key,value in TURBOS.items()}
-    bases={key:{'label':value['label'],'available':unknown or value['unet'] in unets} for key,value in BASES.items()}
+    bases={key:{'label':value['label'],'available':unknown or (value['unet'] in unets and (not value.get('lora') or lora_installed(value['lora'],installed)))} for key,value in BASES.items()}
     # Sharpness 2K/4K upscalers (henge/upscale.py): H3 needs a latent upscaler checkpoint, NVIDIA the nvidia-vfx SDK.
     upscalers={'h3':unknown or any(m in comfy_choices(info,'HengeH3LatentUpscale','model_name') for m in H3_UPSCALERS),'nvidia':unknown or 'HengeRTXUpscale' in info}
     regenerate=regenerate_requirements(info)
@@ -1776,9 +1863,8 @@ async def create_job(request:Request):
                 if tara:options.setdefault('conditioning_mode','tara')
         # New jobs without a turbo get the one their model asks for (`turbo_default`, e.g. a model whose merge already
         # carries a step-distillation adapter), otherwise the standard 4-step turbo; both only when the backend lists
-        # the file, else DMD 8-step, so a job does not fail on a model that was never installed. A distilled base such
-        # as OmniRef keeps none.
-        if 'turbo' not in options and options.get('base','h3')=='h3':
+        # the file, else DMD 8-step, so a job does not fail on a model that was never installed.
+        if 'turbo' not in options:
             known_loras();installed=workflows.INSTALLED.get('LoraLoaderModelOnly')
             wanted=[MODELS.get(options.get('profile',''),{}).get('turbo_default'),workflows.DEFAULT_TURBO]
             default=next((t for t in wanted if t in TURBOS and installed and workflows.lora_installed(TURBOS[t]['lora'],installed)),'dmd8')
@@ -1826,6 +1912,15 @@ async def create_job(request:Request):
             temp=inp/'upload_first_frame';await upload(first_frame,temp,25*1024*1024)
             with Image.open(temp) as im:im.convert('RGB').save(inp/'first_frame.png')
             temp.unlink();assets['first_frame']=(inp/'first_frame.png').relative_to(INPUT).as_posix()
+        start_s,end_s=r['video']['start_seconds'],r['video']['end_seconds'];assets['keyframes']=[]
+        for k in sorted(r.get('keyframes') or [],key=lambda k:k['time_seconds']):
+            upload_=form.get(f"keyframe_{k['slot']}")
+            if not hasattr(upload_,'read'):raise ValueError(f"Attach keyframe {k['slot']}")
+            if not start_s<=float(k['time_seconds'])<=end_s:raise ValueError(f"Keyframe {k['slot']} is outside the selected interval")
+            temp=inp/f"upload_keyframe_{k['slot']}";await upload(upload_,temp,25*1024*1024)
+            dest=inp/f"keyframe_{k['slot']}.png"
+            with Image.open(temp) as im:im.convert('RGB').save(dest)
+            temp.unlink();assets['keyframes'].append({'slot':k['slot'],'time':float(k['time_seconds']),'image':dest.relative_to(INPUT).as_posix()})
         for slot,file in sorted(pictures.items()):
             dest=inp/f'picture_{slot}.png';temp=inp/f'upload_{slot}';await upload(file,temp,25*1024*1024)
             with Image.open(temp) as im:im.convert('RGB').save(dest)
@@ -1910,6 +2005,15 @@ def editor_instruction(editor,op,what,target,refs,marked=False):
     """BFS Body Swap runs on its trained prompt (it reads the clicked person from a crop, not a magenta mark); other
     editors get the instruction built from the edit's fields."""
     if editor=='bfs':return BFS['prompt']+(f'. {target.rstrip(".")}' if target else '')
+    if editor=='bfs_selective':return BFS_SELECTIVE['prompt']+(f' {target.rstrip(".")}.' if target else '')
+    if editor=='gpt_image':
+        # GPT Image gets the clicked person as a mask (transparent where it may edit), not a magenta paint.
+        return edit_instruction(op,what or ('the person inside the masked area of image 1' if marked else ''),target,refs,False)
+    if editor=='h3image':
+        # A swap with the Character Swap LoRA uses its short body_swap line (<Picture 1> is the character); the other edits
+        # P-H3-Image's own form: the frame is <Picture 1>, references <Picture 2>, <Picture 3>...
+        if op=='swap' and refs and h3image_swap_ready():return H3IMAGE['swap_prompt']+(f'. {target.rstrip(".")}' if target else '')
+        return 'Edit <Picture 1>. '+re.sub(r'\bimage (\d+)\b',r'<Picture \1>',edit_instruction(op,what,target,refs,False))
     return edit_instruction(op,what,target,refs,marked)
 
 @app.post('/frame-edit')
@@ -1946,19 +2050,38 @@ async def frame_edit(request:Request):
             with Image.open(io.BytesIO(await form.get('mask').read())) as m:mask=m.convert('L').resize(frame.size)
         except OSError:raise HTTPException(400,'The mask is not an image')
         if not mask.getbbox():mask=None
-    region=masked_region(frame,mask) if mask else None
+    selective=editor=='bfs_selective';gpt=editor=='gpt_image'
+    if selective and (op!='swap' or mask is None or len(images)<2):raise HTTPException(400,'BFS Body Swap Selective swaps the clicked person: click who to replace and choose the character picture')
+    # Selective: the whole frame (it keeps everyone else by seeing them), with a magenta-tinted copy as image 2.
+    region=masked_region(frame,mask) if mask and not selective and not gpt else None
+    if selective:
+        tint=Image.new('RGB',frame.size,BFS_SELECTIVE['mark']);alpha=mask.point(lambda v:round(v*BFS_SELECTIVE['opacity']))
+        marked_frame=frame.copy();marked_frame.paste(tint,(0,0),alpha);images.insert(1,('marked',marked_frame))
     staged=[]
     for i,(name,im) in enumerate(images):
         if i==0 and region:im=im.crop(region)
         dest=inp/f'{name}.png';im.save(dest);staged.append(dest.relative_to(INPUT).as_posix())
     if editor=='bfs' and (op!='swap' or len(staged)<2):raise HTTPException(400,'BFS Body Swap only swaps a person: choose the character picture')
-    text=custom or editor_instruction(editor,op,what,instruction,len(staged)-1,marked)
+    text=custom or editor_instruction(editor,op,what,instruction,len(staged)-1,marked or (gpt and mask is not None))
     job={'id':jid,'created':time.time(),'status':'running','stage':'frame_edit','progress':0,'request':{'mode':'frame_edit','instruction':instruction or what,'op':op,'editor':editor,'masked':bool(region)},'options':{},'message':'Editing the frame'};save(job)
     try:
         seed=int(time.time())%2**31
-        graph=editor_graph(editor,staged[0],staged[1:],text,seed)
-        outputs=await asyncio.to_thread(execute_graph,job,graph,'frame_edit')
-        edited=await asyncio.to_thread(image_from_output,outputs,inp/'edited_raw.png')
+        if gpt:
+            # OpenAI's API: the frame and the references as PNGs; the mask is transparent where the edit may change it
+            # (the clicked person, grown a little, or the painted area).
+            def png(path):return (INPUT/path).read_bytes()
+            gpt_mask=None
+            if mask is not None:
+                from PIL import ImageFilter
+                grown=mask.filter(ImageFilter.MaxFilter(max(3,(frame.width//150)|1)));rgba=Image.new('RGBA',frame.size,(0,0,0,255))
+                rgba.putalpha(grown.point(lambda v:0 if v>127 else 255));buf=io.BytesIO();rgba.save(buf,'PNG');gpt_mask=buf.getvalue()
+            cfg=assistant.load_config(ASSISTANT_CONFIG)
+            raw=await asyncio.to_thread(assistant.gpt_image_edit,cfg,[png(p) for p in staged],text,gpt_mask)
+            edited=inp/'edited_raw.png';edited.write_bytes(raw)
+        else:
+            graph=editor_graph(editor,staged[0],staged[1:],text,seed,op=op)
+            outputs=await asyncio.to_thread(execute_graph,job,graph,'frame_edit')
+            edited=await asyncio.to_thread(image_from_output,outputs,inp/'edited_raw.png')
         with Image.open(edited) as out:
             out=out.convert('RGB')
             if region:
@@ -1973,6 +2096,25 @@ async def frame_edit(request:Request):
                     soft=small.filter(ImageFilter.MaxFilter(grow)).resize(soft.size)
                 soft=soft.filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(max(4,(x1-x0)//60)))
                 result=frame.copy();result.paste(patch,(x0,y0),soft)
+            elif gpt:
+                # GPT Image picks its own size: cover-fit it to the frame, then (with a mask) keep everything outside the
+                # edited area pixel-exact.
+                scale=max(frame.width/out.width,frame.height/out.height);fitted=out.resize((round(out.width*scale),round(out.height*scale)),Image.LANCZOS)
+                left,top=(fitted.width-frame.width)//2,(fitted.height-frame.height)//2;fitted=fitted.crop((left,top,left+frame.width,top+frame.height))
+                if mask is not None:
+                    from PIL import ImageFilter
+                    small=mask.resize((max(1,frame.width//4),max(1,frame.height//4)));grow=max(3,(frame.width//120)|1)
+                    soft=small.filter(ImageFilter.MaxFilter(grow)).resize(frame.size).filter(ImageFilter.GaussianBlur(max(3,frame.width//200)))
+                    result=frame.copy();result.paste(fitted,(0,0),soft)
+                else:result=fitted
+            elif selective:
+                # Everyone else stays pixel-exact: only the clicked person, grown generously (the new character rarely has
+                # the old silhouette: hair, clothes), comes from the edit.
+                from PIL import ImageFilter
+                out=out.resize(frame.size,Image.LANCZOS) if out.size!=frame.size else out
+                small=mask.resize((max(1,frame.width//4),max(1,frame.height//4)));grow=max(3,(frame.width//120)|1)
+                soft=small.filter(ImageFilter.MaxFilter(grow)).resize(frame.size).filter(ImageFilter.GaussianBlur(max(3,frame.width//200)))
+                result=frame.copy();result.paste(out,(0,0),soft)
             else:result=out.resize(frame.size,Image.LANCZOS) if out.size!=frame.size else out
             result.save(inp/'edited.png')
         save(job,status='completed',stage='complete',progress=1)
@@ -2116,11 +2258,25 @@ def shots_zip(jid:str):
         for p in pieces:z.write(p,f'shot_{int(p.stem[6:])+1:02d}.mp4')
     return Response(buffer.getvalue(),media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="henge-{jid[:8]}-shots.zip"'})
 
+@app.get('/jobs/{jid}/review')
+async def review(jid:str,shots:str=''):
+    """Review strips (source frames over the result's) and the camera-cut timing of a finished job; shots=1,3 picks shots."""
+    try:wanted=[int(n) for n in shots.split(',') if n.strip()]
+    except ValueError:raise HTTPException(400,'shots must be shot numbers separated by commas')
+    try:info,images=await asyncio.to_thread(review_job,load(jid),wanted)
+    except ValueError as e:raise HTTPException(409,str(e))
+    for row,image in zip(info['shots'],images):row['strip']=image
+    return info
+
 @app.get('/jobs/{jid}/source/{name}')
 def source(jid:str,name:str):
-    """The guide video and pictures a job was submitted with, so a reloaded page can show the job again."""
+    """The guide video, pictures and Character Swap's edited first frame a job was submitted with, so a reloaded page
+    (or a job made through the API or MCP) can show the job again."""
     assets=load(jid).get('assets') or {};slot=re.fullmatch(r'picture_(\d+)',name)
-    rel=assets.get('video') if name=='video' else assets.get('pictures',{}).get(slot[1]) if slot else None
+    key=re.fullmatch(r'keyframe_(\d+)',name)
+    rel=(assets.get('video') if name=='video' else assets.get('first_frame') if name=='first_frame'
+         else next((k['image'] for k in assets.get('keyframes',[]) if str(k['slot'])==key[1]),None) if key
+         else assets.get('pictures',{}).get(slot[1]) if slot else None)
     if not rel or not (INPUT/rel).is_file():raise HTTPException(404,'Source media not available')
     return FileResponse(INPUT/rel,media_type='video/mp4' if name=='video' else 'image/png')
 
@@ -2147,12 +2303,17 @@ def build_comparison_with_refs(job):
     the same file at once."""
     work=job_path(job['id'])
     refs=[(int(slot),INPUT/path) for slot,path in sorted(job['assets']['pictures'].items(),key=lambda x:int(x[0]))]
+    # Character Swap's edited first frame is a reference of its own (not a Picture): it is where every look came from.
+    if job['assets'].get('first_frame') and (INPUT/job['assets']['first_frame']).is_file():
+        refs.append(('Edited first frame',INPUT/job['assets']['first_frame'],True))
     if (work/'adapted_preview.png').is_file():
         sources=' + '.join(f'Picture {s}' for s in (job.get('plan') or {}).get('adapt_picture_slots',[]))
         refs.append((f'Adapted · from {sources}' if sources else 'Adapted reference',work/'adapted_preview.png',True))
     with LOCK:preview_lock=COMPARISON_LOCKS.setdefault(job['id'],threading.Lock())
     with preview_lock:
-        return create_comparison_with_refs(work/'comparison.mp4',work/'result.mp4',refs,work/'comparison_with_refs_v3.mp4',job_settings(job),(job.get('plan') or {}).get('prompt',''))
+        plan=job.get('plan') or {};middle='Normal map' if (job.get('request') or {}).get('guide_normals') else 'Guide marks' if plan.get('representation','original')!='original' else None
+        labels=('Guide video',middle,'Generated result') if middle else ('Guide video','Generated result')
+        return create_comparison_with_refs(work/'comparison.mp4',work/'result.mp4',refs,work/'comparison_with_refs_v3.mp4',job_settings(job),plan.get('prompt',''),labels)
 
 @app.get('/jobs/{jid}/comparison-with-refs')
 def comparison_with_refs(jid:str):
@@ -2298,11 +2459,72 @@ def job_frames(job,which,count):
             if dest.is_file():out.append(assistant.jpeg_data_url(dest))
     return out
 
+def cut_timing(source,result,near=24,ok=3):
+    """How the result's camera cuts land against the source's (24 fps frames from the selected start). Each source cut is
+    on time, early or late by n frames, or dropped (the take plays the previous shot on through it); a result cut that
+    matches no source cut is extra (often a one-frame glitch, or the take leaving a shot early and cutting again)."""
+    cuts,used=[],set()
+    for c in source:
+        m=min((r for r in result if abs(r-c)<=near and r not in used),key=lambda r:abs(r-c),default=None)
+        if m is None:cuts.append({'frame':c,'verdict':'dropped'});continue
+        used.add(m);d=m-c
+        cuts.append({'frame':c,'result_frame':m,'offset':d,'verdict':'on time' if abs(d)<=ok else 'early' if d<0 else 'late'})
+    return cuts,[{'frame':r,'verdict':'extra'} for r in result if r not in used]
+
+REVIEW_COLUMNS=4
+
+def review_job(job,wanted=None):
+    """Review strips of a finished job: per shot, a row of source frames over the same frames of the result (KEY marks a
+    pinned frame), plus where the result's camera cuts land against the source's. At most 8 shots per call."""
+    work=job_path(job['id']);result=work/'result.mp4'
+    if job['status']!='completed' or not result.is_file():raise ValueError('The review is available once the job has completed')
+    r=job['request'];start,end=r['video']['start_seconds'],r['video']['end_seconds'];assets=job.get('assets') or {}
+    source=INPUT/assets['video'];shots=shot_preview(job)['shots']
+    pins=[k['time'] for k in assets.get('keyframes',[])]+([start] if assets.get('first_frame') else [])
+    try:
+        cuts,extra=cut_timing(camera_cuts(job),detect_camera_cuts(result,0,end-start))
+    except ValueError:cuts,extra=[],[]
+    picked=[s for s in shots if not wanted or s['index'] in wanted][:8];rows=[];images=[]
+    font=ImageFont.load_default();tile=320
+    with tempfile.TemporaryDirectory() as d:
+        for s in picked:
+            a,b=s['start'],s['end'];m=min(.25,(b-a)/8)
+            times=[a+m+(b-a-2*m)*i/(REVIEW_COLUMNS-1) for i in range(REVIEW_COLUMNS)]
+            keyed=set()
+            for p in pins:
+                if a<=p<b:
+                    i=min(range(len(times)),key=lambda i:abs(times[i]-p))
+                    if i not in keyed:times[i]=p;keyed.add(i)
+            cells=[]
+            for row,(video,offset) in enumerate(((source,0.),(result,start))):
+                for i,t in enumerate(times):
+                    dest=Path(d)/f"{s['index']}_{row}_{i}.png"
+                    at=grab_frame(video,max(0.,t-offset),dest)
+                    im=ImageOps.contain(Image.open(dest).convert('RGB'),(tile,tile)) if at is not None else Image.new('RGB',(tile,tile*9//16),'black')
+                    cells.append((row,i,im))
+            h=max(im.height for *_,im in cells);sheet=Image.new('RGB',(tile*REVIEW_COLUMNS,2*h),'black');draw=ImageDraw.Draw(sheet)
+            for row,i,im in cells:
+                x,y=i*tile+(tile-im.width)//2,row*h+(h-im.height)//2;sheet.paste(im,(x,y))
+                label=f"{'src' if row==0 else 'take'} {times[i]:.2f}s"+(' KEY' if i in keyed else '')
+                draw.rectangle((x,y,x+8+6*len(label),y+14),fill='black');draw.text((x+4,y+2),label,fill='yellow' if i in keyed else 'white',font=font)
+            buffer=io.BytesIO();sheet.save(buffer,'JPEG',quality=82)
+            images.append('data:image/jpeg;base64,'+base64.b64encode(buffer.getvalue()).decode())
+            lo,hi=round((a-start)*24),round((b-start)*24)
+            rows.append({'shot':s['index'],'start':s['start'],'end':s['end'],'after_cut':s['after_cut'],'times':[round(t,2) for t in times],
+                         'keyframe_columns':sorted(keyed),'cuts':[c for c in cuts+extra if lo<=c['frame']<hi]})
+    return {'job':job['id'],'reference':'#'+job['id'][:8],'shots_total':len(shots),'shots':rows,
+            'cut_summary':{'source_cuts':len(cuts),'on_time':sum(c['verdict']=='on time' for c in cuts),
+                           'off':[c for c in cuts if c['verdict']!='on time'],'extra':extra}},images
+
 def run_job_tool(name,args):
+    if name=='review_job':
+        wanted=[int(n) for n in args.get('shots') or []]
+        info,images=review_job(load(args['job_id']),wanted)
+        return json.dumps(info,ensure_ascii=False),images
     if name=='generate_reference_image':
         cfg=assistant.load_config(ASSISTANT_CONFIG)
         if not cfg.get('image_enabled'):raise ValueError('Reference image generation is disabled in Assistant settings')
-        key=cfg.get('image_api_key') or (cfg.get('api_key') if cfg.get('provider')=='openai' else '') or os.environ.get('OPENAI_API_KEY','')
+        key=assistant.image_key(cfg)
         if not key:raise ValueError('Add an OpenAI image API key in Assistant settings')
         prompt=str(args.get('prompt') or '').strip()
         if not prompt or len(prompt)>32000:raise ValueError('Send an image prompt up to 32,000 characters')
@@ -2330,7 +2552,9 @@ def run_job_tool(name,args):
         job=load(args['job_id']);n=int(args['shot'])
         if job['status'] not in ('completed','failed'):raise ValueError('A shot can be redone once the job has finished')
         if not (job_path(job['id'])/f'h3_segment_{n-1:03d}.api.json').is_file():raise ValueError(f'Shot {n} was not rendered')
-        save(job,status='queued_redo',stage='queued',redo={'shot':n-1,'seed':args.get('seed')},message=f'Shot {n} queued to be redone')
+        prompt=str(args.get('prompt') or '').strip()
+        if len(prompt)>12000:raise ValueError('The shot prompt must be at most 12000 characters')
+        save(job,status='queued_redo',stage='queued',redo={'shot':n-1,'seed':args.get('seed'),**({'prompt':prompt} if prompt else {})},message=f'Shot {n} queued to be redone')
         return f'Shot {n} queued to be redone. Use wait_for_job until done.',[]
     if name=='retry_job':
         try:retry(args['job_id']);return job_summary(load(args['job_id'])),[]
@@ -2445,6 +2669,12 @@ async def set_assistant_config(request:Request):
     try:return assistant.public_config(assistant.save_config(ASSISTANT_CONFIG,await request.json()))
     except ValueError as e:raise HTTPException(400,str(e))
 
+@app.post('/assistant/image-models')
+async def assistant_image_models(request:Request):
+    """OpenAI's image models, for the GPT Image model dropdown (the key typed in the settings, else the saved one)."""
+    try:return await asyncio.to_thread(assistant.list_image_models,assistant.load_config(ASSISTANT_CONFIG),await request.json())
+    except Exception as e:raise HTTPException(400,str(e)[:300])
+
 @app.post('/assistant/models')
 async def assistant_models(request:Request):
     """The models of the provider chosen in the settings (not saved yet), for the model dropdown."""
@@ -2544,6 +2774,42 @@ async def ask_video(request:Request):
 SUGGEST_CUTS=('List the moments in this video where it could be split into separate clips without cutting an action or a '
     'sentence in half: camera cuts, the end of a spoken sentence, a pause between two actions. Answer with a JSON array of '
     'seconds from the start of the video only, for example [2.4, 5.1].')
+
+@app.post('/generate-image')
+async def generate_image(request:Request):
+    """A new image from a description with GPT Image (the assistant settings' model and key): reference pictures or
+    keyframe ideas for the MCP and other clients. Returns {image: data URL, model}."""
+    body=await request.json()
+    try:meta,images=await asyncio.to_thread(run_job_tool,'generate_reference_image',{'prompt':str(body.get('prompt') or ''),'aspect_ratio':body.get('aspect_ratio') or 'portrait'})
+    except ValueError as e:raise HTTPException(400,str(e))
+    return {'image':images[0],**json.loads(meta)}
+
+@app.post('/shot-plan')
+async def shot_plan(request:Request):
+    """The shots a draft would render with (same split as plan_shots) and its camera cuts, for the studio's keyframe
+    timeline: where a pinned edited frame is needed (a shot opening on a cut) and where one is optional. Seconds from the
+    selected start. The cut analysis is cached per uploaded video and interval."""
+    async with request.form(max_files=1,max_fields=4) as form:
+        video=form.get('video')
+        try:r=json.loads(str(form.get('direction') or '{}'));options=json.loads(str(form.get('options') or '{}'))
+        except ValueError:raise HTTPException(400,'direction and options must be JSON')
+        if not hasattr(video,'read') or not isinstance(r.get('video'),dict) or not isinstance(r.get('processing'),dict):raise HTTPException(400,'Send the guide video and the direction')
+        folder=ROOT/'shot_plan';folder.mkdir(exist_ok=True);digest=hashlib.sha256();temp=folder/f'upload_{uuid.uuid4().hex}'
+        with temp.open('wb') as out:
+            while chunk:=await video.read(1024*1024):digest.update(chunk);out.write(chunk)
+    try:
+        start=float(r['video'].get('start_seconds') or 0);end=float(r['video'].get('end_seconds') or 0)
+        if not 0<=start<end:raise HTTPException(400,'Choose the interval first')
+        cache=folder/f'{digest.hexdigest()[:24]}_{start:.3f}_{end:.3f}.json'
+        cuts=json.loads(cache.read_text()) if cache.is_file() else await asyncio.to_thread(detect_camera_cuts,temp,start,end)
+        cache.write_text(json.dumps(cuts))
+    except ValueError as exc:raise HTTPException(400,str(exc))
+    finally:temp.unlink(missing_ok=True)
+    draft={'request':{**r,'subject_guidance':r.get('subject_guidance') or {}},'options':options}
+    shots,_=plan_shots(draft,cuts)
+    return {'camera_cuts':[round(c/24,3) for c in cuts],
+            'shots':[{'start':round(x['start']/24,3),'end':round((x['start']+x['frames'])/24,3),'new_from':round((x['start']+(x['overlap'] if i else 0))/24,3),
+                      'after_cut':bool(i) and bool(x.get('reset_context'))} for i,x in enumerate(shots)]}
 
 @app.post('/assistant/suggest-cuts')
 async def suggest_cuts(request:Request):

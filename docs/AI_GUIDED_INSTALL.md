@@ -65,7 +65,7 @@ Steps and checks:
    Models the user already has in that ComfyUI are reused (old names, other subfolders), never renamed or
    downloaded twice. Ask which modes the user wants; profiles: `character` (Character Swap), `motion` (every Motion Transfer LoRA, Motion Transfer FFP v1.0 and the SolarRenderer turbo included), `fibo` (the default image editor, FIBO 2.0 edit turbo), `headswap`, `sharpness`, `audio`
    (generated audio),
-   `qwen21` (optional Qwen-Image 2.1 Turbo editor), `klein` / `klein3` (optional FLUX editors), `sam2d` (color marks and latent masks), `sam3d`, `omniref`.
+   `qwen21` (optional Qwen-Image 2.1 Turbo editor), `klein` / `klein3` (optional FLUX editors), `sam2d` (color marks and latent masks), `sam3d`.
 3. **Start ComfyUI** on 8189: `$COMFY_PY main.py --listen 127.0.0.1 --port 8189 --preview-method taesd --fast-disk`.
    Check `curl -s http://127.0.0.1:8189/object_info/HengeFindPeople` is not `{}` (the Henge nodes loaded).
 4. **`.env.local`** in Henge: `COMFY_BASE_URL=http://127.0.0.1:8189`, `COMFY_ROOT=<ComfyUI>`,

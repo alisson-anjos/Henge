@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "henge": {
+      "command": "uv",
+      "args": ["run", "--script", "/path/to/Henge/mcp/henge_mcp.py"],
+      "env": {"HENGE_URL": "http://127.0.0.1:8188", "HENGE_CHARS": "~/.henge/chars", "HENGE_MCP_OUT": "./henge-results"}
+    }
+  }
+}

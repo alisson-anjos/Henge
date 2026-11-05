@@ -6,6 +6,8 @@ type Requirement = {id: string; label: string; file: string; groups: string[]; s
 type Setup = {ready: boolean; downloading: boolean; base_ready: boolean; free_gb?: number | null; persistent_volume?: boolean | null};
 type Health = {online: boolean; offline_reason?: string; comfy_url?: string; setup?: Setup; requirements?: Requirement[]; models?: Record<string, {label: string; available?: boolean}>};
 
+export const CHECKLIST_DISMISSED = 'henge-model-checklist-dismissed';
+
 const gb = (bytes?: number) => bytes ? (bytes / 1e9).toFixed(bytes < 1e9 ? 2 : 1) + ' GB' : '';
 
 /** Full-screen checklist shown until every model is installed and ComfyUI is online. */
@@ -13,7 +15,12 @@ export default function SetupScreen({lang}: {lang: Language}) {
   const tr = (en: string, pt: string, es: string) => ({en, pt, es})[lang];
   const [health, setHealth] = useState<Health | null>(null);
   const [reachable, setReachable] = useState(true);
-  const [dismissed, setDismissed] = useState(false);
+  // "Continue with…" is remembered in this browser: the checklist does not come back on every load, only from
+  // Settings → Models ("Show the model checklist"), which clears this.
+  const [dismissed, setDismissed] = useState(() => {try {return localStorage.getItem(CHECKLIST_DISMISSED) === '1';} catch {return false;}});
+  useEffect(() => {const show = () => {try {localStorage.removeItem(CHECKLIST_DISMISSED);} catch {/* private mode */} setDismissed(false);};
+    addEventListener('henge:model-checklist', show); return () => removeEventListener('henge:model-checklist', show);}, []);
+  const dismiss = () => {try {localStorage.setItem(CHECKLIST_DISMISSED, '1');} catch {/* private mode */} setDismissed(true);};
   useEffect(() => {
     let disposed = false, timer: ReturnType<typeof setTimeout>;
     async function poll() {
@@ -69,7 +76,7 @@ export default function SetupScreen({lang}: {lang: Language}) {
         </li>)}
       </ul>
       {setup?.persistent_volume === false && <p className="setup-error">{tr('No volume is mounted at /workspace: models are stored on the container disk and are lost when the pod is reset.', 'Nenhum volume montado em /workspace: os modelos ficam no disco do container e se perdem ao recriar o pod.', 'No hay un volumen montado en /workspace: los modelos quedan en el disco del contenedor y se pierden al recrear el pod.')}{setup.free_gb != null ? ` (${setup.free_gb} GB ${tr('free', 'livres', 'libres')})` : ''}</p>}
-      {finishedWithErrors && usable.length > 0 && <button className="primary" onClick={() => setDismissed(true)}>{tr('Continue with', 'Continuar com', 'Continuar con')} {usable.join(', ')}</button>}
+      {finishedWithErrors && usable.length > 0 && <button className="primary" onClick={dismiss}>{tr('Continue with', 'Continuar com', 'Continuar con')} {usable.join(', ')}</button>}
     </div>
   </div>;
 }

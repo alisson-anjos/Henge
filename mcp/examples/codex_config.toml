@@ -1,0 +1,13 @@
+# Henge MCP for codex: copy into $CODEX_HOME/config.toml (or ~/.codex/config.toml) and replace /path/to/Henge.
+# Put mcp/AGENTS.md in the workspace (codex reads AGENTS.md) so the agent follows the rules.
+
+# review_job and edit_frame return images; a long wait_for_job blocks for minutes
+tool_output_token_limit = 30000
+
+[mcp_servers.henge]
+command = "uv"
+args = ["run", "--script", "/path/to/Henge/mcp/henge_mcp.py"]
+startup_timeout_sec = 120.0
+# wait_for_job blocks up to 30 min; edit_frame and create_job (upload) take a few
+tool_timeout_sec = 2000.0
+env = { HENGE_URL = "http://127.0.0.1:8188", HENGE_CHARS = "~/.henge/chars", HENGE_MCP_OUT = "./henge-results" }

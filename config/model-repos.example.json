@@ -85,7 +85,7 @@
       ],
       "note": "Downloaded by default; optional turbo selection. Official Pika-Labs H3 Flex Ref2VA Comfy BF16 adapter (full rank, approximately 1.96 GB); strength 1.0, Comfy workflow uses LCM and 6 manual-sigma steps. MiniMax H3 Community License.",
       "sha256": "e4d058fbd027377b925a0ee607b514ddd9037873fee3afa05d73b302e6f7f8e1",
-      "label": "Pika H3 Flex \u00b7 Ref2VA (Official)"
+      "label": "Pika H3 Flex · Ref2VA (Official)"
     },
     {
       "id": "turbo_pika6_kijai",
@@ -99,7 +99,7 @@
       ],
       "note": "Downloaded by default; optional turbo selection. Pika H3 Flex Ref2VA adapter (Pika-Labs) reduced by Kijai to a dynamic rank (sv_fro 0.99 from 384, average 55, 553 MB instead of 1.96 GB); strength 1.0, Comfy workflow uses LCM and 6 manual-sigma steps. SHA256 7b5a7e707860412c214559666c6283cde2cddc79e13e124007fa47a5392352da. MiniMax H3 Community License.",
       "sha256": "7b5a7e707860412c214559666c6283cde2cddc79e13e124007fa47a5392352da",
-      "label": "Pika H3 Flex \u00b7 Ref2VA (Kijai)"
+      "label": "Pika H3 Flex · Ref2VA (Kijai)"
     },
     {
       "id": "pika_license",
@@ -305,6 +305,33 @@
       "note": "BFS Body Swap V1.0 for Qwen-Image 2.1 (MIT): the Character Swap First Frame editor. Replaces the clicked person with the character picture, keeping pose, framing and light."
     },
     {
+      "id": "h3image_lora",
+      "url": "https://huggingface.co/PrunaAI/P-H3-Image-Comfy/resolve/main/loras/p-h3-image_lora_bf16.safetensors",
+      "destination": "loras/henge/p-h3-image_lora_bf16.safetensors",
+      "profiles": [
+        "h3image"
+      ],
+      "note": "PrunaAI P-H3-Image LoRA (Apache-2.0): turns the H3 DiT Henge already uses into an image editor, the H3 Image frame editor."
+    },
+    {
+      "id": "h3image_vae",
+      "url": "https://huggingface.co/PrunaAI/P-H3-Image-Comfy/resolve/main/vae/p-h3-image_vae_bf16.safetensors",
+      "destination": "vae/p-h3-image_vae_bf16.safetensors",
+      "profiles": [
+        "h3image"
+      ],
+      "note": "PrunaAI P-H3-Image VAE (Apache-2.0): decodes the single frames of the H3 Image frame editor."
+    },
+    {
+      "id": "bfs_body_swap_selective_qwen21",
+      "url": "https://huggingface.co/Alissonerdx/BFS-Best-Face-Swap/resolve/main/bfs_body_swap_selective_magenta_v1.0_qwen_2.1.safetensors",
+      "destination": "loras/henge/bfs_body_swap_selective_magenta_v1.0_qwen_2.1.safetensors",
+      "profiles": [
+        "qwen21"
+      ],
+      "note": "BFS Body Swap Selective (Magenta) V1.0 for Qwen-Image 2.1 (MIT): replaces only the clicked person of a multi-person frame (clean frame + magenta-marked frame + character), keeping everyone else, the pose, head angle and expression."
+    },
+    {
       "id": "klein_diffusion_models",
       "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4b-fp8/resolve/main/flux-2-klein-4b-fp8.safetensors",
       "destination": "diffusion_models/flux-2-klein-4b-fp8.safetensors",
@@ -365,15 +392,6 @@
       "profiles": [
         "audio"
       ]
-    },
-    {
-      "id": "omniref",
-      "url": "https://huggingface.co/FastVideo/FastH3-Omni-Comfy/resolve/main/diffusion_models/fasth3_omniref_8step_pruned_int8_convrot.safetensors",
-      "destination": "diffusion_models/fasth3_omniref_8step_pruned_int8_convrot.safetensors",
-      "profiles": [
-        "omniref"
-      ],
-      "note": "Optional base (22 GB): FastH3 OmniRef, distilled to 8 steps. Select it in Advanced > Base model with Turbo LoRA = None."
     },
     {
       "id": "ffp",

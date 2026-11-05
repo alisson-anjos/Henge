@@ -41,7 +41,9 @@ Modes: swap (Character Swap: a person in the video becomes the character in a pi
 
 Mode selection for replacements: always recommend Motion Transfer TARA when replacing multiple subjects, whether people,
 objects, vehicles or a mixture: its LoRA was trained for multi-subject edits. Use profile='motion_tara' AND conditioning_mode='tara', not the Guide Latents motion LoRA. Character Swap may work as an
-alternative only when ALL subjects being replaced are people; do not recommend it for object/vehicle replacements.
+alternative only when ALL subjects being replaced are people; do not recommend it for object/vehicle replacements. For
+several people, that alternative is strong when done as Character Swap with an edited first frame and the normal-map guide
+(below): swap every person in the first frame, and the normal map keeps the people who are not replaced exactly as they are.
 Inspect the frames/references before deciding this. If the user has not explicitly chosen a mode for this request,
 call choose_replacement_mode to show buttons in the assistant chat and WAIT for the user. Set all_people=true only
 when every subject being replaced is a person; otherwise only Motion Transfer TARA is offered. The tool applies the
@@ -54,7 +56,9 @@ the same performance: recommend **Motion Transfer FFP v1.0** every time, not the
 it yourself: set_mode 'motion', set_options {"profile":"motion_mix_dyn99"} and set_first_frame, which selects that
 model and marks the Picture as the video's first frame. Give set_first_frame `time` + `instruction` to edit a guide
 frame with the installed image editor, or `picture` when the user already attached the edited frame. The edited frame
-becomes the first frame and its changes propagate through the whole clip while the guide keeps the motion, timing and
+becomes the first frame (with the normal-map guide on by default: guide_normals, so the original performer's clothes, hair
+and colours cannot leak; tell the user why and that it can be turned off) and its changes propagate through the whole clip
+while the guide keeps the motion, timing and
 camera; the line explaining the Picture's role is added to the prompt automatically, so do not write it yourself. Use
 Motion Transfer SolarRenderer FFP v1.0
 (profile motion_solar_ffp, SolarRenderer control alone, on SolarRenderer's own conditioning and four-step sampler; its
@@ -68,11 +72,20 @@ character). Offer it when you configure a Character Swap, and use it when the us
 characters in a frame, to "start from" an edited frame, or to fix how the clip begins. Steps: view_frame / find_people
 with kind='character' at a time where everyone to replace is clearly visible (the clip will start at that time), then
 swap_first_frame with one swap per character (character number + picture slot, or a description when there is no
-picture). Several characters go in ONE call, in the order you list them. When BFS Body Swap is installed it is used by
-default: it was trained to replace a person keeping their pose and only touches the clicked character; it needs a
-picture for each swap and works best with a full-body picture on a plain background. Look at the returned frame: if one swap is
-wrong, call again (a different time, picture, description or an English `prompt`). Default use_as 'latent' (the frame
-becomes frame 0 of the guide, so the render follows it); 'reference' only if the user asks. The reference pictures
+picture). Several characters go in ONE call, in the order you list them. When BFS Body Swap Selective is installed it is
+used by default (editor 'bfs_selective'): it replaces only the clicked person on the whole frame and keeps everyone else and
+the background exactly, with the pose, head angle and expression; BFS Body Swap ('bfs') is the older single-person editor.
+Both need a picture for each swap and work best with a full-body picture on a plain background. Look at the returned frame:
+if one swap is wrong, call again (a different time, picture, description or an English `prompt`).
+Normal-map guide (guide_normals, ON by default with a Character Swap first frame): the guide becomes a MoGe-2 surface-normal
+map, so it gives only shapes, poses, motion and camera and no one's colours, clothes or light; the look of every person and
+of the place comes from the edited frame, which goes in as a reference picture and as the keyframe at frame 0 (use_as does
+not apply). Recommend it, explaining why, whenever the user swaps several people or wants to change the background (edit
+the background in the first frame too): with the plain guide the original performers can come back after the first frames.
+Keep it on unless the user turns it off; it needs the Original guide representation. With it, the prompt must describe the
+look of the edited frame (the place, the light and every person that stays), never the original performers: the planner adds
+that description by itself. Without it (guide_normals false), use_as 'latent' (frame 0 of the guide) is the default and
+'reference' only if the user asks. The reference pictures
 stay as they are and keep driving each character's identity, so keep the character pictures attached when the user
 has them; with a first frame set, Character Swap can also generate with no pictures (the frame alone defines the looks). For finer control
 use the building blocks instead: edit_frame (any edit of a guide frame, an earlier edit or a Picture: swap a numbered
@@ -80,6 +93,29 @@ character, replace, remove, add, free text, your own English prompt, chosen refe
 edit=<id>), then use_frame to set the result as the first frame (or as a Picture), clear_first_frame to drop it. They
 work for Motion Transfer's First Frame too. The user can do the same by hand in the FFP card of Character Swap (Segment the characters, click, edit, or upload a frame they made).
 If no image editor is installed, say so and suggest uploading a frame they swapped elsewhere in that card.
+
+Keyframes (Character Swap and Motion Transfer, works best with the normal-map guide): besides the first frame, any number
+of edited frames can be pinned at their own times. Each one is a frame of the RESULT at that time (the guide frame with the
+characters already swapped or the edit already made): it goes in as a reference picture and as an Add Guide keyframe in the
+shot that renders that time, so the clip passes through it. Use them:
+- after every camera cut: a shot that opens on a cut has nothing to start from but the guide; a keyframe right after the cut
+  says who is who there. get_keyframes lists the shots, the camera cuts and cuts_without_keyframe;
+- on long clips or when a character drifts (identity, outfit, hair) in the middle of a take;
+- for edits that must hold later in the clip (a prop added, a new background) when the view changes.
+How: get_keyframes -> for each time: find_people kind='character' at that time -> edit_frame (time=<t>, op swap, character,
+pictures, editor bfs_selective by default; gpt_image when it is offered and the user prefers it) -> look at the result ->
+use_frame edit=<id> as='keyframe' (slot=<n> to replace one). Several frames at once: edit_frames with a list of edit_frame
+inputs (GPT Image runs three in parallel). Pin the start first (use_frame as first_frame) unless the user wants the clip to
+open from the guide. remove_keyframe drops keyframes; set_guide_normals turns the normal-map guide on or off (recommended on
+with keyframes, it needs the original guide representation).
+Consistency: before generating with two or more pinned frames, call view_keyframes and compare every character across all of
+them and against the reference pictures (face, hair, outfit, body, colours, scale, who is where). If one drifts, redo it
+(edit_frame again, possibly from the first frame's look as an extra picture) and pin it with the same slot. Tell the user what
+you checked. The user can do all of this by hand in the frame editor: its timeline shows the shots, cuts, ◆ pins and ◇
+suggestions; each frame keeps its own edit; a Batch checkbox edits and pins several at once.
+Image generation: generate_reference_image (when GPT Image is enabled in the assistant settings) makes new reference
+pictures from a description; the user adds them as Pictures. GPT Image is also an editor (editor 'gpt_image') for
+edit_frame when it is offered (get_studio_state / the editor list); it reads the clicked character as a mask.
 
 Guide representation (how the guide video reaches the model):
 - original: THE default, for every mode and every case: one or several people, animals, vehicles and objects. The video goes in as it is. Character Swap, Motion Transfer and Head Swap were trained on original guide videos only: no colored marks, no masks. Who becomes whom is said in the prompt (describe each person and the picture they become) and, when needed, with subject marks, which bind identities while the guide stays original.
@@ -108,6 +144,14 @@ The studio state's selected_job is the generation selected on screen. When the u
 14. When the user asks you to create an original reference image, call generate_reference_image. Write a self-contained image prompt optimized for video character reference: a clearly visible subject, coherent identity, clean lighting and an uncluttered background. Prefer portrait for a character. The generated image is only a candidate: never claim it was added to the studio. Tell the user to click the button on the image to use it as the next Picture. Do not generate images unless the user asked for one.
 15. A user message ending with [sent while you were still working on the previous request] arrived while you were working. Read it before your next action: if it changes the request, adapt what you are doing (or stop and ask); if it is unrelated, finish the current step and then answer it.
 16. Default to the cheapest setup: set_quality 480p before generating (fastest and cheapest), keep the turbo LoRA and its step count, one take. Use a higher quality, more steps or no turbo only when the user asks for it ("720p", "best quality", "final version"), and say it costs more time. Sharpness is the exception: there the target resolution is the point, so keep what the user chose.
+17. Review every finished render before you call it done: review_job shows, per shot, source frames over the same frames of
+the result (KEY = a pinned frame) and where the result's camera cuts land against the source's. Look at every strip and grade
+each shot: BAD = wrong identity (wrong character, two of the same, a face unlike its picture), not replaced or a leak (an original
+face or costume item back), someone missing or added, broken image (melted faces, extra limbs), a cut dropped (the take plays on
+through it) or 8+ frames off; MINOR = only on a small, edge or background figure, or mild drift; OK = clean. Be strict: "a
+slightly weaker likeness" often hides a wrong identity. One fix round per shot: redo_shot with a new seed for a dropped or late
+cut or bad luck; a shot that opens on a cut without a keyframe, or a character that drifts, needs a keyframe there (a new
+generation with it pinned) more than another seed. Then tell the user each shot's grade and what is still weak, by time.
 
 Be brief. Always answer in the language of the user's latest message, even when it differs from the interface or earlier messages. Write approval questions in that same language. Never invent people, pictures or results you have not seen."""
 
@@ -133,18 +177,29 @@ STUDIO_TOOLS = [
     {'name': 'set_mode', 'description': 'Switch the studio mode.',
      'input_schema': {'type': 'object', 'properties': {'mode': {'type': 'string', 'enum': ['swap', 'motion', 'headswap', 'sharpness']}}, 'required': ['mode'], 'additionalProperties': False}},
     {'name': 'set_first_frame', 'description': "Set the video's edited First Frame and select Motion Transfer FFP v1.0 (motion + profile motion_mix_dyn99): the model for editing what the clip shows (style, adding, removing or changing something) while the guide keeps the motion, timing and camera. Use it for those requests instead of the replacement models. Either picture=<attached Picture slot> for a frame that is already edited, or time=<seconds> + instruction=<what to change in that frame>, which edits that guide frame with the installed FLUX Klein editor and attaches the result as a new Picture. It also switches the studio to Motion Transfer; the prompt line explaining the Picture is added by the backend.",
-     'input_schema': {'type': 'object', 'properties': {'picture': {'type': 'integer', 'description': 'Slot of an attached Picture holding the edited first frame'}, 'time': {'type': 'number', 'description': 'Time in seconds, inside the selected interval, of the guide frame to edit'}, 'instruction': {'type': 'string', 'description': 'What to change in that frame (the edit request)'}}, 'additionalProperties': False}},
+     'input_schema': {'type': 'object', 'properties': {'guide_normals': {'type': 'boolean', 'description': 'Normal-map guide (default true with a First Frame): the guide becomes a MoGe-2 normal map, so the performer\'s clothes, hair and colours cannot leak; the look comes from the pictures and the First Frame, pinned at frame 0.'}, 'picture': {'type': 'integer', 'description': 'Slot of an attached Picture holding the edited first frame'}, 'time': {'type': 'number', 'description': 'Time in seconds, inside the selected interval, of the guide frame to edit'}, 'instruction': {'type': 'string', 'description': 'What to change in that frame (the edit request)'}}, 'additionalProperties': False}},
     {'name': 'swap_first_frame', 'description': "Character Swap's optional First Frame: take the guide frame at `time`, segment its characters with SAM 3.1 (numbered left to right, exactly like find_people kind='character' at that time) and swap the ones in `swaps` with the image editor, one after another (each edit is made on the previous result, with that character painted magenta and the editor told to replace the magenta-marked character). Several characters can be swapped in one call. Each swap takes an attached Picture slot (the character's look) or a description (no picture), and optionally `prompt` to replace the editor prompt for that swap (English). The result becomes the first frame of the guide (use_as 'latent', default: it replaces frame 0 of the guide the model reads, so the render starts from it) or a reference picture (use_as 'reference'); it is not a Picture slot, so the reference pictures stay free. Switches to Character Swap and moves the interval start to `time`. Returns the edited frame: look at it and call again if a swap is wrong.",
      'input_schema': {'type': 'object', 'properties': {'time': {'type': 'number', 'description': 'Seconds inside the selected interval; the clip will start here'},
        'swaps': {'type': 'array', 'minItems': 1, 'items': {'type': 'object', 'properties': {'character': {'type': 'integer', 'description': "Number from find_people kind='character' at the same time"}, 'picture': {'type': 'integer', 'description': 'Attached Picture slot with the new character'}, 'description': {'type': 'string', 'description': 'The new character, in English, when there is no picture (or extra details with one)'}, 'prompt': {'type': 'string', 'description': 'Optional full English editor prompt for this swap, replacing the default'}}, 'required': ['character'], 'additionalProperties': False}},
-       'use_as': {'type': 'string', 'enum': ['latent', 'reference'], 'description': "latent (default) = frame 0 of the guide; reference = reference picture only"},
-       'editor': {'type': 'string', 'enum': ['bfs', 'qwen21', 'fibo', 'klein', 'klein3'], 'description': "Default: bfs (BFS Body Swap on Qwen-Image 2.1, trained for person swaps; needs a picture per swap; edits only the clicked person) when installed, else the backend's editor with the magenta mark"}}, 'required': ['time', 'swaps'], 'additionalProperties': False}},
+       'use_as': {'type': 'string', 'enum': ['latent', 'reference'], 'description': "Without the normal-map guide: latent (default) = frame 0 of the guide; reference = reference picture only"},
+       'guide_normals': {'type': 'boolean', 'description': 'Normal-map guide (default true): the guide becomes a MoGe-2 normal map and the edited frame a reference + keyframe at frame 0, so everyone\'s look comes from the frame. Recommended for several people or a new background.'},
+       'editor': {'type': 'string', 'enum': ['bfs_selective', 'h3image', 'bfs', 'qwen21', 'fibo', 'klein', 'klein3', 'gpt_image'], 'description': "Default: bfs_selective (BFS Body Swap Selective on Qwen-Image 2.1: only the clicked person changes, everyone else stays; needs a picture per swap), else bfs (BFS Body Swap on Qwen-Image 2.1), else h3image (H3 Image, PrunaAI P-H3-Image on the same H3 model as the videos; less reliable at keeping the pose in a swap), else bfs (BFS Body Swap on Qwen-Image 2.1, trained for person swaps; needs a picture per swap; edits only the clicked person) when installed, else the backend's editor with the magenta mark"}}, 'required': ['time', 'swaps'], 'additionalProperties': False}},
     {'name': 'edit_frame', 'description': "Edit one image with the installed image editor and keep the result (returned with an edit id; nothing in the studio changes until use_frame). Source: exactly one of time (a guide frame in seconds), edit (an earlier edit id, to chain edits: e.g. swap a second character on the result of the first) or picture (an attached Picture slot). op: swap (replace a character: with `character` the editor gets it painted magenta), replace (`what` with `instruction`), remove (`what`), add (`instruction`), free (`instruction` is the whole request). character: number from find_people kind='character' at the source's guide time. pictures: attached Picture slots sent as image 2, image 3... (for swap, image 2 is the new character). prompt: your own full English editor prompt instead of the one built from these fields. editor: fibo | qwen21 | klein | klein3 (default: the backend's choice).",
      'input_schema': {'type': 'object', 'properties': {'time': {'type': 'number'}, 'edit': {'type': 'string'}, 'picture': {'type': 'integer'},
        'op': {'type': 'string', 'enum': ['swap', 'replace', 'remove', 'add', 'free']}, 'character': {'type': 'integer'}, 'what': {'type': 'string'}, 'instruction': {'type': 'string'},
-       'pictures': {'type': 'array', 'items': {'type': 'integer'}}, 'prompt': {'type': 'string'}, 'editor': {'type': 'string', 'enum': ['fibo', 'qwen21', 'klein', 'klein3', 'bfs'], 'description': "bfs = BFS Body Swap: op swap with character + one picture only; it edits a crop around that character and pastes it back, leaving everyone else untouched"}}, 'required': ['op'], 'additionalProperties': False}},
-    {'name': 'use_frame', 'description': "Put an edit_frame result (edit) or an attached Picture (picture) to use. as='first_frame' (default): in Character Swap it becomes the first frame of the guide, not a Picture; in Motion Transfer it becomes the First Frame Picture and selects Motion Transfer FFP v1.0. use_as: latent (default, frame 0 of the guide the model reads) or reference (reference picture only). A frame edited from a guide time moves the interval start to that time. as='picture' adds it as a new reference Picture instead.",
-     'input_schema': {'type': 'object', 'properties': {'edit': {'type': 'string'}, 'picture': {'type': 'integer'}, 'as': {'type': 'string', 'enum': ['first_frame', 'picture']}, 'use_as': {'type': 'string', 'enum': ['latent', 'reference']}}, 'additionalProperties': False}},
+       'pictures': {'type': 'array', 'items': {'type': 'integer'}}, 'prompt': {'type': 'string'}, 'editor': {'type': 'string', 'enum': ['h3image', 'fibo', 'qwen21', 'klein', 'klein3', 'bfs', 'bfs_selective', 'gpt_image'], 'description': "gpt_image = GPT Image on OpenAI's API (only when enabled in the assistant settings; reads the character as a mask; whole-frame edits can drift); h3image = H3 Image (PrunaAI P-H3-Image on the H3 model; best for add/remove/replace/free edits); bfs_selective = BFS Body Swap Selective (only the clicked person, whole frame kept); bfs = BFS Body Swap: op swap with character + one picture only; it edits a crop around that character and pastes it back, leaving everyone else untouched"}}, 'required': ['op'], 'additionalProperties': False}},
+    {'name': 'use_frame', 'description': "Put an edit_frame result (edit) or an attached Picture (picture) to use. as='first_frame' (default): in Character Swap it becomes the first frame of the guide, not a Picture; in Motion Transfer it becomes the First Frame Picture and selects Motion Transfer FFP v1.0. use_as: latent (default, frame 0 of the guide the model reads) or reference (reference picture only). A frame edited from a guide time moves the interval start to that time. as='picture' adds it as a new reference Picture instead. as='keyframe' pins it as a keyframe at its guide time (or `time`), as a new slot or replacing `slot`; the interval does not move.",
+     'input_schema': {'type': 'object', 'properties': {'edit': {'type': 'string'}, 'picture': {'type': 'integer'}, 'as': {'type': 'string', 'enum': ['first_frame', 'keyframe', 'picture']}, 'time': {'type': 'number', 'description': 'Keyframe time in seconds (default: the time the edit was made from)'}, 'slot': {'type': 'integer', 'description': 'Keyframe slot to replace'}, 'use_as': {'type': 'string', 'enum': ['latent', 'reference']}, 'guide_normals': {'type': 'boolean', 'description': 'Character Swap first frame only: normal-map guide (default true)'}}, 'additionalProperties': False}},
+    {'name': 'get_keyframes', 'description': "The keyframe plan of the selection: whether a first frame is set, the pinned keyframes (slot, time), the render's shots (start, end, whether it opens on a camera cut), the camera cuts, cuts_without_keyframe (where to pin next) and guide_normals. Times are seconds of the source video.",
+     'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
+    {'name': 'view_keyframes', 'description': 'See every pinned frame (the first frame and each keyframe) in time order, to check that each character looks the same in all of them before generating.',
+     'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
+    {'name': 'remove_keyframe', 'description': 'Remove pinned keyframes: the given slots, or all of them when slots is omitted. The first frame is removed with clear_first_frame.',
+     'input_schema': {'type': 'object', 'properties': {'slots': {'type': 'array', 'items': {'type': 'integer'}}}, 'additionalProperties': False}},
+    {'name': 'set_guide_normals', 'description': 'Turn the normal-map guide (MoGe-2) on or off for Character Swap or Motion Transfer. Recommended on with a first frame or keyframes: the look of everyone comes from the pinned frames.',
+     'input_schema': {'type': 'object', 'properties': {'on': {'type': 'boolean'}}, 'required': ['on'], 'additionalProperties': False}},
+    {'name': 'edit_frames', 'description': 'Run several edit_frame edits in one call (each item takes the edit_frame inputs). GPT Image edits run three at a time; ComfyUI editors one after another. Returns every edit id and image; then pin them with use_frame.',
+     'input_schema': {'type': 'object', 'properties': {'edits': {'type': 'array', 'minItems': 1, 'maxItems': 24, 'items': {'type': 'object'}}}, 'required': ['edits'], 'additionalProperties': False}},
     {'name': 'clear_first_frame', 'description': 'Remove the first frame (Character Swap guide frame or Motion First Frame marking).',
      'input_schema': {'type': 'object', 'properties': {}, 'additionalProperties': False}},
     {'name': 'set_prompt', 'description': 'Replace the request text in the prompt editor. Use @Picture1, @Picture2 for the pictures.',
@@ -216,8 +271,10 @@ JOB_TOOLS = [
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'opacity': {'type': 'number'}}, 'required': ['job_id', 'opacity'], 'additionalProperties': False}},
     {'name': 'get_job_shots', 'description': 'How a job splits the video into shots: index, start and end (seconds in the source), and whether each starts after a camera cut (people may have moved or changed there).',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
+    {'name': 'review_job', 'description': "Review a completed job: per shot, a strip with the source frames on top and the same frames of the result below (KEY marks a pinned keyframe), and the camera-cut timing (each source cut on time, early/late by n frames or dropped; extra cuts the result added). shots: 1-based shot numbers, at most 8 per call (default the first 8). Grade every shot from it.",
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'shots': {'type': 'array', 'items': {'type': 'integer'}}}, 'required': ['job_id'], 'additionalProperties': False}},
     {'name': 'redo_shot', 'description': 'Render one shot (1-based) of a finished job again with a new seed (or the given one) and join the video again; the other shots are kept. job_id accepts the visible generation reference. Then wait_for_job done.',
-     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'shot': {'type': 'integer'}, 'seed': {'type': 'integer'}}, 'required': ['job_id', 'shot'], 'additionalProperties': False}},
+     'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}, 'shot': {'type': 'integer'}, 'seed': {'type': 'integer'}, 'prompt': {'type': 'string', 'description': 'Optional: the shot prompt rewritten (e.g. a timed action); omit to keep it'}}, 'required': ['job_id', 'shot'], 'additionalProperties': False}},
     {'name': 'retry_job', 'description': 'Run a failed or cancelled job again.',
      'input_schema': {'type': 'object', 'properties': {'job_id': {'type': 'string'}}, 'required': ['job_id'], 'additionalProperties': False}},
     {'name': 'approve_job', 'description': 'Approve a plan waiting for review so the video renders.',
@@ -272,7 +329,7 @@ def public_config(cfg: dict) -> dict:
     """The config for the browser: keys are never sent back, only whether they are saved."""
     key = cfg.get('api_key') or ''
     image_key = cfg.get('image_api_key') or ''
-    return {**{k: v for k, v in cfg.items() if k not in ('api_key', 'image_api_key')}, 'has_key': bool(key),
+    return {**{k: v for k, v in cfg.items() if k not in ('api_key', 'image_api_key')}, 'has_key': bool(key), 'image_ready': gpt_image_ready(cfg),
             'key_hint': f'…{key[-4:]}' if len(key) > 8 else '', 'has_image_key': bool(image_key),
             'image_key_hint': f'…{image_key[-4:]}' if len(image_key) > 8 else ''}
 
@@ -455,13 +512,58 @@ def key_hint(provider: str, key: str) -> str:
     return ''
 
 
+def image_key(cfg: dict) -> str:
+    """The OpenAI key GPT Image uses: its own key, else the assistant's key when the assistant is on OpenAI's API, else
+    OPENAI_API_KEY."""
+    import os
+    own = (cfg.get('image_api_key') or '').strip()
+    if own: return own
+    if cfg.get('provider') == 'openai' and 'api.openai.com' in (cfg.get('base_url') or 'https://api.openai.com/v1'):
+        if cfg.get('api_key'): return cfg['api_key']
+    return os.environ.get('OPENAI_API_KEY', '').strip()
+
+
+def gpt_image_ready(cfg: dict) -> bool:
+    """GPT Image is offered (reference images, the frame editor) once it is enabled and a key is available."""
+    return bool(cfg.get('image_enabled') and cfg.get('image_model') and image_key(cfg))
+
+
+def list_image_models(saved: dict, draft: dict) -> list:
+    """OpenAI's image models (ids with "image" in them), newest first, for the GPT Image model dropdown."""
+    key = (draft.get('image_api_key') or '').strip() or image_key(saved)
+    if not key: raise ValueError('Add an OpenAI API key (here, or as the assistant key with OpenAI selected)')
+    r = requests.get('https://api.openai.com/v1/models', headers={'Authorization': f'Bearer {key}'}, timeout=20)
+    if not r.ok: raise ValueError(f'OpenAI /models: HTTP {r.status_code}: {r.text[:200]}')
+    rows = sorted(r.json().get('data') or [], key=lambda m: -(m.get('created') or 0))
+    return [{'id': m['id'], 'name': m['id']} for m in rows if 'image' in str(m.get('id', ''))]
+
+
+def gpt_image_edit(cfg: dict, images: list, prompt: str, mask: bytes | None = None) -> bytes:
+    """Edit with GPT Image (OpenAI /v1/images/edits): `images` are PNG bytes, the image to edit first and the references
+    after it; `mask` (PNG with alpha, the size of the first image) is transparent where the edit may change it. Returns
+    the edited image's bytes."""
+    key = image_key(cfg)
+    if not key: raise ValueError('GPT Image needs an OpenAI API key in the assistant settings')
+    files = [('image[]', (f'image_{i + 1}.png', data, 'image/png')) for i, data in enumerate(images)]
+    if mask is not None: files.append(('mask', ('mask.png', mask, 'image/png')))
+    data = {'model': cfg['image_model'], 'prompt': prompt, 'n': '1', 'size': 'auto', 'quality': cfg.get('image_quality') or 'auto'}
+    r = requests.post('https://api.openai.com/v1/images/edits', headers={'Authorization': f'Bearer {key}'}, data=data, files=files, timeout=600)
+    if not r.ok: raise ValueError(f'GPT Image edit failed: HTTP {r.status_code}: {r.text[:500]}')
+    item = (r.json().get('data') or [{}])[0]
+    if item.get('b64_json'): return base64.b64decode(item['b64_json'])
+    if item.get('url'):
+        got = requests.get(item['url'], timeout=120); got.raise_for_status(); return got.content
+    raise ValueError('GPT Image returned no image')
+
+
 def list_models(saved: dict, draft: dict) -> list:
     """Model ids the provider in the settings draft offers, newest first. The saved key is used only for the same
     provider and URL it was saved for, so it is never sent to another server."""
     provider = draft.get('provider') or saved['provider']
     base_url = (draft.get('base_url') if isinstance(draft.get('base_url'), str) else saved['base_url']).strip()
     key = (draft.get('api_key') or '').strip()
-    if not key and provider == saved['provider'] and base_url == saved['base_url']:
+    same = lambda u: (u or '').strip().rstrip('/') or ('https://api.openai.com/v1' if provider == 'openai' else '')
+    if not key and provider == saved['provider'] and same(base_url) == same(saved['base_url']):
         key = saved['api_key']
     if provider == 'local':
         return [{'id': LOCAL_MODEL, 'name': 'Henge VLM (Qwen 3.5 9B, built-in)'}]
@@ -475,6 +577,8 @@ def list_models(saved: dict, draft: dict) -> list:
         try: return [{'id': m.id, 'name': m.display_name} for m in client.models.list(limit=100)]
         except anthropic.AuthenticationError: raise ValueError('Anthropic rejected this key. Use an API key from console.anthropic.com → API Keys (it starts with sk-ant-api).')
     base = (base_url or 'https://api.openai.com/v1').rstrip('/')
+    if not key and 'api.openai.com' in base:
+        raise ValueError('Type your OpenAI API key below (platform.openai.com → API keys); the list loads when you leave the field.')
     r = requests.get(base + '/models', headers={'Authorization': f'Bearer {key}'} if key else {}, timeout=20)
     if not r.ok:
         raise ValueError(f'{base}/models: HTTP {r.status_code}: {r.text[:200]}')

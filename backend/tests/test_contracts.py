@@ -302,7 +302,7 @@ class WorkflowContracts(unittest.TestCase):
   self.assertEqual(bfs_graph('f.png',['p.png'],'',1)['30']['inputs']['model'],['1',0])
   from server import editor_instruction,EDITORS
   self.assertEqual(editor_instruction('bfs','swap','','',1),BFS['prompt']);self.assertTrue(editor_instruction('bfs','swap','','keep the microphone',1).endswith('. keep the microphone'))
-  self.assertIn('magenta',editor_instruction('fibo','swap','','',1,True));self.assertEqual(EDITORS[-1][0],'bfs')
+  self.assertIn('magenta',editor_instruction('fibo','swap','','',1,True));self.assertEqual([k for k,_ in EDITORS][-3:],['bfs','bfs_selective','gpt_image'])
  def test_qwen21_sampler_follows_what_comfyui_has(self):
   # The worker's pinned ComfyUI has no deis_2m: Qwen-Image 2.1 (and BFS on it) must not ask for a sampler it lacks.
   import server,workflows
@@ -459,11 +459,16 @@ class WorkflowContracts(unittest.TestCase):
   text=character_swap_prompt('Male, tall, red afro wig, white jersey 87.')
   self.assertTrue(text.startswith('body_swap: subject_definitions: <Subject 1> is the Male, tall, red afro wig, white jersey 87 shown in <Picture 1>,'))
   self.assertIn('  summary: ',text);self.assertIn('  detailed_description: [Shot 1]',text);self.assertNotIn('\n',text)
- def test_omniref_base_without_turbo(self):
-  g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,8,'original',[],'human',0,turbo='none',base='omniref')
-  self.assertEqual(g['1']['inputs']['unet_name'],'fasth3_omniref_8step_pruned_int8_convrot.safetensors');self.assertNotIn('2',g);self.assertEqual(g['3']['inputs']['model'],['1',0])
-  g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion',1,8,'original',[],'human',0,turbo='none',base='omniref')
-  self.assertNotIn('2',g);self.assertEqual(g['3']['inputs']['model'],['1',0])
+ def test_fl2va_ref_base_puts_the_ref_lora_under_every_lora(self):
+  g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion_tara',1,8,'original',[],'human',0,base='fl2va_ref')
+  self.assertEqual(g['1']['inputs']['unet_name'],'minimax_h3_fl2va_pruned_int8_convrot.safetensors')
+  self.assertEqual((g['26']['inputs']['model'],g['26']['inputs']['lora_name']),(['1',0],'minimax_h3_ref_lora_rank_256_bf16.safetensors'))
+  self.assertFalse([k for k,n in g.items() if k!='26' and n['inputs'].get('model')==['1',0]])
+  self.assertNotIn('26',h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'motion_tara',1,8,'original',[],'human',0,base='fl2va'))
+ def test_no_turbo_loads_the_task_lora_on_the_base(self):
+  for profile in ('character','motion'):
+   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,profile,1,8,'original',[],'human',0,turbo='none')
+   self.assertNotIn('2',g);self.assertEqual(g['3']['inputs']['model'],['1',0])
  def test_cfg_adds_zeroed_negative(self):
   g=h3_graph('v.mp4',['r.png'],'p',512,288,107,107,'character',1,30,'original',[],'human',0,turbo='none',cfg=4)
   self.assertEqual(g['24']['class_type'],'ConditioningZeroOut');self.assertEqual(g['10']['inputs']['negative'],['24',0]);self.assertEqual(g['10']['inputs']['cfg'],4.)
