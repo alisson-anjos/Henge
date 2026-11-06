@@ -287,7 +287,7 @@ def match_people(video, refs, start, end, work):
     for shot in shots:
         for t in shot['times']:
             dest = work/f'key_{shot["shot"]:02d}_{t:.3f}.jpg'
-            subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(t), '-i', str(video), '-frames:v', '1', '-q:v', '2', '-y', str(dest)],
+            subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(t), '-i', str(video), '-frames:v', '1', '-q:v', '2', '-strict', 'unofficial', '-y', str(dest)],
                 check=True, capture_output=True, timeout=120)
             keys.append(dict(shot=shot['shot'], time=t, path=str(dest)))
     (work/'keys.json').write_text(json.dumps(keys))
@@ -340,7 +340,7 @@ def point_previews(video, points, work):
     for i, timestamp in enumerate(times):
         dest = Path(work)/f'point_{i}.jpg'
         subprocess.run(['ffmpeg','-v','error','-ss',str(timestamp),'-i',str(video),'-frames:v','1',
-            '-vf','scale=960:-2','-y',str(dest)],check=True,capture_output=True)
+            '-vf','scale=960:-2','-strict','unofficial','-y',str(dest)],check=True,capture_output=True)
         with Image.open(dest) as source:
             im=source.convert('RGB'); draw=ImageDraw.Draw(im)
             for point in points:

@@ -139,8 +139,16 @@ def probe(p):
     try:d=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_format','-show_streams','-of','json',str(p)]));v=next(s for s in d['streams'] if s['codec_type']=='video');return {'duration':float(d['format']['duration']),'width':int(v['width']),'height':int(v['height']),'audio':any(s['codec_type']=='audio' for s in d['streams'])}
     except Exception as e:raise ValueError('Unable to decode uploaded video') from e
 
+def ffmpeg_args(args):
+    """FFmpeg 7.1+ refuses to write a JPEG from limited-range video ("Non full-range YUV is non-standard", issue #9):
+    allow it, as older builds did."""
+    args=list(args)
+    if args and Path(str(args[0])).stem=='ffmpeg' and str(args[-1]).lower().endswith(('.jpg','.jpeg')) and '-strict' not in args:
+        args[-1:-1]=['-strict','unofficial']
+    return args
+
 def run(args):
-    p=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=300)
+    p=subprocess.run(ffmpeg_args(args),stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=300)
     if p.returncode:raise ValueError(p.stderr.decode(errors='replace')[-1200:])
 
 # Blur of the source person in what the model sees (BFS source blur, applied in HengeGuide): '<region> (<what stays sharp>)'.

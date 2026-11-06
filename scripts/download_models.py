@@ -36,11 +36,17 @@ LEGACY={k:v for k,v in _json.loads(open(os.path.join(os.path.dirname(os.path.abs
 ALIASES={'motion':['motion_transfer','motion_transfer_tara','ffp'],'swap':['character'],'masks':['sam2d'],
          # names used before 2026-10-27
          'motion10500':['motion_transfer'],'motion4500':['motion_transfer_tara']}
+# Profiles that existed once; listing them is harmless.
+REMOVED={'omniref'}
 
 def selected_models(manifest,profiles):
     profiles={q for p in profiles if p.strip() for q in ALIASES.get(p.strip(),[p.strip()])}
     known={p for item in manifest['models'] for p in item.get('profiles',[])}
-    if profiles-known:raise ValueError('Unknown model profiles: '+', '.join(sorted(profiles-known)))
+    # Profiles dropped from the manifest stay in old pod templates and .env files: skip them (and typos) with a warning
+    # instead of failing before any download, which left every model missing (issue #10).
+    for name in sorted(profiles-known):
+        print(f'[Henge] skipping {"removed" if name in REMOVED else "unknown"} model profile: {name}',flush=True)
+    profiles&=known
     active=profiles|{'common'}
     for item in manifest['models']:
         dest=PurePosixPath(item['destination'])
