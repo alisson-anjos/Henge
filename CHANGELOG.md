@@ -7,6 +7,21 @@ This log starts with the 2026-10-28 updates; earlier commits remain in the Git h
 Render and RunPod have been updated; each entry records those states separately. Test results are described with
 their scope; CPU tests do not replace generation with the real models.
 
+## 2026-11-06
+
+### Fixes for issues #8, #9, #10
+
+- Model downloads no longer stop on a profile that is not in the manifest (#10). The published RunPod pod template
+  still listed `omniref` (removed on 2026-11-05), so `scripts/download_models.py` raised `Unknown model profiles` before
+  fetching anything and every model stayed missing. Removed or unknown profiles are now skipped with a log line, and
+  the pod template env is back in sync with `scripts/runpod_template.sh`.
+- Frame grabs to JPEG pass `-strict unofficial` to FFmpeg (#9). FFmpeg 7.1+ refuses to encode limited-range video
+  to MJPEG ("Non full-range YUV is non-standard"), which failed the planner evidence frames on Windows builds.
+- Clearer job errors (#8): a ComfyUI validation error for a model file its loader does not list
+  (e.g. `bg_removal_name: 'birefnet.safetensors' not in []`) and a missing custom node now say which model or node is
+  missing and how to install it, instead of the raw validation dump.
+- Tests: `backend/tests/test_issue_fixes.py` (CPU).
+
 ## 2026-11-05
 
 ### Experimental bases: fl2va, and fl2va + ref LoRA
